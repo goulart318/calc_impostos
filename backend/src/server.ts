@@ -277,6 +277,147 @@ app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint Analytics para o Dashboard Tributário
+app.get('/api/dashboard/analytics', async (req: Request, res: Response) => {
+  try {
+    const naturezaFiltro = String(req.query.natureza || '').trim();
+
+    const result = await pool.query(`
+      SELECT id, tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome, 
+             destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto, 
+             valor_liquido, total_retido, dados_json, created_at 
+      FROM notas_analisadas 
+      ORDER BY created_at DESC;
+    `);
+
+    const rows = result.rows;
+
+    let totalBrutoAcumulado = 0;
+    let totalGeralRetido = 0;
+    let totalIr = 0;
+    let totalCsll = 0;
+    let totalPis = 0;
+    let totalCofins = 0;
+    let totalInss = 0;
+    let totalIss = 0;
+
+    const mefDarfMap: Record<string, { codigo: string; totalValor: number; count: number }> = {};
+    const mefReinfMap: Record<string, { codigo: string; descricao: string; totalValor: number; count: number }> = {};
+    const alertas: Array<{ id: number; numeroNota: string; fornecedorNome: string; tipo: string; mensagem: string }> = [];
+
+    const notasDetalhadas: any[] = [];
+
+    for (const r of rows) {
+      const dj = r.dados_json || {};
+      const bruto = parseFloat(r.valor_bruto) || 0;
+      const retido = parseFloat(r.total_retido) || 0;
+
+      totalBrutoAcumulado += bruto;
+      totalGeralRetido += retido;
+      totalIr += parseFloat(dj.totalIr) || 0;
+      totalCsll += parseFloat(dj.totalCsll) || 0;
+      totalPis += parseFloat(dj.totalPis) || 0;
+      totalCofins += parseFloat(dj.totalCofins) || 0;
+      totalInss += parseFloat(dj.totalInss) || 0;
+      totalIss += parseFloat(dj.totalIss) || 0;
+
+      // Processar Códigos DARF
+      if (Array.isArray(dj.codigosReceitaDarf)) {
+        for (const d of dj.codigosReceitaDarf) {
+          const cod = String(d.codigo || 'OUTROS');
+          const val = parseFloat(d.valor) || 0;
+          if (!mefDarfMap[cod]) {
+            mefDarfMap[cod] = { codigo: cod, totalValor: 0, count: 0 };
+          }
+          mefDarfMap[cod].totalValor += val;
+          mefDarfMap[cod].count += 1;
+        }
+      }
+
+      // Processar Naturezas EFD-Reinf
+      const naturezasNota: string[] = [];
+      if (Array.isArray(dj.naturezasEFDReinf)) {
+        for (const nr of dj.naturezasEFDReinf) {
+          const cod = String(nr.codigo || '');
+          const desc = String(nr.descricao || 'Serviço/Bem');
+          const val = parseFloat(nr.valor) || bruto;
+          if (cod) {
+            naturezasNota.push(cod);
+            if (!mefReinfMap[cod]) {
+              mefReinfMap[cod] = { codigo: cod, descricao: desc, totalValor: 0, count: 0 };
+            }
+            mefReinfMap[cod].totalValor += val;
+            mefReinfMap[cod].count += 1;
+          }
+        }
+      }
+
+      // Verificar Alertas
+      if (!r.optante_simples && retido === 0 && bruto > 0) {
+        alertas.push({
+          id: r.id,
+          numeroNota: r.numero_nota,
+          fornecedorNome: r.fornecedor_nome,
+          tipo: 'RETENCAO_ZERADA',
+          mensagem: `Nota nº ${r.numero_nota} de ${r.fornecedor_nome} não é optante do Simples, mas possui retenção zerada (R$ 0,00).`
+        });
+      }
+      if (r.tipo_documento === 'NFE' && (!r.chave_acesso || r.chave_acesso.length < 44)) {
+        alertas.push({
+          id: r.id,
+          numeroNota: r.numero_nota,
+          fornecedorNome: r.fornecedor_nome,
+          tipo: 'CHAVE_AUSENTE',
+          mensagem: `Nota nº ${r.numero_nota} do tipo NFe está sem Chave de Acesso válida.`
+        });
+      }
+
+      const notaItem = {
+        id: r.id,
+        tipoDocumento: r.tipo_documento,
+        numeroNota: r.numero_nota,
+        chaveAcesso: r.chave_acesso,
+        fornecedorCnpj: r.fornecedor_cnpj,
+        fornecedorNome: r.fornecedor_nome,
+        destinatarioCnpj: r.destinatario_cnpj,
+        destinatarioNome: r.destinatario_nome,
+        optanteSimples: r.optante_simples,
+        valorBruto: bruto,
+        valorLiquido: parseFloat(r.valor_liquido) || 0,
+        totalRetido: retido,
+        createdAt: r.created_at,
+        naturezasReinf: naturezasNota,
+        dadosJson: dj
+      };
+
+      if (!naturezaFiltro || naturezasNota.includes(naturezaFiltro)) {
+        notasDetalhadas.push(notaItem);
+      }
+    }
+
+    res.json({
+      totaisPorTributo: {
+        totalBrutoAcumulado: Number(totalBrutoAcumulado.toFixed(2)),
+        totalGeralRetido: Number(totalGeralRetido.toFixed(2)),
+        ir: Number(totalIr.toFixed(2)),
+        csll: Number(totalCsll.toFixed(2)),
+        pis: Number(totalPis.toFixed(2)),
+        cofins: Number(totalCofins.toFixed(2)),
+        inss: Number(totalInss.toFixed(2)),
+        iss: Number(totalIss.toFixed(2))
+      },
+      totaisPorCodigoDarf: Object.values(mefDarfMap),
+      naturezasEFDReinf: Object.values(mefReinfMap),
+      alertas,
+      totalNotasAnalisadas: rows.length,
+      notas: notasDetalhadas
+    });
+  } catch (error: any) {
+    console.error('Erro ao gerar dados do Dashboard:', error);
+    res.status(500).json({ error: error.message || 'Erro ao carregar dados do Dashboard.' });
+  }
+});
+
 // Buscar uma nota salva específica pelo ID
 app.get('/api/notas/:id', async (req: Request, res: Response) => {
   try {

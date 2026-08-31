@@ -15,15 +15,17 @@ import {
   RotateCcw,
   Sparkles,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  BarChart3
 } from 'lucide-react';
 import { ReportPreview, type ResultadoConsolidado } from './components/ReportPreview';
 import { HistoricoSearch } from './components/HistoricoSearch';
 import { Anexo1Tab } from './components/Anexo1Tab';
 import { NcmMatrixTab } from './components/NcmMatrixTab';
+import { DashboardTab } from './components/DashboardTab';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'analise' | 'historico' | 'anexo1' | 'ncm'>('analise');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'analise' | 'historico' | 'anexo1' | 'ncm'>('analise');
   
   // Estado do formulário de análise (100% limpo inicialmente)
   const [tipoDocumento, setTipoDocumento] = useState<'NFE' | 'NFSE'>('NFE');
@@ -333,6 +335,14 @@ export default function App() {
 
       {/* Navegação por Abas */}
       <nav className="nav-tabs">
+        <button 
+          className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          <BarChart3 size={18} />
+          <span>Dashboard & Analytics</span>
+        </button>
+
         <button 
           className={`nav-tab ${activeTab === 'analise' ? 'active' : ''}`}
           onClick={() => setActiveTab('analise')}
@@ -908,6 +918,7 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === 'dashboard' && <DashboardTab />}
         {activeTab === 'historico' && <HistoricoSearch onSelectNota={handleSelectNotaDoHistorico} />}
         {activeTab === 'anexo1' && <Anexo1Tab />}
         {activeTab === 'ncm' && <NcmMatrixTab />}
