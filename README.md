@@ -154,3 +154,35 @@ Contribuições são super bem-vindas! Siga os passos abaixo para contribuir:
 ## 📄 Licença
 
 Este projeto está licenciado sob a licença **MIT** — consulte o arquivo [LICENSE](file:///c:/Desenv-sistemas/Ret-Impostos/LICENSE) para mais informações.
+
+
+O projeto possui um único arquivo SQL consolidado — o 
+
+database/schema.sql
+ — que contém toda a estrutura de tabelas, índices e dados iniciais que o banco de dados PostgreSQL precisa ter.
+
+📋 O que o script 
+
+database/schema.sql
+ executa de uma só vez:
+Criação da Tabela ncm_regras: Armazena as regras tributárias por prefixo NCM, alíquotas de impostos federais (IR, CSLL, PIS, COFINS), código de receita DARF (ex: 8767, 6147), natureza de rendimento para EFD-Reinf e fundamentação legal.
+
+Criação da Tabela fornecedores_simples: Registra o histórico de consultas de CNPJs no Simples Nacional e SIMEI.
+
+Criação da Tabela notas_analisadas: Tabela principal do histórico de análises de documentos (NF-e e NFS-e), armazenando número da nota, chave de acesso, CNPJs, valores brutos/líquidos/retidos e o espelho completo dos impostos em formato JSONB.
+
+Índices de Performance: Cria três índices estratégicos (idx_notas_fornecedor_cnpj, idx_notas_chave_acesso, idx_notas_numero_nota) para garantir pesquisas instantâneas no histórico.
+
+Carga Inicial de Dados (Seed Data): Contém instruções INSERT ... ON CONFLICT DO UPDATE pré-carregando os NCMs de medicamentos, artigos farmacêuticos, seringas, agulhas e cateteres (Alíquota Zero de PIS/COFINS nos termos da Lei nº 10.147/2000 e da IN RFB nº 1.234/2012).
+
+
+Você pode rodar todo o banco de dados de duas formas simples:
+
+Opção 1: Via Terminal (psql)
+bash
+psql -U postgres -d ret_impostos -f database/schema.sql
+Opção 2: Via Cliente SQL (DBeaver / pgAdmin / VS Code)
+Abra o arquivo 
+
+database/schema.sql
+, selecione todo o texto (Ctrl+A) e execute o script em seu banco de dados ret_impostos.
