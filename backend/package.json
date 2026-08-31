@@ -1,0 +1,39 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.20.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "fast-xml-parser": "^5.11.1",
+    "multer": "^2.2.0",
+    "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.20.1",
+    "pg": "^8.23.0",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^26.4.0",
+    "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.23.1",
+    "@types/xml2js": "^0.4.14",
+    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}

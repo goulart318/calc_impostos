@@ -1,0 +1,13 @@
+{
+  "name": "ret-impostos",
+  "version": "1.0.0",
+  "description": "Plataforma de Retenções Tributárias para Órgão Federal (IN 1234/2012, INSS e ISS Vitória/ES)",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "start": "npm run dev:backend"
+  },
+  "keywords": ["tributario", "in1234", "retencao", "sei", "sped", "reinf"],
+  "author": "",
+  "license": "ISC"
+}
