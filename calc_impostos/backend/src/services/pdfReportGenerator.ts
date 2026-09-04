@@ -3,16 +3,36 @@ import { ResultadoConsolidado } from './taxEngine';
 
 export class PdfReportGenerator {
   /**
+   * Gera o nome padronizado do arquivo PDF incluindo o número da nota e a Razão Social do fornecedor
+   */
+  public static gerarNomeArquivo(numeroNota?: string, fornecedorNome?: string): string {
+    const nota = (numeroNota || 'Fiscal').trim();
+    const razaoSocial = (fornecedorNome || '')
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9\s_-]/g, '')
+      .replace(/\s+/g, '_')
+      .toUpperCase();
+
+    if (razaoSocial) {
+      return `Relatorio_Retencao_Nota_${nota}_${razaoSocial}.pdf`;
+    }
+    return `Relatorio_Retencao_Nota_${nota}.pdf`;
+  }
+
+  /**
    * Gera o PDF formatado do relatório individualizado de retenções (Padrão SEI / Órgão Federal)
    */
   public static gerarRelatorio(resultado: ResultadoConsolidado): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       try {
+        const nomeArquivo = PdfReportGenerator.gerarNomeArquivo(resultado.numeroNota, resultado.fornecedorNome);
         const doc = new PDFDocument({
           size: 'A4',
           margins: { top: 30, bottom: 30, left: 35, right: 35 },
           info: {
-            Title: `Relatorio_Retencao_Nota_${resultado.numeroNota}`,
+            Title: nomeArquivo.replace('.pdf', ''),
             Author: 'Sistema de Retencoes Tributarias - Orgao Federal',
             Subject: 'Memoria de Calculo de Retencoes Tributarias (IN RFB 1.234/2012)'
           }

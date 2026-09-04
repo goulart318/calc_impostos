@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, FileText, Download, RefreshCw, Calendar, Building } from 'lucide-react';
-import type { ResultadoConsolidado } from './ReportPreview';
+import { gerarNomeArquivoPdf, type ResultadoConsolidado } from './ReportPreview';
 
 interface NotaSalvaResumo {
   id: number;
@@ -69,7 +69,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota }) => {
     }
   };
 
-  const handleDownloadPdfDirect = async (id: number, numeroNota: string) => {
+  const handleDownloadPdfDirect = async (id: number, numeroNota: string, fornecedorNome?: string) => {
     try {
       const resNota = await fetch(`http://localhost:3001/api/notas/${id}`);
       if (!resNota.ok) return;
@@ -86,7 +86,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota }) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `relatorio_retencao_nota_${numeroNota || id}.pdf`;
+        a.download = gerarNomeArquivoPdf(dataFull.numeroNota || numeroNota, dataFull.fornecedorNome || fornecedorNome);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -201,7 +201,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota }) => {
 
                         <button
                           className="btn-primary"
-                          onClick={() => handleDownloadPdfDirect(n.id, n.numero_nota)}
+                          onClick={() => handleDownloadPdfDirect(n.id, n.numero_nota, n.fornecedor_nome)}
                           title="Baixar Relatório em PDF para o SEI"
                           style={{ padding: '6px 10px', fontSize: '0.78rem' }}
                         >

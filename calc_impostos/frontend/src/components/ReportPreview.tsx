@@ -64,6 +64,22 @@ export interface ResultadoConsolidado {
   fundamentacaoLegalResumo: string[];
 }
 
+export const gerarNomeArquivoPdf = (numeroNota?: string, fornecedorNome?: string): string => {
+  const nota = (numeroNota || 'Fiscal').trim();
+  const razaoSocial = (fornecedorNome || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s_-]/g, '')
+    .replace(/\s+/g, '_')
+    .toUpperCase();
+
+  if (razaoSocial) {
+    return `Relatorio_Retencao_Nota_${nota}_${razaoSocial}.pdf`;
+  }
+  return `Relatorio_Retencao_Nota_${nota}.pdf`;
+};
+
 interface Props {
   data: ResultadoConsolidado;
 }
@@ -92,7 +108,7 @@ export const ReportPreview: React.FC<Props> = ({ data }) => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Relatorio_Retencao_Nota_${data.numeroNota || 'Fiscal'}.pdf`;
+      a.download = gerarNomeArquivoPdf(data.numeroNota, data.fornecedorNome);
       document.body.appendChild(a);
       a.click();
       a.remove();

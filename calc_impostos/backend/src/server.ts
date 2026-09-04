@@ -202,9 +202,10 @@ app.post('/api/gerar-pdf', async (req: Request, res: Response) => {
   try {
     const resultado: ResultadoConsolidado = req.body;
     const pdfBuffer = await PdfReportGenerator.gerarRelatorio(resultado);
+    const nomeArquivo = PdfReportGenerator.gerarNomeArquivo(resultado.numeroNota, resultado.fornecedorNome);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=relatorio_retencao_nota_${resultado.numeroNota || 'fiscal'}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
     res.send(pdfBuffer);
   } catch (error: any) {
     console.error('Erro ao gerar PDF:', error);
