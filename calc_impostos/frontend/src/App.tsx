@@ -23,6 +23,7 @@ import { HistoricoSearch } from './components/HistoricoSearch';
 import { Anexo1Tab } from './components/Anexo1Tab';
 import { NcmMatrixTab } from './components/NcmMatrixTab';
 import { DashboardTab } from './components/DashboardTab';
+import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './components/ProcessoConsolidadoModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'analise' | 'historico' | 'anexo1' | 'ncm'>('analise');
@@ -66,6 +67,8 @@ export default function App() {
   // Estado de Drag and Drop e Upload
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [loteProgresso, setLoteProgresso] = useState<string>('');
+  const [processoModalData, setProcessoModalData] = useState<ProcessoConsolidadoData | null>(null);
 
   // Resultado do Cálculo (Vazio por padrão)
   const [resultado, setResultado] = useState<ResultadoConsolidado | null>(null);
@@ -235,6 +238,44 @@ export default function App() {
     }
   };
 
+  const handleFilesUpload = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+
+    if (files.length === 1) {
+      return handleFileUpload(files[0]);
+    }
+
+    // Processamento em lote de múltiplos arquivos
+    try {
+      setUploading(true);
+      setLoteProgresso(`Processando lote com ${files.length} notas fiscais e consultando Receita Federal...`);
+
+      const formData = new FormData();
+      files.forEach((f) => {
+        formData.append('arquivos', f);
+      });
+
+      const res = await fetch('http://localhost:3001/api/upload-lote', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao processar lote de arquivos.');
+      }
+
+      const data: ProcessoConsolidadoData = await res.json();
+      setProcessoModalData(data);
+    } catch (err: any) {
+      alert('Erro no processamento do lote: ' + err.message);
+    } finally {
+      setUploading(false);
+      setLoteProgresso('');
+    }
+  };
+
   const handleSelectNotaDoHistorico = (nota: ResultadoConsolidado) => {
     setResultado(nota);
     setTipoDocumento(nota.tipoDocumento);
@@ -383,7 +424,7 @@ export default function App() {
             <div className="two-column-layout">
               {/* Painel Esquerdo: Entrada de Dados */}
               <div className="left-panel">
-                {/* Upload de Nota Fiscal (XML ou PDF) */}
+                {/* Upload de Nota Fiscal (XML ou PDF) - Individual ou em Lote */}
                 <div 
                   className={`card drop-zone ${isDragging ? 'dragging' : ''}`}
                   onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -391,35 +432,69 @@ export default function App() {
                   onDrop={(e) => {
                     e.preventDefault();
                     setIsDragging(false);
-                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                      handleFileUpload(e.dataTransfer.files[0]);
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      handleFilesUpload(e.dataTransfer.files);
                     }
                   }}
                   style={{ marginBottom: '16px', textOverflow: 'ellipsis' }}
                 >
                   <UploadCloud size={36} color="var(--primary)" style={{ marginBottom: '8px' }} />
                   <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 4px 0' }}>
-                    {uploading ? 'Processando e consultando Receita Federal...' : 'Importar Nota Fiscal (PDF ou XML)'}
+                    {uploading 
+                      ? (loteProgresso || 'Processando e consultando Receita Federal...') 
+                      : 'Importar Nota(s) Fiscal(is) — Individual ou em Lote'}
                   </h3>
                   <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
-                    O sistema extrai o CNPJ, NCMs, itens e valores automaticamente
+                    Arraste um arquivo individual ou múltiplos PDFs/XMLs para calcular o processo de pagamento unificado
                   </p>
                   
                   <input 
                     type="file" 
                     id="file-upload" 
+                    multiple
                     accept=".pdf,.xml" 
                     style={{ display: 'none' }}
                     onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleFileUpload(e.target.files[0]);
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleFilesUpload(e.target.files);
                       }
                     }} 
                   />
                   <label htmlFor="file-upload" className="btn btn-outline" style={{ marginTop: '12px', fontSize: '0.8rem' }}>
-                    Selecionar Arquivo
+                    Selecionar Arquivo(s) (PDF ou XML)
                   </label>
                 </div>
+
+                {/* Banner de Processo Consolidado Ativo (se houver) */}
+                {processoModalData && (
+                  <div style={{
+                    marginBottom: '16px',
+                    padding: '12px 16px',
+                    background: '#eff6ff',
+                    border: '1px solid #93c5fd',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <div>
+                      <strong style={{ fontSize: '0.85rem', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Layers size={16} /> Processo de Pagamento com {processoModalData.resumo.totalNotas} Nota(s) Consolidada(s)
+                      </strong>
+                      <div style={{ fontSize: '0.75rem', color: '#3b82f6', marginTop: '2px' }}>
+                        Total Bruto: {(processoModalData.resumo.totalBruto || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} • Líquido: {(processoModalData.resumo.totalLiquido || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </div>
+                    </div>
+                    <button 
+                      className="btn-primary"
+                      onClick={() => setProcessoModalData(processoModalData)}
+                      style={{ fontSize: '0.78rem', padding: '6px 12px' }}
+                    >
+                      Abrir Relatório Consolidado
+                    </button>
+                  </div>
+                )}
 
                 {/* Card de Configuração do CNPJ do Órgão / Estabelecimento */}
                 <div className="card" style={{ background: '#f8fafc', border: '1px solid #cbd5e1', marginBottom: '16px' }}>
@@ -919,10 +994,24 @@ export default function App() {
         )}
 
         {activeTab === 'dashboard' && <DashboardTab />}
-        {activeTab === 'historico' && <HistoricoSearch onSelectNota={handleSelectNotaDoHistorico} />}
+        {activeTab === 'historico' && (
+          <HistoricoSearch 
+            onSelectNota={handleSelectNotaDoHistorico} 
+            onConsolidarNotas={(dados) => setProcessoModalData(dados)} 
+          />
+        )}
         {activeTab === 'anexo1' && <Anexo1Tab />}
         {activeTab === 'ncm' && <NcmMatrixTab />}
       </main>
+
+      {/* Modal de Processo de Pagamento Consolidado (Múltiplas Notas) */}
+      {processoModalData && (
+        <ProcessoConsolidadoModal 
+          dados={processoModalData} 
+          onClose={() => setProcessoModalData(null)}
+          podeSalvarNoBanco={activeTab === 'analise'} // Se veio de upload de lote, permite salvar no banco
+        />
+      )}
     </div>
   );
 }
