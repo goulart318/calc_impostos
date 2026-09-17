@@ -381,6 +381,26 @@ app.get('/api/consultar-cnpj/:cnpj', async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint de Recálculo Reativo de Retenções (Edição de Itens e Parâmetros)
+app.post('/api/recalcular', async (req: Request, res: Response) => {
+  try {
+    const params: ParametrosCalculo = req.body;
+    if (!params || !params.itens || !Array.isArray(params.itens)) {
+      return res.status(400).json({ error: 'Dados inválidos para recálculo de nota fiscal.' });
+    }
+
+    const resultado = await TaxEngine.processarNota(params);
+    if (req.body.optanteSimei !== undefined) resultado.optanteSimei = req.body.optanteSimei;
+    if (req.body.dataOpcaoSimples !== undefined) resultado.dataOpcaoSimples = req.body.dataOpcaoSimples;
+    if (req.body.fonteConsultaCnpj !== undefined) resultado.fonteConsultaCnpj = req.body.fonteConsultaCnpj;
+
+    res.json(resultado);
+  } catch (error: any) {
+    console.error('Erro ao recalcular nota fiscal:', error);
+    res.status(500).json({ error: 'Erro ao recalcular retenções: ' + error.message });
+  }
+});
+
 // =========================================================================
 // 2. GERAÇÃO DE RELATÓRIO EM PDF (INDIVIDUAL E CONSOLIDADO SEI)
 // =========================================================================

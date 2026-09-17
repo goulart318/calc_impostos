@@ -8,6 +8,17 @@ export interface ItemAnaliseInput {
   codigoServico?: string;
   valorBruto: number;
   condicaoEspecial?: string;
+
+  // Overrides manuais opcionais se editados pelo usuário
+  manualAliqIr?: number;
+  manualAliqCsll?: number;
+  manualAliqPis?: number;
+  manualAliqCofins?: number;
+  manualAliqInss?: number;
+  manualAliqIss?: number;
+  manualCodigoDarf?: string;
+  manualNaturezaReinf?: string;
+  manualFundamentacao?: string;
 }
 
 export interface ItemCalculado {
@@ -132,16 +143,55 @@ export class TaxEngine {
   }> {
     const ncm = (ncmRaw || '').replace(/\D/g, '');
 
-    if (codigoForcado === '8767') {
+    if (codigoForcado === 'ISENTO') {
       return {
-        codigoReceita: '8767',
+        codigoReceita: 'ISENTO',
+        naturezaReinf: 'ISENTO',
+        condicao: 'Operação Isenta / Imune de Retenção Federal',
+        aliqIr: 0,
+        aliqCsll: 0,
+        aliqCofins: 0,
+        aliqPis: 0,
+        fundamentacao: 'Operação dispensada / isenta de retenção federal'
+      };
+    }
+
+    if (codigoForcado === '8767' || codigoForcado === '6188') {
+      return {
+        codigoReceita: codigoForcado,
         naturezaReinf: '17022',
-        condicao: 'Produtos com Alíquota Zero / Monofásico de PIS e COFINS (Art. 2º § 5º IN 1234/2012)',
+        condicao: 'Medicamentos / Monofásicos PIS/COFINS (Art. 2º § 5º IN 1234/2012 - 2,20%)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
         aliqCofins: 0.00,
         aliqPis: 0.00,
-        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 10.147/2000 (Código 8767)'
+        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 10.147/2000'
+      };
+    }
+
+    if (codigoForcado === '6175') {
+      return {
+        codigoReceita: '6175',
+        naturezaReinf: '17009',
+        condicao: 'Transporte de Cargas ou Passageiros (7,05%)',
+        aliqIr: 2.40,
+        aliqCsll: 1.00,
+        aliqCofins: 3.00,
+        aliqPis: 0.65,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 6175'
+      };
+    }
+
+    if (codigoForcado === '6190') {
+      return {
+        codigoReceita: '6190',
+        naturezaReinf: '17006',
+        condicao: 'Prestação de Serviços / Locação em Geral (Regra 9,45%)',
+        aliqIr: 4.80,
+        aliqCsll: 1.00,
+        aliqCofins: 3.00,
+        aliqPis: 0.65,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 6190'
       };
     }
 
@@ -231,6 +281,32 @@ export class TaxEngine {
   }> {
     const cod = codigoReceitaEscolhido || '6190';
 
+    if (cod === 'ISENTO') {
+      return {
+        codigoReceita: 'ISENTO',
+        naturezaReinf: 'ISENTO',
+        condicao: 'Serviço Isento ou Dispensa de Retenção',
+        aliqIr: 0,
+        aliqCsll: 0,
+        aliqCofins: 0,
+        aliqPis: 0,
+        fundamentacao: 'Operação dispensada / isenta de retenção federal'
+      };
+    }
+
+    if (cod === '8767' || cod === '6188') {
+      return {
+        codigoReceita: cod,
+        naturezaReinf: '17022',
+        condicao: 'Serviços Hospitalares / Monofásico PIS/COFINS (2,20%)',
+        aliqIr: 1.20,
+        aliqCsll: 1.00,
+        aliqCofins: 0.00,
+        aliqPis: 0.00,
+        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012'
+      };
+    }
+
     if (cod === '6147' || cod === '07.02' || cod === '7.02') {
       return {
         codigoReceita: '6147',
@@ -248,7 +324,7 @@ export class TaxEngine {
       return {
         codigoReceita: '6175',
         naturezaReinf: '17009',
-        condicao: 'Transporte de passageiros (7,05%)',
+        condicao: 'Transporte de passageiros ou cargas (7,05%)',
         aliqIr: 2.40,
         aliqCsll: 1.00,
         aliqCofins: 3.00,
@@ -332,7 +408,7 @@ export class TaxEngine {
       let natReinfFinal = regraTributaria.naturezaReinf;
       let fundamentacaoItem = regraTributaria.fundamentacao;
 
-      if (params.optanteSimples) {
+      if (params.optanteSimples && itemInput.manualAliqIr === undefined) {
         aliqIr = 0;
         aliqCsll = 0;
         aliqCofins = 0;
@@ -345,6 +421,15 @@ export class TaxEngine {
       } else {
         fundSet.add(fundamentacaoItem);
       }
+
+      // Aplicação de overrides manuais do usuário se definidos na edição inline
+      if (itemInput.manualAliqIr !== undefined) aliqIr = itemInput.manualAliqIr;
+      if (itemInput.manualAliqCsll !== undefined) aliqCsll = itemInput.manualAliqCsll;
+      if (itemInput.manualAliqCofins !== undefined) aliqCofins = itemInput.manualAliqCofins;
+      if (itemInput.manualAliqPis !== undefined) aliqPis = itemInput.manualAliqPis;
+      if (itemInput.manualCodigoDarf) codReceitaFinal = itemInput.manualCodigoDarf;
+      if (itemInput.manualNaturezaReinf) natReinfFinal = itemInput.manualNaturezaReinf;
+      if (itemInput.manualFundamentacao) fundamentacaoItem = itemInput.manualFundamentacao;
 
       // 1. INSS / Contribuição Previdenciária com suporte a Abatimento de Materiais e Equipamentos (IN 2.110/2022)
       let aliqInss = 0;
@@ -371,6 +456,11 @@ export class TaxEngine {
         }
       }
 
+      if (itemInput.manualAliqInss !== undefined) {
+        aliqInss = itemInput.manualAliqInss;
+        valorInss = Number(((baseCalculoInss * aliqInss) / 100).toFixed(2));
+      }
+
       baseCalculoInssTotal += baseCalculoInss;
 
       // 2. ISSQN (Municipal com suporte à Redução de Base de Cálculo em Vitória/ES)
@@ -391,6 +481,11 @@ export class TaxEngine {
         } else {
           fundSet.add('Código Tributário de Vitória/ES (Lei Municipal nº 6.075/2003) c/c LC nº 116/2003');
         }
+      }
+
+      if (itemInput.manualAliqIss !== undefined) {
+        aliqIss = itemInput.manualAliqIss;
+        valorIss = Number(((baseCalculoIss * aliqIss) / 100).toFixed(2));
       }
 
       baseCalculoIssTotal += baseCalculoIss;

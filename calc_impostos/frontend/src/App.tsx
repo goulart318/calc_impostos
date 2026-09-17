@@ -1039,7 +1039,10 @@ export default function App() {
                         <Database size={16} /> Salvar Análise no Banco de Dados
                       </button>
                     </div>
-                    <ReportPreview data={resultado} />
+                    <ReportPreview 
+                      data={resultado} 
+                      onUpdateData={(novoResultado) => setResultado(novoResultado)}
+                    />
                   </div>
                 ) : (
                   <div className="card empty-state">
