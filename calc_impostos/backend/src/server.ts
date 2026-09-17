@@ -88,6 +88,8 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
       tipoDocumento: notaExtraida.tipoDocumento,
       numeroNota: notaExtraida.numeroNota,
       chaveAcesso: notaExtraida.chaveAcesso,
+      numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
+      numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
       fornecedorNome: notaExtraida.fornecedorNome,
       fornecedorCnpj: notaExtraida.fornecedorCnpj,
       destinatarioNome: notaExtraida.destinatarioNome,
@@ -153,6 +155,8 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
       tipoDocumento: notaExtraida.tipoDocumento,
       numeroNota: notaExtraida.numeroNota,
       chaveAcesso: notaExtraida.chaveAcesso,
+      numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
+      numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
       fornecedorNome: notaExtraida.fornecedorNome,
       fornecedorCnpj: notaExtraida.fornecedorCnpj,
       destinatarioNome: notaExtraida.destinatarioNome,
@@ -246,6 +250,8 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
           tipoDocumento: notaExtraida.tipoDocumento,
           numeroNota: notaExtraida.numeroNota,
           chaveAcesso: notaExtraida.chaveAcesso,
+          numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
+          numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
           fornecedorNome: notaExtraida.fornecedorNome,
           fornecedorCnpj: notaExtraida.fornecedorCnpj,
           destinatarioNome: notaExtraida.destinatarioNome,
@@ -421,7 +427,7 @@ app.post('/api/processo/gerar-pdf-consolidado', async (req: Request, res: Respon
 app.get('/api/notas', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 100;'
+      'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 100;'
     );
     res.json(result.rows);
   } catch (error: any) {
@@ -443,8 +449,8 @@ app.post('/api/notas/salvar', async (req: Request, res: Response) => {
       INSERT INTO notas_analisadas (
         tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
         destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto,
-        valor_liquido, total_retido, dados_json
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        valor_liquido, total_retido, dados_json, numero_processo, numero_empenho
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id;
     `;
 
@@ -453,7 +459,8 @@ app.post('/api/notas/salvar', async (req: Request, res: Response) => {
       r.fornecedorCnpj, r.fornecedorNome,
       r.destinatarioCnpj || null, r.destinatarioNome || null,
       r.optanteSimples, r.totalBruto, r.valorLiquido, r.totalRetidoGeral,
-      JSON.stringify(r)
+      JSON.stringify(r),
+      r.numeroProcesso || null, r.numeroEmpenho || null
     ];
 
     const result = await pool.query(query, values);
@@ -466,21 +473,23 @@ app.post('/api/notas/salvar', async (req: Request, res: Response) => {
   }
 });
 
-// Pesquisar notas salvos por CNPJ, Chave de Acesso, Número da Nota ou Nome do Fornecedor
+// Pesquisar notas salvos por CNPJ, Chave de Acesso, Número da Nota, Processo ou Empenho
 app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
   try {
     const q = String(req.query.q || '').trim();
-    let queryText = 'SELECT id, tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 50;';
+    let queryText = 'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 50;';
     let queryParams: any[] = [];
 
     if (q) {
       queryText = `
-        SELECT id, tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at
+        SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at
         FROM notas_analisadas
         WHERE fornecedor_cnpj ILIKE $1 
            OR chave_acesso ILIKE $1 
            OR numero_nota ILIKE $1 
            OR fornecedor_nome ILIKE $1
+           OR numero_processo ILIKE $1
+           OR numero_empenho ILIKE $1
         ORDER BY created_at DESC 
         LIMIT 50;
       `;
@@ -501,9 +510,9 @@ app.get('/api/dashboard/analytics', async (req: Request, res: Response) => {
     const naturezaFiltro = String(req.query.natureza || '').trim();
 
     const result = await pool.query(`
-      SELECT id, tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome, 
-             destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto, 
-             valor_liquido, total_retido, dados_json, created_at 
+      SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, numero_empenho, 
+             fornecedor_cnpj, fornecedor_nome, destinatario_cnpj, destinatario_nome, 
+             optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at 
       FROM notas_analisadas 
       ORDER BY created_at DESC;
     `);
@@ -595,6 +604,8 @@ app.get('/api/dashboard/analytics', async (req: Request, res: Response) => {
         tipoDocumento: r.tipo_documento,
         numeroNota: r.numero_nota,
         chaveAcesso: r.chave_acesso,
+        numeroProcesso: r.numero_processo || dj.numeroProcesso || null,
+        numeroEmpenho: r.numero_empenho || dj.numeroEmpenho || null,
         fornecedorCnpj: r.fornecedor_cnpj,
         fornecedorNome: r.fornecedor_nome,
         destinatarioCnpj: r.destinatario_cnpj,

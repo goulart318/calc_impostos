@@ -84,23 +84,41 @@ export class PdfReportGenerator {
            .text(`[CONFERENCIA DE CNPJ] DESTINADO A: ${destNomeFmt} (${destCnpjFmt})`, 45, destY + 6, { width: 505, ellipsis: true });
 
         // ==========================================
-        // 3. QUADRO DE INFORMAÇÕES DA NOTA E FORNECEDOR
+        // 3. QUADRO DE INFORMAÇÕES DA NOTA, PROCESSO SEI E EMPENHO
         // ==========================================
         const boxY = 90;
-        doc.rect(35, boxY, 525, 42).fillAndStroke(lightBg, borderColor);
+        const boxH = 56;
+        doc.rect(35, boxY, 525, boxH).fillAndStroke(lightBg, borderColor);
 
-        doc.fillColor(textMuted).fontSize(7.5).font('Helvetica-Bold').text('NUMERO DA NOTA', 45, boxY + 6);
-        doc.fillColor(primaryColor).fontSize(12).font('Helvetica-Bold').text(resultado.numeroNota || '---', 45, boxY + 18);
+        // Linha 1: Número da Nota e Fornecedor
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NUMERO DA NOTA', 45, boxY + 5);
+        doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text(resultado.numeroNota || '---', 45, boxY + 15);
 
-        doc.fillColor(textMuted).fontSize(7.5).font('Helvetica-Bold').text('FORNECEDOR (RAZAO SOCIAL / CNPJ)', 150, boxY + 6);
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('FORNECEDOR (RAZAO SOCIAL / CNPJ)', 145, boxY + 5);
         const cnpjFmt = resultado.fornecedorCnpj ? ` • CNPJ: ${resultado.fornecedorCnpj}` : '';
-        doc.fillColor(primaryColor).fontSize(9.5).font('Helvetica-Bold')
-           .text(`${resultado.fornecedorNome}${cnpjFmt}`, 150, boxY + 18, { width: 395, ellipsis: true });
+        doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold')
+           .text(`${resultado.fornecedorNome}${cnpjFmt}`, 145, boxY + 15, { width: 405, ellipsis: true });
+
+        // Divisor interno
+        doc.moveTo(45, boxY + 29).lineTo(550, boxY + 29).strokeColor('#e2e8f0').stroke();
+
+        // Linha 2: Processo SEI, Nota de Empenho e Data de Emissão
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('PROCESSO SEI Nº', 45, boxY + 32);
+        doc.fillColor(resultado.numeroProcesso ? '#0f172a' : '#64748b').fontSize(8.5).font('Helvetica-Bold')
+           .text(resultado.numeroProcesso || 'Não informado', 45, boxY + 42);
+
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NOTA DE EMPENHO', 280, boxY + 32);
+        doc.fillColor(resultado.numeroEmpenho ? '#0f172a' : '#64748b').fontSize(8.5).font('Helvetica-Bold')
+           .text(resultado.numeroEmpenho || 'Não informada', 280, boxY + 42);
+
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('DATA EMISSÃO', 450, boxY + 32);
+        doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold')
+           .text(resultado.dataEmissao || '---', 450, boxY + 42);
 
         // ==========================================
         // 4. QUADRO DE ENQUADRAMENTO TRIBUTÁRIO (SIMPLES NACIONAL / REGIME TRIBUTÁRIO)
         // ==========================================
-        const simpY = boxY + 48;
+        const simpY = boxY + boxH + 6;
         const ehSimples = resultado.optanteSimples;
         const simpBg = ehSimples ? '#fffbeb' : '#eff6ff';
         const simpBorder = ehSimples ? '#fde68a' : '#bfdbfe';

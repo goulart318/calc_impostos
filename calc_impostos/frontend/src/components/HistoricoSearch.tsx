@@ -8,12 +8,15 @@ interface NotaSalvaResumo {
   tipo_documento: 'NFE' | 'NFSE';
   numero_nota: string;
   chave_acesso?: string;
+  numero_processo?: string;
+  numero_empenho?: string;
   fornecedor_cnpj: string;
   fornecedor_nome: string;
   optante_simples: boolean;
   valor_bruto: number;
   valor_liquido: number;
   total_retido: number;
+  dados_json?: any;
   created_at: string;
 }
 
@@ -215,6 +218,100 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
     }
   };
 
+  const handleExportarExcelCsv = () => {
+    const notasParaExportar = selectedIds.size > 0 
+      ? notas.filter(n => selectedIds.has(n.id))
+      : notas;
+
+    if (notasParaExportar.length === 0) {
+      alert('Não há notas para exportar.');
+      return;
+    }
+
+    const headers = [
+      'ID',
+      'Data da Análise',
+      'Processo SEI',
+      'Nota de Empenho',
+      'Tipo Documento',
+      'Número da Nota',
+      'Chave de Acesso',
+      'CNPJ Fornecedor',
+      'Razão Social Fornecedor',
+      'Optante Simples',
+      'Valor Bruto (R$)',
+      'IR Retido (R$)',
+      'CSLL Retido (R$)',
+      'PIS Retido (R$)',
+      'COFINS Retido (R$)',
+      'INSS Retido (R$)',
+      'ISS Retido (R$)',
+      'Total Geral Retido (R$)',
+      'Valor Líquido a Pagar (R$)',
+      'Códigos DARF',
+      'Naturezas EFD-Reinf'
+    ];
+
+    const escapeCsv = (str: any) => {
+      if (str === null || str === undefined) return '""';
+      const clean = String(str).replace(/"/g, '""');
+      return `"${clean}"`;
+    };
+
+    const formatNum = (num: any) => {
+      const n = parseFloat(num) || 0;
+      return `"${n.toFixed(2).replace('.', ',')}"`;
+    };
+
+    const linhas = [headers.join(';')];
+
+    notasParaExportar.forEach(n => {
+      const dj = n.dados_json || {};
+      const codigosDarf = Array.isArray(dj.codigosReceitaDarf) 
+        ? dj.codigosReceitaDarf.map((d: any) => `${d.codigo}: R$ ${Number(d.valor || 0).toFixed(2)}`).join(' | ')
+        : '';
+      const naturezasReinf = Array.isArray(dj.naturezasEFDReinf)
+        ? dj.naturezasEFDReinf.map((r: any) => `${r.codigo} (${r.descricao || 'Serviço'}): R$ ${Number(r.valor || 0).toFixed(2)}`).join(' | ')
+        : '';
+
+      const linha = [
+        n.id,
+        escapeCsv(new Date(n.created_at).toLocaleDateString('pt-BR') + ' ' + new Date(n.created_at).toLocaleTimeString('pt-BR')),
+        escapeCsv(n.numero_processo || dj.numeroProcesso || 'Não informado'),
+        escapeCsv(n.numero_empenho || dj.numeroEmpenho || 'Não informada'),
+        escapeCsv(n.tipo_documento),
+        escapeCsv(n.numero_nota),
+        escapeCsv(n.chave_acesso || ''),
+        escapeCsv(n.fornecedor_cnpj),
+        escapeCsv(n.fornecedor_nome),
+        escapeCsv(n.optante_simples ? 'SIM' : 'NÃO'),
+        formatNum(n.valor_bruto),
+        formatNum(dj.totalIr || 0),
+        formatNum(dj.totalCsll || 0),
+        formatNum(dj.totalPis || 0),
+        formatNum(dj.totalCofins || 0),
+        formatNum(dj.totalInss || 0),
+        formatNum(dj.totalIss || 0),
+        formatNum(n.total_retido),
+        formatNum(n.valor_liquido),
+        escapeCsv(codigosDarf),
+        escapeCsv(naturezasReinf)
+      ];
+      linhas.push(linha.join(';'));
+    });
+
+    const csvContent = '\uFEFF' + linhas.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dataHora = new Date().toISOString().slice(0, 10);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Relatorio_Contabil_Retencoes_${dataHora}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Barra de Pesquisa */}
@@ -226,7 +323,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
               type="text"
               className="form-input"
               style={{ paddingLeft: '40px', fontSize: '0.95rem' }}
-              placeholder="Digite o CNPJ do Fornecedor, Número da Nota Fiscal ou Chave de Acesso..."
+              placeholder="Digite o CNPJ do Fornecedor, Nº da Nota, Chave de Acesso, Processo SEI ou Empenho..."
               value={termo}
               onChange={(e) => setTermo(e.target.value)}
             />
@@ -305,14 +402,38 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
 
       {/* Lista de Registros */}
       <div className="card-box" style={{ background: '#ffffff', border: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FileText size={18} color="var(--primary)" />
-            <span>Análises Gravadas no Banco de Dados ({notas.length})</span>
-          </h3>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            💡 Marque os checkboxes para somar várias notas e gerar o relatório consolidado do processo no SEI.
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <FileText size={18} color="var(--primary)" />
+              <span>Análises Gravadas no Banco de Dados ({notas.length})</span>
+            </h3>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              💡 Marque os checkboxes para somar várias notas e gerar o relatório consolidado do processo no SEI.
+            </span>
+          </div>
+
+          <button 
+            onClick={handleExportarExcelCsv}
+            className="btn-outline" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              padding: '6px 14px', 
+              fontSize: '0.82rem', 
+              fontWeight: 700, 
+              borderColor: '#16a34a', 
+              color: '#15803d', 
+              background: '#f0fdf4',
+              cursor: 'pointer',
+              borderRadius: '6px'
+            }}
+            title="Exportar notas exibidas / selecionadas para planilha Excel (formato CSV formatado para o Brasil)"
+          >
+            <Download size={15} />
+            <span>Exportar para Excel (CSV)</span>
+          </button>
         </div>
 
         {notas.length === 0 ? (
@@ -345,6 +466,10 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
               <tbody>
                 {notas.map((n) => {
                   const isSelected = selectedIds.has(n.id);
+                  const dj = n.dados_json || {};
+                  const procExibir = n.numero_processo || dj.numeroProcesso;
+                  const empExibir = n.numero_empenho || dj.numeroEmpenho;
+
                   return (
                     <tr 
                       key={n.id}
@@ -378,6 +503,17 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
                         <span style={{ fontSize: '0.7rem', fontWeight: 600, color: n.tipo_documento === 'NFE' ? '#2563eb' : '#9333ea' }}>
                           {n.tipo_documento === 'NFE' ? 'NF-e Mercadoria' : 'NFS-e Serviço'}
                         </span>
+
+                        {procExibir && (
+                          <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
+                            <span style={{ color: '#64748b', fontWeight: 500 }}>SEI:</span> {procExibir}
+                          </div>
+                        )}
+                        {empExibir && (
+                          <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
+                            <span style={{ color: '#64748b', fontWeight: 500 }}>NE:</span> {empExibir}
+                          </div>
+                        )}
                       </td>
 
                       <td>

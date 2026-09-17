@@ -46,14 +46,23 @@ CREATE TABLE IF NOT EXISTS notas_analisadas (
   valor_liquido NUMERIC(15, 2) NOT NULL,
   total_retido NUMERIC(15, 2) NOT NULL,
   dados_json JSONB NOT NULL,
+  numero_processo VARCHAR(60),
+  numero_empenho VARCHAR(50),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Índices para busca ultrarrápida por CNPJ, Chave de Acesso e Número da Nota
+-- Garante compatibilidade caso a tabela já tenha sido criada anteriormente
+ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS numero_processo VARCHAR(60);
+ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS numero_empenho VARCHAR(50);
+
+-- Índices para busca ultrarrápida por CNPJ, Chave de Acesso, Número da Nota, Processo e Empenho
 CREATE INDEX IF NOT EXISTS idx_notas_fornecedor_cnpj ON notas_analisadas(fornecedor_cnpj);
 CREATE INDEX IF NOT EXISTS idx_notas_chave_acesso ON notas_analisadas(chave_acesso);
 CREATE INDEX IF NOT EXISTS idx_notas_numero_nota ON notas_analisadas(numero_nota);
+CREATE INDEX IF NOT EXISTS idx_notas_numero_processo ON notas_analisadas(numero_processo);
+CREATE INDEX IF NOT EXISTS idx_notas_numero_empenho ON notas_analisadas(numero_empenho);
+
 
 -- Regras Iniciais para Medicamentos, Equipamentos, Combustíveis, Livros e Autopeças
 INSERT INTO ncm_regras (ncm_prefixo, descricao, descricao_categoria, codigo_receita, natureza_reinf, aliq_ir, aliq_csll, aliq_cofins, aliq_pis, condicao_aplicavel, fundamentacao_legal) VALUES

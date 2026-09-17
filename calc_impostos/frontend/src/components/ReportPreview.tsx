@@ -32,6 +32,8 @@ export interface ResultadoConsolidado {
   tipoDocumento: 'NFE' | 'NFSE';
   numeroNota: string;
   chaveAcesso?: string;
+  numeroProcesso?: string;
+  numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
   destinatarioNome?: string;
@@ -184,19 +186,33 @@ export const ReportPreview: React.FC<Props> = ({ data }) => {
           </div>
         </div>
 
-        {/* Informações da Nota e Fornecedor */}
+        {/* Informações da Nota, Processo SEI e Fornecedor */}
         <div className="report-header-box">
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 180px 140px 1fr', gap: '16px', alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>NÚMERO DA NOTA</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{data.numeroNota || '---'}</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>{data.numeroNota || '---'}</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>PROCESSO SEI Nº</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: data.numeroProcesso ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                {data.numeroProcesso || 'Não informado'}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>NOTA DE EMPENHO</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: data.numeroEmpenho ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                {data.numeroEmpenho || 'Não informada'}
+              </div>
             </div>
 
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>FORNECEDOR (EMITENTE)</div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                {data.fornecedorNome}
-                {data.fornecedorCnpj && <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({data.fornecedorCnpj})</span>}
+              <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span>{data.fornecedorNome}</span>
+                {data.fornecedorCnpj && <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.78rem' }}>({data.fornecedorCnpj})</span>}
               </div>
             </div>
           </div>

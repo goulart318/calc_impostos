@@ -55,6 +55,15 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
   const [salvando, setSalvando] = useState(false);
   const [salvoSucesso, setSalvoSucesso] = useState(false);
 
+  // Formata o número do processo no padrão SEI: xxxxx.yyyyyy/aaaa-dd
+  const formatarProcessoSei = (val: string) => {
+    const limpo = val.replace(/\D/g, '').slice(0, 17);
+    if (limpo.length <= 5) return limpo;
+    if (limpo.length <= 11) return `${limpo.slice(0, 5)}.${limpo.slice(5)}`;
+    if (limpo.length <= 15) return `${limpo.slice(0, 5)}.${limpo.slice(5, 11)}/${limpo.slice(11)}`;
+    return `${limpo.slice(0, 5)}.${limpo.slice(5, 11)}/${limpo.slice(11, 15)}-${limpo.slice(15)}`;
+  };
+
   const formatBRL = (val: number) => {
     return (Number(val) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
@@ -216,16 +225,17 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                  NÚMERO DO PROCESSO SEI:
+                <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                  <span>NÚMERO DO PROCESSO SEI:</span>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Padrão: xxxxx.yyyyyy/aaaa-dd</span>
                 </label>
                 <input 
                   type="text"
                   className="form-input"
-                  placeholder="Ex: 23000.012345/2026-00"
+                  placeholder="Ex: 23068.012345/2026-99"
                   value={numeroProcesso}
-                  onChange={(e) => setNumeroProcesso(e.target.value)}
-                  style={{ width: '100%', fontSize: '0.85rem' }}
+                  onChange={(e) => setNumeroProcesso(formatarProcessoSei(e.target.value))}
+                  style={{ width: '100%', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
                 />
               </div>
 

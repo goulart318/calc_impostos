@@ -52,6 +52,8 @@ export interface ParametrosCalculo {
   tipoDocumento: 'NFE' | 'NFSE';
   numeroNota: string;
   chaveAcesso?: string;
+  numeroProcesso?: string;
+  numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
   destinatarioNome?: string;
@@ -78,6 +80,8 @@ export interface ResultadoConsolidado {
   tipoDocumento: 'NFE' | 'NFSE';
   numeroNota: string;
   chaveAcesso?: string;
+  numeroProcesso?: string;
+  numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
   destinatarioNome?: string;
@@ -472,6 +476,8 @@ export class TaxEngine {
       tipoDocumento: params.tipoDocumento,
       numeroNota: params.numeroNota,
       chaveAcesso: params.chaveAcesso,
+      numeroProcesso: params.numeroProcesso,
+      numeroEmpenho: params.numeroEmpenho,
       fornecedorNome: params.fornecedorNome,
       fornecedorCnpj: params.fornecedorCnpj,
       destinatarioNome: params.destinatarioNome,

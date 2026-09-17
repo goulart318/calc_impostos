@@ -7,7 +7,8 @@ import {
   RefreshCw, 
   FileText, 
   Layers, 
-  Receipt
+  Receipt,
+  Download
 } from 'lucide-react';
 
 interface AnalyticsData {
@@ -45,6 +46,8 @@ interface AnalyticsData {
     tipoDocumento: string;
     numeroNota: string;
     chaveAcesso?: string;
+    numeroProcesso?: string;
+    numeroEmpenho?: string;
     fornecedorCnpj: string;
     fornecedorNome: string;
     destinatarioCnpj?: string;
@@ -95,6 +98,96 @@ export const DashboardTab: React.FC = () => {
   const calcularPorcentagem = (valor: number, total: number) => {
     if (!total || total === 0) return '0.0%';
     return `${((valor / total) * 100).toFixed(1)}%`;
+  };
+
+  const handleExportarExcelCsv = () => {
+    if (!data || !data.notas || data.notas.length === 0) {
+      alert('Não há notas fiscais para exportar.');
+      return;
+    }
+
+    const headers = [
+      'ID',
+      'Data da Análise',
+      'Processo SEI',
+      'Nota de Empenho',
+      'Tipo Documento',
+      'Número da Nota',
+      'Chave de Acesso',
+      'CNPJ Fornecedor',
+      'Razão Social Fornecedor',
+      'Optante Simples',
+      'Valor Bruto (R$)',
+      'IR Retido (R$)',
+      'CSLL Retido (R$)',
+      'PIS Retido (R$)',
+      'COFINS Retido (R$)',
+      'INSS Retido (R$)',
+      'ISS Retido (R$)',
+      'Total Geral Retido (R$)',
+      'Valor Líquido a Pagar (R$)',
+      'Códigos DARF',
+      'Naturezas EFD-Reinf'
+    ];
+
+    const escapeCsv = (str: any) => {
+      if (str === null || str === undefined) return '""';
+      const clean = String(str).replace(/"/g, '""');
+      return `"${clean}"`;
+    };
+
+    const formatNum = (num: any) => {
+      const n = parseFloat(num) || 0;
+      return `"${n.toFixed(2).replace('.', ',')}"`;
+    };
+
+    const linhas = [headers.join(';')];
+
+    data.notas.forEach(n => {
+      const dj = n.dadosJson || {};
+      const codigosDarf = Array.isArray(dj.codigosReceitaDarf) 
+        ? dj.codigosReceitaDarf.map((d: any) => `${d.codigo}: R$ ${Number(d.valor || 0).toFixed(2)}`).join(' | ')
+        : '';
+      const naturezasReinf = Array.isArray(dj.naturezasEFDReinf)
+        ? dj.naturezasEFDReinf.map((r: any) => `${r.codigo} (${r.descricao || 'Serviço'}): R$ ${Number(r.valor || 0).toFixed(2)}`).join(' | ')
+        : '';
+
+      const linha = [
+        n.id,
+        escapeCsv(new Date(n.createdAt).toLocaleDateString('pt-BR') + ' ' + new Date(n.createdAt).toLocaleTimeString('pt-BR')),
+        escapeCsv(n.numeroProcesso || dj.numeroProcesso || 'Não informado'),
+        escapeCsv(n.numeroEmpenho || dj.numeroEmpenho || 'Não informada'),
+        escapeCsv(n.tipoDocumento),
+        escapeCsv(n.numeroNota),
+        escapeCsv(n.chaveAcesso || ''),
+        escapeCsv(n.fornecedorCnpj),
+        escapeCsv(n.fornecedorNome),
+        escapeCsv(n.optanteSimples ? 'SIM' : 'NÃO'),
+        formatNum(n.valorBruto),
+        formatNum(dj.totalIr || 0),
+        formatNum(dj.totalCsll || 0),
+        formatNum(dj.totalPis || 0),
+        formatNum(dj.totalCofins || 0),
+        formatNum(dj.totalInss || 0),
+        formatNum(dj.totalIss || 0),
+        formatNum(n.totalRetido),
+        formatNum(n.valorLiquido),
+        escapeCsv(codigosDarf),
+        escapeCsv(naturezasReinf)
+      ];
+      linhas.push(linha.join(';'));
+    });
+
+    const csvContent = '\uFEFF' + linhas.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dataHora = new Date().toISOString().slice(0, 10);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Dashboard_Retencoes_${dataHora}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -377,22 +470,35 @@ export const DashboardTab: React.FC = () => {
                 </p>
               </div>
 
-              {/* SELECT FILTRO DE NATUREZA */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>Natureza:</label>
-                <select
-                  className="form-select"
-                  value={filtroNatureza}
-                  onChange={(e) => setFiltroNatureza(e.target.value)}
-                  style={{ minWidth: '240px' }}
+              {/* SELECT FILTRO DE NATUREZA E BOTÃO EXPORTAR */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>Natureza:</label>
+                  <select
+                    className="form-select"
+                    value={filtroNatureza}
+                    onChange={(e) => setFiltroNatureza(e.target.value)}
+                    style={{ minWidth: '240px' }}
+                  >
+                    <option value="">-- Todas as Naturezas EFD-Reinf --</option>
+                    {data.naturezasEFDReinf.map((n) => (
+                      <option key={n.codigo} value={n.codigo}>
+                        Code {n.codigo} — {n.descricao} ({n.count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  className="btn btn-outline"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '6px 14px' }}
+                  onClick={handleExportarExcelCsv}
+                  disabled={!data.notas || data.notas.length === 0}
+                  title="Exportar dados tributários em planilha CSV compatível com Excel"
                 >
-                  <option value="">-- Todas as Naturezas EFD-Reinf --</option>
-                  {data.naturezasEFDReinf.map((n) => (
-                    <option key={n.codigo} value={n.codigo}>
-                      Code {n.codigo} — {n.descricao} ({n.count})
-                    </option>
-                  ))}
-                </select>
+                  <Download size={15} />
+                  Exportar para Excel (CSV)
+                </button>
               </div>
             </div>
 
@@ -418,37 +524,54 @@ export const DashboardTab: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.notas.map((n) => (
-                      <tr key={n.id}>
-                        <td>
-                          <span className={`badge ${n.tipoDocumento === 'NFE' ? 'badge-primary' : 'badge-success'}`}>
-                            {n.tipoDocumento}
-                          </span>
-                        </td>
-                        <td><strong>{n.numeroNota}</strong></td>
-                        <td>{n.fornecedorNome}</td>
-                        <td><code style={{ fontSize: '0.8rem' }}>{n.fornecedorCnpj}</code></td>
-                        <td>
-                          {n.optanteSimples ? (
-                            <span className="badge badge-warning">Simples</span>
-                          ) : (
-                            <span className="badge badge-secondary">Não</span>
-                          )}
-                        </td>
-                        <td>{formatBRL(n.valorBruto)}</td>
-                        <td><strong style={{ color: 'var(--primary)' }}>{formatBRL(n.totalRetido)}</strong></td>
-                        <td>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', fontSize: '0.75rem' }}>
-                            {n.dadosJson.totalIr > 0 && <span className="badge badge-outline">IR: {formatBRL(n.dadosJson.totalIr)}</span>}
-                            {n.dadosJson.totalCsll > 0 && <span className="badge badge-outline">CSLL: {formatBRL(n.dadosJson.totalCsll)}</span>}
-                            {n.dadosJson.totalPis > 0 && <span className="badge badge-outline">PIS: {formatBRL(n.dadosJson.totalPis)}</span>}
-                            {n.dadosJson.totalCofins > 0 && <span className="badge badge-outline">COFINS: {formatBRL(n.dadosJson.totalCofins)}</span>}
-                            {n.dadosJson.totalInss > 0 && <span className="badge badge-outline">INSS: {formatBRL(n.dadosJson.totalInss)}</span>}
-                            {n.dadosJson.totalIss > 0 && <span className="badge badge-outline">ISS: {formatBRL(n.dadosJson.totalIss)}</span>}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {data.notas.map((n) => {
+                      const procExibir = n.numeroProcesso || (n.dadosJson && n.dadosJson.numeroProcesso);
+                      const empExibir = n.numeroEmpenho || (n.dadosJson && n.dadosJson.numeroEmpenho);
+
+                      return (
+                        <tr key={n.id}>
+                          <td>
+                            <span className={`badge ${n.tipoDocumento === 'NFE' ? 'badge-primary' : 'badge-success'}`}>
+                              {n.tipoDocumento}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>{n.numeroNota}</strong>
+                            {procExibir && (
+                              <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
+                                <span style={{ color: '#64748b', fontWeight: 500 }}>SEI:</span> {procExibir}
+                              </div>
+                            )}
+                            {empExibir && (
+                              <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
+                                <span style={{ color: '#64748b', fontWeight: 500 }}>NE:</span> {empExibir}
+                              </div>
+                            )}
+                          </td>
+                          <td>{n.fornecedorNome}</td>
+                          <td><code style={{ fontSize: '0.8rem' }}>{n.fornecedorCnpj}</code></td>
+                          <td>
+                            {n.optanteSimples ? (
+                              <span className="badge badge-warning">Simples</span>
+                            ) : (
+                              <span className="badge badge-secondary">Não</span>
+                            )}
+                          </td>
+                          <td>{formatBRL(n.valorBruto)}</td>
+                          <td><strong style={{ color: 'var(--primary)' }}>{formatBRL(n.totalRetido)}</strong></td>
+                          <td>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', fontSize: '0.75rem' }}>
+                              {n.dadosJson.totalIr > 0 && <span className="badge badge-outline">IR: {formatBRL(n.dadosJson.totalIr)}</span>}
+                              {n.dadosJson.totalCsll > 0 && <span className="badge badge-outline">CSLL: {formatBRL(n.dadosJson.totalCsll)}</span>}
+                              {n.dadosJson.totalPis > 0 && <span className="badge badge-outline">PIS: {formatBRL(n.dadosJson.totalPis)}</span>}
+                              {n.dadosJson.totalCofins > 0 && <span className="badge badge-outline">COFINS: {formatBRL(n.dadosJson.totalCofins)}</span>}
+                              {n.dadosJson.totalInss > 0 && <span className="badge badge-outline">INSS: {formatBRL(n.dadosJson.totalInss)}</span>}
+                              {n.dadosJson.totalIss > 0 && <span className="badge badge-outline">ISS: {formatBRL(n.dadosJson.totalIss)}</span>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

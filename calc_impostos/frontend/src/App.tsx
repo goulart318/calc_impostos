@@ -32,11 +32,23 @@ export default function App() {
   const [tipoDocumento, setTipoDocumento] = useState<'NFE' | 'NFSE'>('NFE');
   const [numeroNota, setNumeroNota] = useState('');
   const [chaveAcesso, setChaveAcesso] = useState('');
+  const [numeroProcesso, setNumeroProcesso] = useState('');
+  const [numeroEmpenho, setNumeroEmpenho] = useState('');
   const [fornecedorCnpj, setFornecedorCnpj] = useState('');
   const [fornecedorNome, setFornecedorNome] = useState('');
   const [optanteSimples, setOptanteSimples] = useState(false);
   const [situacaoCadastral, setSituacaoCadastral] = useState('ATIVA');
   const [consultandoCnpj, setConsultandoCnpj] = useState(false);
+
+  // Formata o número do processo no padrão SEI: xxxxx.yyyyyy/aaaa-dd
+  const formatarProcessoSei = (val: string) => {
+    // Se o usuário digitou ou colou já com pontuação, mantemos ou normalizamos
+    const limpo = val.replace(/\D/g, '').slice(0, 17);
+    if (limpo.length <= 5) return limpo;
+    if (limpo.length <= 11) return `${limpo.slice(0, 5)}.${limpo.slice(5)}`;
+    if (limpo.length <= 15) return `${limpo.slice(0, 5)}.${limpo.slice(5, 11)}/${limpo.slice(11)}`;
+    return `${limpo.slice(0, 5)}.${limpo.slice(5, 11)}/${limpo.slice(11, 15)}-${limpo.slice(15)}`;
+  };
 
   // CNPJ do Órgão do Usuário (Configurável e Salvo em LocalStorage)
   const [cnpjMeuEstabelecimento, setCnpjMeuEstabelecimento] = useState<string>(() => {
@@ -82,6 +94,8 @@ export default function App() {
   const limparFormulario = () => {
     setNumeroNota('');
     setChaveAcesso('');
+    setNumeroProcesso('');
+    setNumeroEmpenho('');
     setFornecedorCnpj('');
     setFornecedorNome('');
     setOptanteSimples(false);
@@ -112,6 +126,8 @@ export default function App() {
         tipoDocumento,
         numeroNota: numeroNota || 'S/N',
         chaveAcesso,
+        numeroProcesso: numeroProcesso || undefined,
+        numeroEmpenho: numeroEmpenho || undefined,
         fornecedorNome: fornecedorNome || 'Fornecedor Não Informado',
         fornecedorCnpj: fornecedorCnpj || '',
         destinatarioNome,
@@ -178,6 +194,8 @@ export default function App() {
       const formData = new FormData();
       formData.append('arquivo', file);
       formData.append('file', file);
+      if (numeroProcesso) formData.append('numeroProcesso', numeroProcesso);
+      if (numeroEmpenho) formData.append('numeroEmpenho', numeroEmpenho);
 
       const endpoint = isXml ? 'http://localhost:3001/api/upload-xml' : 'http://localhost:3001/api/upload-pdf';
       const res = await fetch(endpoint, {
@@ -191,6 +209,8 @@ export default function App() {
       }
 
       const data: ResultadoConsolidado = await res.json();
+      if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
+      if (numeroEmpenho && !data.numeroEmpenho) data.numeroEmpenho = numeroEmpenho;
       setResultado(data);
 
       setNumeroNota(data.numeroNota || '');
@@ -255,6 +275,8 @@ export default function App() {
       files.forEach((f) => {
         formData.append('arquivos', f);
       });
+      if (numeroProcesso) formData.append('numeroProcesso', numeroProcesso);
+      if (numeroEmpenho) formData.append('numeroEmpenho', numeroEmpenho);
 
       const res = await fetch('http://localhost:3001/api/upload-lote', {
         method: 'POST',
@@ -267,6 +289,8 @@ export default function App() {
       }
 
       const data: ProcessoConsolidadoData = await res.json();
+      if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
+      if (numeroEmpenho && !data.notaEmpenho) data.notaEmpenho = numeroEmpenho;
       setProcessoModalData(data);
     } catch (err: any) {
       alert('Erro no processamento do lote: ' + err.message);
@@ -281,6 +305,8 @@ export default function App() {
     setTipoDocumento(nota.tipoDocumento);
     setNumeroNota(nota.numeroNota || '');
     setChaveAcesso(nota.chaveAcesso || '');
+    setNumeroProcesso(nota.numeroProcesso || '');
+    setNumeroEmpenho(nota.numeroEmpenho || '');
     setFornecedorCnpj(nota.fornecedorCnpj || '');
     setFornecedorNome(nota.fornecedorNome || '');
     setDestinatarioCnpj(nota.destinatarioCnpj || '');
@@ -313,13 +339,18 @@ export default function App() {
   const handleSalvarAnaliseNoBanco = async () => {
     if (!resultado) return;
     try {
+      const notaParaSalvar = {
+        ...resultado,
+        numeroProcesso: numeroProcesso || resultado.numeroProcesso || null,
+        numeroEmpenho: numeroEmpenho || resultado.numeroEmpenho || null
+      };
       const res = await fetch('http://localhost:3001/api/notas/salvar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(resultado)
+        body: JSON.stringify(notaParaSalvar)
       });
       if (res.ok) {
-        alert(' Análise fiscal gravada com sucesso no histórico do PostgreSQL!');
+        alert('✓ Análise fiscal gravada com sucesso no histórico do PostgreSQL!');
       } else {
         alert('Erro ao gravar análise no banco de dados.');
       }
@@ -617,6 +648,35 @@ export default function App() {
                         value={chaveAcesso} 
                         onChange={(e) => setChaveAcesso(e.target.value)} 
                         placeholder="44 Dígitos da NF-e"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Nº Processo Administrativo / SEI</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Padrão: xxxxx.yyyyyy/aaaa-dd</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        value={numeroProcesso} 
+                        onChange={(e) => setNumeroProcesso(formatarProcessoSei(e.target.value))} 
+                        placeholder="Ex: 23068.012345/2026-99"
+                        style={{ fontFamily: 'var(--font-mono)' }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Nota de Empenho (NE)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        value={numeroEmpenho} 
+                        onChange={(e) => setNumeroEmpenho(e.target.value.toUpperCase())} 
+                        placeholder="Ex: 2026NE000123"
+                        style={{ fontFamily: 'var(--font-mono)' }}
                       />
                     </div>
                   </div>
