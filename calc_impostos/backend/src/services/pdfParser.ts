@@ -55,12 +55,18 @@ export class PdfParser {
 
     // 1. TIPO DE DOCUMENTO (NF-e vs NFS-e)
     const upperText = text.toUpperCase();
-    const ehServico = upperText.includes('NFS-E') || 
-                      upperText.includes('DANFSE') ||
-                      upperText.includes('NOTA FISCAL DE SERVIÇOS') || 
-                      upperText.includes('PRESTADOR') ||
-                      upperText.includes('TOMADOR') ||
-                      upperText.includes('IMPOSTO SOBRE SERVIÇOS');
+    const temMarcadorDanfeNfe = upperText.includes('DANFE') && 
+                                (upperText.includes('DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA') || 
+                                 upperText.includes('DOCUMENTO AUXILIAR DA') || 
+                                 upperText.includes('CHAVE DE ACESSO'));
+
+    const ehServico = !temMarcadorDanfeNfe && (
+      upperText.includes('NFS-E') || 
+      upperText.includes('DANFSE') ||
+      upperText.includes('NOTA FISCAL DE SERVIÇOS') || 
+      upperText.includes('NOTA FISCAL DE SERVIÇO ELETRÔNICA') ||
+      upperText.includes('IMPOSTO SOBRE SERVIÇOS DE QUALQUER NATUREZA')
+    );
 
     // 2. CHAVE DE ACESSO
     let chaveAcesso = '';
@@ -173,13 +179,14 @@ export class PdfParser {
     // 5. VALORES E RETENÇÕES DESTAQUE NA NFS-E
     let valorTotal = 0;
     const padroesValorNota = [
+      /VALOR\s*TOTAL\s*DA\s*NOTA[^\d]*([\d\.,]+)/i,
+      /VALOR\s*TOTAL\s*DOS\s*PRODUTOS[^\d]*([\d\.,]+)/i,
       /Vl\.?\s*do\s*Servi[çc]o[^\d]*([\d\.,]+)/i,
       /Valor\s+do\s+Servi[çc]o[^\d]*([\d\.,]+)/i,
       /VALORDAOPERAÇÃO\s*\/\s*SERVIÇO[^\d]*([\d\.,]+)/i,
       /VALOR DA OPERAÇÃO \/ SERVIÇO[^\d]*([\d\.,]+)/i,
       /VALORTOTALDANFS-e[^\d]*([\d\.,]+)/i,
       /VALOR TOTAL DA NFS-e[^\d]*([\d\.,]+)/i,
-      /V(?:ALOR)?\.?\s*TOTAL\s+DA\s+NOTA[^\d]*([\d\.,]+)/i,
       /VALOR\s+TOTAL\s+DO\s+SERVIÇO[^\d]*([\d\.,]+)/i,
       /VALOR\s+L[ÍI]QUIDO[^\d]*([\d\.,]+)/i,
       /VALOR\s+TOTAL[^\d]*R?\$?\s*([\d\.,]+)/i
@@ -318,19 +325,33 @@ export class PdfParser {
           : text.substring(idxInicioProd);
       }
 
-      const regexColado = /(?:[A-Za-z])?(\d{8})\s*(\d{3})\s*(\d{4})/g;
-      let matchColado;
-      while ((matchColado = regexColado.exec(secaoProdutos)) !== null) {
-        const candidatoNcm = matchColado[1];
-        const candidatoCstFull = matchColado[2];
-        const cstSimples = candidatoCstFull.substring(0, 2);
+      // Regex melhorada: detecta linha de produto completa ou NCM em qualquer formato
+      // Exemplo: "90219012 740 5102 UN 1,00 15.000,00" ou "2716.00.00" ou "27160000"
+      const regexLinhaItem = /(?:^|\s)([0-9]{4}\.?[0-9]{2}\.?[0-9]{2})\s+([0-9]{2,3})\s+([0-9]{4})\s+([A-Za-z]{2,4})\s+([\d\.,]+)\s+([\d\.,]+)/gm;
+      let matchLinha;
+      while ((matchLinha = regexLinhaItem.exec(secaoProdutos)) !== null) {
+        const ncmLimpo = matchLinha[1].replace(/\D/g, '');
+        const cstLimpo = matchLinha[2].substring(0, 2);
+        if (this.ehNcmValido(ncmLimpo) && !ncmsEncontrados.some(x => x.ncm === ncmLimpo)) {
+          ncmsEncontrados.push({ ncm: ncmLimpo, cst: cstLimpo });
+        }
+      }
 
-        if (this.ehNcmValido(candidatoNcm)) {
-          if (!ncmsEncontrados.some(x => x.ncm === candidatoNcm)) {
-            ncmsEncontrados.push({
-              ncm: candidatoNcm,
-              cst: cstSimples
-            });
+      if (ncmsEncontrados.length === 0) {
+        const regexColado = /(?:[A-Za-z])?(\d{8})\s*(\d{2,3})\s*(\d{4})/g;
+        let matchColado;
+        while ((matchColado = regexColado.exec(secaoProdutos)) !== null) {
+          const candidatoNcm = matchColado[1];
+          const candidatoCstFull = matchColado[2];
+          const cstSimples = candidatoCstFull.substring(0, 2);
+
+          if (this.ehNcmValido(candidatoNcm)) {
+            if (!ncmsEncontrados.some(x => x.ncm === candidatoNcm)) {
+              ncmsEncontrados.push({
+                ncm: candidatoNcm,
+                cst: cstSimples
+              });
+            }
           }
         }
       }
@@ -348,12 +369,17 @@ export class PdfParser {
         }
       }
 
+      // Detecção de descrições reais do produto
+      const descrStent = text.match(/(STENT[^\n]{4,80})/i);
+      const descrEnergia = text.match(/(ENERGIA EL[EÉ]TRICA[^\n]{4,80})/i);
       const descrDapagliflozina = text.match(/(DAPAGLIFLOZINA[^\n]{4,60})/i);
       const descrSensor = text.match(/(Sensor de SpO2[^\n]{4,60})/i);
       const descrCateter = text.match(/(Cateter para Terapia[^\n]{4,60})/i);
 
-      let descrDefault = 'Item de Material / Consumo';
-      if (descrDapagliflozina) descrDefault = descrDapagliflozina[1].trim();
+      let descrDefault = 'Item de Material / Mercadoria';
+      if (descrStent) descrDefault = descrStent[1].trim();
+      else if (descrEnergia) descrDefault = descrEnergia[1].trim();
+      else if (descrDapagliflozina) descrDefault = descrDapagliflozina[1].trim();
       else if (descrSensor) descrDefault = descrSensor[1].trim();
       else if (descrCateter) descrDefault = descrCateter[1].trim();
 

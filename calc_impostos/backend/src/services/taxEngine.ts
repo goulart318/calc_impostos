@@ -248,18 +248,33 @@ export class TaxEngine {
 
     const ehMedicamentoOuVacina = ncm.startsWith('3001') || ncm.startsWith('3002') || ncm.startsWith('3003') || 
                                   ncm.startsWith('3004') || ncm.startsWith('3005') || ncm.startsWith('3006');
-    const ehCateterAgulhaSeringa = ncm.startsWith('901831') || ncm.startsWith('901832') || ncm.startsWith('901839');
+    const ehMaterialHospitalarAliqZero = ncm.startsWith('9018') || ncm.startsWith('9019') || 
+                                         ncm.startsWith('9021') || ncm.startsWith('9022');
 
-    if (ehMedicamentoOuVacina || ehCateterAgulhaSeringa) {
+    if (ehMedicamentoOuVacina || ehMaterialHospitalarAliqZero) {
       return {
         codigoReceita: '8767',
         naturezaReinf: '17022',
-        condicao: 'Medicamentos / Cateteres / Materiais de Alíquota Zero PIS/COFINS (Lei 10.147/2000)',
+        condicao: 'Próteses / Órteses / Stents / Medicamentos / Alíquota Zero PIS/COFINS (§ 5º Art. 2º)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
         aliqCofins: 0.00,
         aliqPis: 0.00,
-        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 10.147/2000 (Código 8767)'
+        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012 (Código 8767 - 2,20%)'
+      };
+    }
+
+    // Energia Elétrica (NCM 2716.00.00) - Código 6147 (5,85%)
+    if (ncm.startsWith('2716')) {
+      return {
+        codigoReceita: '6147',
+        naturezaReinf: '17099',
+        condicao: 'Energia Elétrica (Regra Geral 5,85% - IR 1,2% + CSLL 1% + COFINS 3% + PIS 0,65%)',
+        aliqIr: 1.20,
+        aliqCsll: 1.00,
+        aliqCofins: 3.00,
+        aliqPis: 0.65,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 6147'
       };
     }
 

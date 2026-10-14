@@ -182,11 +182,12 @@ export default function App() {
   };
 
   const handleFileUpload = async (file: File) => {
-    const isXml = file.name.endsWith('.xml');
-    const isPdf = file.name.endsWith('.pdf');
+    const fileNameLower = (file.name || '').toLowerCase();
+    const isXml = fileNameLower.endsWith('.xml') || file.type.includes('xml');
+    const isPdf = fileNameLower.endsWith('.pdf') || file.type.includes('pdf');
 
     if (!isXml && !isPdf) {
-      alert('Por favor, envie um arquivo XML ou PDF (DANFE).');
+      alert(`O arquivo "${file.name}" não foi reconhecido como PDF ou XML válido. Por favor, envie um arquivo com extensão .pdf ou .xml.`);
       return;
     }
 
