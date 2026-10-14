@@ -952,10 +952,26 @@ export default function App() {
                           step="0.01"
                           min="0"
                           className="form-input"
-                          value={valorContaVinculada}
-                          onChange={(e) => setValorContaVinculada(parseFloat(e.target.value) || 0)}
+                          value={valorContaVinculada || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            setValorContaVinculada(val);
+                            if (resultado) {
+                              setResultado(prev => {
+                                if (!prev) return null;
+                                const totGeral = Number((prev.totalFederal + prev.totalInss + prev.totalIss + val).toFixed(2));
+                                const liq = Number((prev.totalBruto - totGeral).toFixed(2));
+                                return {
+                                  ...prev,
+                                  totalContaVinculada: val,
+                                  totalRetidoGeral: totGeral,
+                                  valorLiquido: liq
+                                };
+                              });
+                            }
+                          }}
                           placeholder="R$ 0,00"
-                          style={{ width: '160px', fontWeight: 700, color: '#0f172a' }}
+                          style={{ width: '160px', fontWeight: 700, color: '#b45309' }}
                         />
                         <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
                           Provisões trabalhistas (férias, 13º, rescisão) descontadas do pagamento e depositadas em Conta Vinculada.

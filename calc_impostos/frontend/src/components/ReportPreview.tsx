@@ -171,13 +171,23 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
     (data.itens || []).map(itemParaEditavel)
   );
 
-  // Sincroniza se a prop data mudar externamente (ex: carregamento de nova nota)
+  // Sincroniza se a prop data mudar externamente (ex: carregamento de nova nota ou recálculo no formulário principal)
   useEffect(() => {
     setCurrentData(data);
     setDadosOriginais(data);
     setItensEditados((data.itens || []).map(itemParaEditavel));
     setModificado(false);
-  }, [data.numeroNota, data.chaveAcesso, data.fornecedorCnpj]);
+  }, [
+    data.numeroNota, 
+    data.chaveAcesso, 
+    data.fornecedorCnpj, 
+    data.totalBruto, 
+    data.totalContaVinculada, 
+    data.totalRetidoGeral, 
+    data.valorLiquido,
+    data.totalInss,
+    data.totalIss
+  ]);
 
   const formatBRL = (val: number) => {
     return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -479,7 +489,32 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {currentData.tipoDocumento === 'NFSE' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #bae6fd' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1' }}>🏦 Conta Vinculada (R$):</span>
+                <input 
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="form-input"
+                  value={currentData.totalContaVinculada || ''}
+                  placeholder="0,00"
+                  onChange={(e) => {
+                    const novoVal = parseFloat(e.target.value) || 0;
+                    setCurrentData(prev => ({
+                      ...prev,
+                      totalContaVinculada: novoVal,
+                      totalRetidoGeral: Number(((prev.totalFederal + prev.totalInss + prev.totalIss + novoVal)).toFixed(2)),
+                      valorLiquido: Number((prev.totalBruto - (prev.totalFederal + prev.totalInss + prev.totalIss + novoVal)).toFixed(2))
+                    }));
+                    setModificado(true);
+                  }}
+                  style={{ width: '110px', padding: '4px 6px', fontSize: '0.8rem', fontWeight: 700, color: '#b45309' }}
+                />
+              </div>
+            )}
+
             <button
               className="btn btn-outline"
               style={{ fontSize: '0.82rem', padding: '6px 12px', background: '#ffffff', borderColor: '#38bdf8', color: '#0369a1' }}
@@ -910,13 +945,20 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
 
           <div className="consolidado-box">
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-              TOTAL A RETER, INCLUINDO INSS E ISS
+              {Boolean(currentData.totalContaVinculada && currentData.totalContaVinculada > 0)
+                ? 'TOTAL RETIDO E DESCONTADO DO PAGAMENTO (TRIBUTOS FEDERAIS + INSS + ISS + CONTA VINCULADA)'
+                : 'TOTAL A RETER, INCLUINDO INSS E ISS'}
             </div>
             <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#1e40af', marginTop: '2px' }}>
               {formatBRL(currentData.totalRetidoGeral)}
             </div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               sobre o valor bruto de {formatBRL(currentData.totalBruto)}
+              {Boolean(currentData.totalContaVinculada && currentData.totalContaVinculada > 0) && (
+                <span style={{ marginLeft: '8px', color: '#b45309', fontWeight: 600 }}>
+                  (sendo {formatBRL(currentData.totalRetidoGeral - currentData.totalContaVinculada!)} retenções fiscais + {formatBRL(currentData.totalContaVinculada!)} depósito em conta vinculada)
+                </span>
+              )}
             </div>
           </div>
 
@@ -924,10 +966,10 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
           <table className="tax-table">
             <thead>
               <tr>
-                <th>TRIBUTO / RETENÇÃO</th>
+                <th>TRIBUTO / RETENÇÃO / DESCONTO</th>
                 <th>ALÍQUOTA MÉDIA</th>
                 <th>LEGISLAÇÃO APLICÁVEL</th>
-                <th style={{ textAlign: 'right' }}>VALOR RETIDO</th>
+                <th style={{ textAlign: 'right' }}>VALOR RETIDO / DESCONTADO</th>
               </tr>
             </thead>
             <tbody>
@@ -1053,11 +1095,25 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalIss)}</td>
               </tr>
               {Boolean(currentData.totalContaVinculada && currentData.totalContaVinculada > 0) && (
-                <tr style={{ background: '#fffbeb' }}>
-                  <td><strong>CONTA VINCULADA</strong> — Provisões Trabalhistas</td>
-                  <td>---</td>
-                  <td>IN SEGES/ME nº 5/2017 (Conta-Depósito Vinculada)</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#b45309' }}>{formatBRL(currentData.totalContaVinculada!)}</td>
+                <tr style={{ background: '#fffbeb', borderLeft: '4px solid #f59e0b' }}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ background: '#b45309', color: '#ffffff', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                        CONTA VINCULADA
+                      </span>
+                      <strong>Retenção / Desconto para Conta-Depósito Vinculada</strong>
+                    </div>
+                    <div style={{ fontSize: '0.73rem', color: '#92400e', marginTop: '2px' }}>
+                      Provisões de encargos trabalhistas (férias, 13º salário e rescisão) retidas do pagamento e depositadas em conta vinculada do contrato
+                    </div>
+                  </td>
+                  <td>{currentData.totalBruto > 0 ? `${((currentData.totalContaVinculada! / currentData.totalBruto) * 100).toFixed(2)}%` : '---'}</td>
+                  <td style={{ fontSize: '0.8rem', color: '#78350f', fontWeight: 600 }}>
+                    IN SEGES/ME nº 5/2017
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: '#b45309', fontSize: '0.95rem' }}>
+                    {formatBRL(currentData.totalContaVinculada!)}
+                  </td>
                 </tr>
               )}
               <tr className="liquid-row">
