@@ -921,28 +921,83 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td><strong>IR</strong> — Imposto de Renda</td>
+              {/* Linha Consolidada Agrupada para Lançamento e Conferência com o SIAFI */}
+              {(() => {
+                const aliqFederalAcumulada = currentData.totalBruto > 0 
+                  ? ((currentData.totalFederal / currentData.totalBruto) * 100).toFixed(2) 
+                  : '0,00';
+                return (
+                  <tr style={{ background: '#f0fdf4', borderBottom: '2px solid #86efac' }}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ 
+                          background: '#166534', 
+                          color: '#ffffff', 
+                          fontSize: '0.68rem', 
+                          fontWeight: 800, 
+                          padding: '2px 6px', 
+                          borderRadius: '4px',
+                          letterSpacing: '0.5px' 
+                        }}>
+                          SIAFI
+                        </span>
+                        <div>
+                          <strong style={{ color: '#166534', fontSize: '0.9rem' }}>
+                            TRIBUTOS FEDERAIS AGREGADOS (IR + CSLL + COFINS + PIS)
+                          </strong>
+                          <div style={{ fontSize: '0.72rem', color: '#15803d', marginTop: '1px' }}>
+                            Alíquota conjunta para conferência e apropriação direta no SIAFI
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ color: '#166534', fontWeight: 800, fontSize: '0.92rem' }}>
+                      {aliqFederalAcumulada}%
+                    </td>
+                    <td style={{ color: '#166534', fontSize: '0.8rem', fontWeight: 600 }}>
+                      IN RFB nº 1.234/2012
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 800, color: '#166534', fontSize: '1rem' }}>
+                      {formatBRL(currentData.totalFederal)}
+                    </td>
+                  </tr>
+                );
+              })()}
+
+              <tr style={{ background: '#fafafa' }}>
+                <td style={{ paddingLeft: '28px' }}>
+                  <span style={{ color: '#64748b', marginRight: '6px' }}>↳</span>
+                  <strong>IR</strong> — Imposto de Renda
+                </td>
                 <td>{currentData.totalBruto > 0 ? `${((currentData.totalIr / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
-                <td>IN RFB nº 1.234/2012</td>
+                <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalIr)}</td>
               </tr>
-              <tr>
-                <td><strong>CSLL</strong> — Contribuição Social s/ Lucro</td>
+              <tr style={{ background: '#fafafa' }}>
+                <td style={{ paddingLeft: '28px' }}>
+                  <span style={{ color: '#64748b', marginRight: '6px' }}>↳</span>
+                  <strong>CSLL</strong> — Contribuição Social s/ Lucro
+                </td>
                 <td>{currentData.totalBruto > 0 ? `${((currentData.totalCsll / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
-                <td>IN RFB nº 1.234/2012</td>
+                <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalCsll)}</td>
               </tr>
-              <tr>
-                <td><strong>COFINS</strong> — Seguridade Social</td>
+              <tr style={{ background: '#fafafa' }}>
+                <td style={{ paddingLeft: '28px' }}>
+                  <span style={{ color: '#64748b', marginRight: '6px' }}>↳</span>
+                  <strong>COFINS</strong> — Seguridade Social
+                </td>
                 <td>{currentData.totalBruto > 0 ? `${((currentData.totalCofins / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
-                <td>IN RFB nº 1.234/2012</td>
+                <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalCofins)}</td>
               </tr>
-              <tr>
-                <td><strong>PIS/PASEP</strong> — Integração Social</td>
+              <tr style={{ background: '#fafafa' }}>
+                <td style={{ paddingLeft: '28px' }}>
+                  <span style={{ color: '#64748b', marginRight: '6px' }}>↳</span>
+                  <strong>PIS/PASEP</strong> — Integração Social
+                </td>
                 <td>{currentData.totalBruto > 0 ? `${((currentData.totalPis / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
-                <td>IN RFB nº 1.234/2012</td>
+                <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalPis)}</td>
               </tr>
               <tr>

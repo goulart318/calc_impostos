@@ -55,18 +55,26 @@ export class PdfParser {
 
     // 1. TIPO DE DOCUMENTO (NF-e vs NFS-e)
     const upperText = text.toUpperCase();
-    const temMarcadorDanfeNfe = upperText.includes('DANFE') && 
+    const temMarcadorReformaNfse = upperText.includes('TRIBUTAÇÃO IBS / CBS') || 
+                                   upperText.includes('IMPOSTO E CONTRIBUIÇÃO SOBRE BENS E SERVIÇOS') ||
+                                   upperText.includes('DADOS DO SERVIÇO PRESTADO') ||
+                                   upperText.includes('CÓD. TRIB. NACIONAL') ||
+                                   upperText.includes('CÓDIGO DE TRIBUTAÇÃO NACIONAL') ||
+                                   upperText.includes('VALOR TOTAL DA NFS-E');
+
+    const temMarcadorDanfeNfe = !temMarcadorReformaNfse && upperText.includes('DANFE') && 
                                 (upperText.includes('DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA') || 
                                  upperText.includes('DOCUMENTO AUXILIAR DA') || 
                                  upperText.includes('CHAVE DE ACESSO'));
 
-    const ehServico = !temMarcadorDanfeNfe && (
+    const ehServico = temMarcadorReformaNfse || (!temMarcadorDanfeNfe && (
       upperText.includes('NFS-E') || 
       upperText.includes('DANFSE') ||
       upperText.includes('NOTA FISCAL DE SERVIÇOS') || 
       upperText.includes('NOTA FISCAL DE SERVIÇO ELETRÔNICA') ||
-      upperText.includes('IMPOSTO SOBRE SERVIÇOS DE QUALQUER NATUREZA')
-    );
+      upperText.includes('IMPOSTO SOBRE SERVIÇOS DE QUALQUER NATUREZA') ||
+      upperText.includes('SERVIÇO PRESTADO')
+    ));
 
     // 2. CHAVE DE ACESSO
     let chaveAcesso = '';
@@ -300,18 +308,34 @@ export class PdfParser {
 
     if (ehServico) {
       let descrServico = 'Prestação de Serviços Gerais';
-      const matchDesc = text.match(/Descri[çc][ãa]o\s*do\s*Servi[çc]o\s*:\s*([\s\S]{5,400}?)(?=\n?IMPOSTO\s+SOBRE|\n?TRIBUTA[ÇC][ÃA]O\s+NACIONAL|\n?INFORMA[ÇC][ÕO]ES\s+COMPLEMENTARES|\n\n)/i) ||
-                        text.match(/Descrição\s*do\s*Serviço[^\n]*\n\s*([^\n]{5,150})/i) ||
-                        text.match(/(REFERENTE A [^\n]{5,150})/i) ||
-                        text.match(/(EXECUCAO DE SERVICOS[^\n]{5,150})/i);
+      const matchDesc = text.match(/Descri[çc][ãa]o\s*do\s*Servi[çc]o\s*:?\s*([\s\S]{5,400}?)(?=\n?IMPOSTO\s+SOBRE|\n?TRIBUTA[ÇC][ÃA]O|\n?INFORMA[ÇC][ÕO]ES\s+COMPLEMENTARES|\n\n)/i) ||
+                        text.match(/Descrição\s*do\s*Serviço[^\n]*\n\s*([^\n]{5,200})/i) ||
+                        text.match(/(?:REFERENTE A|EXECUCAO DE SERVICOS)[^\n]{5,150}/i);
       if (matchDesc && matchDesc[1]) descrServico = matchDesc[1].replace(/\s+/g, ' ').trim();
 
-      itens.push({
+      const itemServico: ItemAnaliseInput = {
         numeroItem: 1,
         descricao: descrServico,
         codigoServico: codigoServicoNfse,
         valorBruto: valorTotal
-      });
+      };
+
+      // Regra especial DDF025: Serviços prestados com dedicação exclusiva de mão de obra
+      // Código DARF: 6190 (9,45%), Natureza REINF R-4020: 17033 (Locação / Cessão de mão de obra)
+      const descrLower = descrServico.toLowerCase();
+      if (
+        descrLower.includes('dedicação exclusiva de mão de obra') || 
+        descrLower.includes('dedicacao exclusiva de mao de obra') ||
+        descrLower.includes('dedicação exclusiva') ||
+        descrLower.includes('cessão de mão de obra') ||
+        descrLower.includes('locação de mão de obra')
+      ) {
+        itemServico.manualCodigoDarf = '6190';
+        itemServico.manualNaturezaReinf = '17033';
+        itemServico.manualFundamentacao = 'DDF025 - Natureza 17033 (Locação / Cessão de Mão de Obra com dedicação exclusiva - DARF 6190 / 9,45%)';
+      }
+
+      itens.push(itemServico);
     } else {
       const ncmsEncontrados: { ncm: string; cst: string; descricao?: string }[] = [];
 

@@ -111,6 +111,9 @@ export default function App() {
     setResultado(null);
   };
 
+  const [calculando, setCalculando] = useState(false);
+  const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
+
   const calcularRetencoes = async () => {
     if (temDivergenciaDestinatario) {
       alert('⚠️ A emissão do relatório foi bloqueada pois a nota fiscal pertence a outro CNPJ!');
@@ -123,6 +126,7 @@ export default function App() {
     }
 
     try {
+      setCalculando(true);
       const payload = {
         tipoDocumento,
         numeroNota: numeroNota || 'S/N',
@@ -154,12 +158,26 @@ export default function App() {
         body: JSON.stringify(payload)
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setResultado(data);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Erro HTTP ${res.status} ao calcular retenções`);
       }
-    } catch (err) {
-      console.warn('Erro no cálculo:', err);
+
+      const data = await res.json();
+      setResultado(data);
+      setMensagemSucesso(`✓ Retenções calculadas com sucesso para a Nota Fiscal ${data.numeroNota || numeroNota}!`);
+      setTimeout(() => setMensagemSucesso(null), 6000);
+
+      // Scroll suave até o relatório
+      setTimeout(() => {
+        const el = document.getElementById('secao-relatorio-conferencia');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } catch (err: any) {
+      console.error('Erro no cálculo:', err);
+      alert('Erro ao calcular retenções: ' + (err.message || 'Verifique a conexão com o servidor.'));
+    } finally {
+      setCalculando(false);
     }
   };
 
@@ -269,6 +287,15 @@ export default function App() {
         valorBruto: it.valorBruto,
         condicaoEspecial: it.codigoReceitaDarf === '8767' ? '8767' : (it.codigoReceitaDarf === '6147' ? '6147' : undefined)
       })));
+
+      setMensagemSucesso(`✓ Nota Fiscal ${data.numeroNota || 'processada'} carregada e analisada com sucesso!`);
+      setTimeout(() => setMensagemSucesso(null), 6000);
+
+      // Rola suavemente até o resumo/relatório
+      setTimeout(() => {
+        const el = document.getElementById('secao-relatorio-conferencia');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
     } catch (err: any) {
       alert('Erro na leitura do arquivo: ' + err.message);
     } finally {
@@ -468,6 +495,37 @@ export default function App() {
 
       {/* Conteúdo Principal */}
       <main className="main-content">
+        {/* Banner de Notificação de Sucesso */}
+        {mensagemSucesso && (
+          <div style={{
+            margin: '0 0 16px 0',
+            padding: '12px 18px',
+            background: '#ecfdf5',
+            border: '2px solid #10b981',
+            borderRadius: 'var(--radius-md)',
+            color: '#065f46',
+            fontWeight: 700,
+            fontSize: '0.92rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
+            animation: 'fadeIn 0.3s ease-in-out'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CheckCircle2 size={22} color="#059669" />
+              <span>{mensagemSucesso}</span>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setMensagemSucesso(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#047857', fontWeight: 800, fontSize: '1rem' }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {activeTab === 'analise' && (
           <div className="tab-pane active">
             <div className="two-column-layout">
@@ -1026,25 +1084,27 @@ export default function App() {
                       className="btn btn-primary btn-block" 
                       type="button" 
                       onClick={calcularRetencoes} 
-                      disabled={temDivergenciaDestinatario}
+                      disabled={temDivergenciaDestinatario || calculando}
                       style={{ 
                         marginTop: '16px',
-                        opacity: temDivergenciaDestinatario ? 0.65 : 1,
-                        cursor: temDivergenciaDestinatario ? 'not-allowed' : 'pointer',
+                        opacity: (temDivergenciaDestinatario || calculando) ? 0.65 : 1,
+                        cursor: (temDivergenciaDestinatario || calculando) ? 'not-allowed' : 'pointer',
                         background: temDivergenciaDestinatario ? '#ef4444' : undefined
                       }}
                     >
                       <Calculator size={18} />
-                      {temDivergenciaDestinatario 
-                        ? 'Bloqueado — CNPJ da Nota Pertence a Outro Estabelecimento' 
-                        : 'Calcular Retenções e Gerar Relatório'}
+                      {calculando 
+                        ? 'Processando Cálculos e Regras...' 
+                        : temDivergenciaDestinatario 
+                          ? 'Bloqueado — CNPJ da Nota Pertence a Outro Estabelecimento' 
+                          : 'Calcular Retenções e Gerar Relatório'}
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Painel Direito: Pré-Visualização e Relatório SEI */}
-              <div className="right-panel">
+              <div className="right-panel" id="secao-relatorio-conferencia">
                 {resultado ? (
                   <div>
                     <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

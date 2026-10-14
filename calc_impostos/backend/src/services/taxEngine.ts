@@ -419,6 +419,24 @@ export class TaxEngine {
 
       if (ehServico) {
         regraTributaria = await this.identificarRegraServico(itemInput.codigoServico || params.codigoServicoPadrao || '6190');
+        
+        // Verificação contextual da descrição do serviço para regras da DDF025:
+        const descrLower = (itemInput.descricao || '').toLowerCase();
+        if (
+          descrLower.includes('dedicação exclusiva de mão de obra') ||
+          descrLower.includes('dedicacao exclusiva de mao de obra') ||
+          descrLower.includes('dedicação exclusiva') ||
+          descrLower.includes('cessão de mão de obra') ||
+          descrLower.includes('locação de mão de obra')
+        ) {
+          regraTributaria = {
+            ...regraTributaria,
+            codigoReceita: '6190',
+            naturezaReinf: '17033', // DDF025: Locação de mão-de-obra / cessão de mão de obra
+            condicao: 'Serviço com Cessão / Dedicação Exclusiva de Mão de Obra (DARF 6190 / 9,45%)',
+            fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 c/c DDF025 Natureza 17033'
+          };
+        }
       } else {
         regraTributaria = await this.identificarRegraNCM(itemInput.ncm, itemInput.condicaoEspecial, itemInput.cst);
       }

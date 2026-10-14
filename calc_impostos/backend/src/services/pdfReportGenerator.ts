@@ -228,11 +228,23 @@ export class PdfReportGenerator {
         currentY += 42;
 
         // Tabela Detalhada por Tributo
+        const aliqFedTotal = (resultado.itens[0]?.aliqIr || 0) + 
+                             (resultado.itens[0]?.aliqCsll || 0) + 
+                             (resultado.itens[0]?.aliqCofins || 0) + 
+                             (resultado.itens[0]?.aliqPis || 0);
+
         const rows = [
-          { nome: 'IR (Imposto de Renda)', aliq: resultado.itens[0]?.aliqIr || 0, valor: resultado.totalIr, legal: 'IN RFB nº 1.234/2012' },
-          { nome: 'CSLL (Contribuição Social sobre o Lucro Líquido)', aliq: resultado.itens[0]?.aliqCsll || 0, valor: resultado.totalCsll, legal: 'IN RFB nº 1.234/2012' },
-          { nome: 'COFINS (Contribuição para o Financiamento da Seguridade)', aliq: resultado.itens[0]?.aliqCofins || 0, valor: resultado.totalCofins, legal: 'IN RFB nº 1.234/2012' },
-          { nome: 'PIS/PASEP (Programa de Integração Social)', aliq: resultado.itens[0]?.aliqPis || 0, valor: resultado.totalPis, legal: 'IN RFB nº 1.234/2012' },
+          { 
+            nome: 'TRIBUTOS FEDERAIS AGREGADOS (IR+CSLL+COFINS+PIS) [SIAFI]', 
+            aliq: aliqFedTotal, 
+            valor: resultado.totalFederal, 
+            legal: 'IN RFB nº 1.234/2012',
+            destaque: true 
+          },
+          { nome: '  ↳ IR (Imposto de Renda)', aliq: resultado.itens[0]?.aliqIr || 0, valor: resultado.totalIr, legal: 'IN RFB nº 1.234/2012' },
+          { nome: '  ↳ CSLL (Contribuição Social sobre o Lucro Líquido)', aliq: resultado.itens[0]?.aliqCsll || 0, valor: resultado.totalCsll, legal: 'IN RFB nº 1.234/2012' },
+          { nome: '  ↳ COFINS (Contribuição para Seguridade)', aliq: resultado.itens[0]?.aliqCofins || 0, valor: resultado.totalCofins, legal: 'IN RFB nº 1.234/2012' },
+          { nome: '  ↳ PIS/PASEP (Programa de Integração Social)', aliq: resultado.itens[0]?.aliqPis || 0, valor: resultado.totalPis, legal: 'IN RFB nº 1.234/2012' },
           { 
             nome: temDeducaoMateriais 
               ? `INSS — Retenção Previdenciária (BC: ${formatBRL(resultado.baseCalculoInssTotal || resultado.totalBruto)})` 
