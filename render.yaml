@@ -4,7 +4,7 @@
 databases:
   - name: calc-impostos-db
     databaseName: ret_impostos
-    user: postgres
+    user: ret_impostos_user
     plan: free
     region: ohio
 
@@ -37,7 +37,6 @@ services:
     name: calc-impostos-frontend
     env: static
     plan: free
-    region: ohio
     rootDir: calc_impostos/frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
