@@ -248,19 +248,21 @@ export class TaxEngine {
 
     const ehMedicamentoOuVacina = ncm.startsWith('3001') || ncm.startsWith('3002') || ncm.startsWith('3003') || 
                                   ncm.startsWith('3004') || ncm.startsWith('3005') || ncm.startsWith('3006');
-    const ehMaterialHospitalarAliqZero = ncm.startsWith('9018') || ncm.startsWith('9019') || 
-                                         ncm.startsWith('9021') || ncm.startsWith('9022');
+    const ehEquipamentoHospitalar = ncm.startsWith('9018') || ncm.startsWith('9019') || ncm.startsWith('9022');
+    
+    // Tabela 4.3.13 do SPED / Decreto 6.426/2008: Apenas 9021.10 (ortopedia/fraturas), 9021.3 (próteses) e 9021.40 (auditivos)
+    const ehProteseOuAparelhoOrtopedicoAliqZero = ncm.startsWith('902110') || ncm.startsWith('90213') || ncm.startsWith('902140');
 
-    if (ehMedicamentoOuVacina || ehMaterialHospitalarAliqZero) {
+    if (ehMedicamentoOuVacina || ehEquipamentoHospitalar || ehProteseOuAparelhoOrtopedicoAliqZero) {
       return {
         codigoReceita: '8767',
         naturezaReinf: '17022',
-        condicao: 'Próteses / Órteses / Stents / Medicamentos / Alíquota Zero PIS/COFINS (§ 5º Art. 2º)',
+        condicao: 'Artigos Ortopédicos / Próteses / Medicamentos com Alíquota Zero PIS/COFINS (Decreto 6.426/2008 c/c IN 1234/2012)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
         aliqCofins: 0.00,
         aliqPis: 0.00,
-        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012 (Código 8767 - 2,20%)'
+        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Decreto nº 6.426/2008 (Código 8767 - 2,20%)'
       };
     }
 
