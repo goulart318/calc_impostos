@@ -17,6 +17,8 @@ export interface CnpjInfo {
   fonteConsulta: string;
 }
 
+const cnpjCache = new Map<string, { info: CnpjInfo; timestamp: number }>();
+
 export class CnpjService {
   /**
    * Consulta dados do CNPJ com Fallback em cascata (BrasilAPI -> MinhaReceita -> ReceitaWS -> CNPJ.ws)
@@ -28,9 +30,15 @@ export class CnpjService {
       throw new Error('CNPJ inválido. Deve conter 14 dígitos numéricos.');
     }
 
-    // 1. Tentar BrasilAPI
+    // Cache em memória (válido por 24 horas)
+    const cached = cnpjCache.get(cnpj);
+    if (cached && (Date.now() - cached.timestamp < 24 * 60 * 60 * 1000)) {
+      return cached.info;
+    }
+
+    // 1. Tentar BrasilAPI com timeout curto (2500ms)
     try {
-      const res = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { timeout: 6000 });
+      const res = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { timeout: 2500 });
       const data = res.data;
       
       const optSimples = data.opcao_pelo_simples === true || 
@@ -39,7 +47,7 @@ export class CnpjService {
 
       const optMei = data.opcao_pelo_mei === true || data.simples?.mei === true;
 
-      return {
+      const info: CnpjInfo = {
         cnpj,
         razaoSocial: data.razao_social || data.nome_fantasia || 'Razão Social Não Identificada',
         nomeFantasia: data.nome_fantasia || '',
@@ -55,19 +63,21 @@ export class CnpjService {
         municipio: data.municipio || 'Vitória',
         fonteConsulta: 'BrasilAPI / Receita Federal'
       };
+      cnpjCache.set(cnpj, { info, timestamp: Date.now() });
+      return info;
     } catch (e1: any) {
       console.warn(`[CNPJ Service] BrasilAPI falhou para ${cnpj}: ${e1.message}. Tentando MinhaReceita...`);
     }
 
     // 2. Tentar MinhaReceita
     try {
-      const res = await axios.get(`https://minhareceita.org/${cnpj}`, { timeout: 6000 });
+      const res = await axios.get(`https://minhareceita.org/${cnpj}`, { timeout: 2500 });
       const data = res.data;
 
       const optSimples = data.opcao_pelo_simples === true;
       const optMei = data.opcao_pelo_mei === true;
 
-      return {
+      const info: CnpjInfo = {
         cnpj,
         razaoSocial: data.razao_social || 'Razão Social Não Identificada',
         nomeFantasia: data.nome_fantasia || '',
@@ -83,20 +93,22 @@ export class CnpjService {
         municipio: data.municipio || 'Vitória',
         fonteConsulta: 'MinhaReceita'
       };
+      cnpjCache.set(cnpj, { info, timestamp: Date.now() });
+      return info;
     } catch (e2: any) {
       console.warn(`[CNPJ Service] MinhaReceita falhou para ${cnpj}: ${e2.message}. Tentando ReceitaWS...`);
     }
 
     // 3. Tentar ReceitaWS
     try {
-      const res = await axios.get(`https://receitaws.com.br/v1/cnpj/${cnpj}`, { timeout: 6000 });
+      const res = await axios.get(`https://receitaws.com.br/v1/cnpj/${cnpj}`, { timeout: 3000 });
       const data = res.data;
 
       if (data.status !== 'ERROR') {
         const optSimples = data.simples?.optante === true;
         const optMei = data.simples?.mei === true;
 
-        return {
+        const info: CnpjInfo = {
           cnpj,
           razaoSocial: data.nome || data.fantasia || 'Razão Social Não Identificada',
           nomeFantasia: data.fantasia || '',
@@ -112,6 +124,8 @@ export class CnpjService {
           municipio: data.municipio || 'Vitória',
           fonteConsulta: 'ReceitaWS'
         };
+        cnpjCache.set(cnpj, { info, timestamp: Date.now() });
+        return info;
       }
     } catch (e3: any) {
       console.warn(`[CNPJ Service] ReceitaWS falhou para ${cnpj}: ${e3.message}.`);

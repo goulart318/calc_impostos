@@ -186,16 +186,18 @@ export class PdfParser {
 
     // 5. VALORES E RETENÇÕES DESTAQUE NA NFS-E
     let valorTotal = 0;
-    const padroesValorNota = [
+    const padroesValorNota = ehServico ? [
+      /Vl\.?\s*do\s*Servi[çc]o\s*:?\s*R?\$?\s*([\d\.,]+)/i,
+      /Valor\s+do\s+Servi[çc]o\s*:?\s*R?\$?\s*([\d\.,]+)/i,
+      /VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O\s*:?\s*R?\$?\s*([\d\.,]+)/i,
+      /VALOR\s+TOTAL\s+DO\s+SERVIÇO\s*:?\s*R?\$?\s*([\d\.,]+)/i,
+      /VALOR\s*TOTAL\s*DA\s*NFS-e\s*:?\s*R?\$?\s*([\d\.,]+)/i,
+      /VALOR\s*TOTAL\s*DA\s*NOTA\s*:?\s*R?\$?\s*([\d\.,]+)/i,
+      /VALOR\s+L[ÍI]QUIDO[^\d]*([\d\.,]+)/i,
+      /VALOR\s+TOTAL[^\d]*R?\$?\s*([\d\.,]+)/i
+    ] : [
       /VALOR\s*TOTAL\s*DA\s*NOTA[^\d]*([\d\.,]+)/i,
       /VALOR\s*TOTAL\s*DOS\s*PRODUTOS[^\d]*([\d\.,]+)/i,
-      /Vl\.?\s*do\s*Servi[çc]o[^\d]*([\d\.,]+)/i,
-      /Valor\s+do\s+Servi[çc]o[^\d]*([\d\.,]+)/i,
-      /VALORDAOPERAÇÃO\s*\/\s*SERVIÇO[^\d]*([\d\.,]+)/i,
-      /VALOR DA OPERAÇÃO \/ SERVIÇO[^\d]*([\d\.,]+)/i,
-      /VALORTOTALDANFS-e[^\d]*([\d\.,]+)/i,
-      /VALOR TOTAL DA NFS-e[^\d]*([\d\.,]+)/i,
-      /VALOR\s+TOTAL\s+DO\s+SERVIÇO[^\d]*([\d\.,]+)/i,
       /VALOR\s+L[ÍI]QUIDO[^\d]*([\d\.,]+)/i,
       /VALOR\s+TOTAL[^\d]*R?\$?\s*([\d\.,]+)/i
     ];
