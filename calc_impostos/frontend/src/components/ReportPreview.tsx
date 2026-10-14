@@ -373,15 +373,22 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   const handleSalvarPostgres = async () => {
     try {
       setSalvando(true);
-      const response = await fetch(`${API_BASE_URL}/api/salvar-nota`, {
+      const response = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentData)
       });
 
       if (!response.ok) {
-        const errJson = await response.json();
-        throw new Error(errJson.error || 'Erro ao salvar no PostgreSQL');
+        let errMsg = 'Erro ao salvar no PostgreSQL';
+        try {
+          const errJson = await response.json();
+          errMsg = errJson.error || errMsg;
+        } catch {
+          const txt = await response.text().catch(() => '');
+          errMsg = `Erro ${response.status}: ${txt.substring(0, 120)}`;
+        }
+        throw new Error(errMsg);
       }
 
       setSalvo(true);

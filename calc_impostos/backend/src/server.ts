@@ -493,6 +493,34 @@ app.post('/api/notas/salvar', async (req: Request, res: Response) => {
   }
 });
 
+// Alias para compatibilidade
+app.post('/api/salvar-nota', async (req: Request, res: Response) => {
+  // Redireciona internamente para o mesmo handler
+  try {
+    const r: ResultadoConsolidado = req.body;
+    const query = `
+      INSERT INTO notas_analisadas (
+        tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
+        destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto,
+        valor_liquido, total_retido, dados_json, numero_processo, numero_empenho
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING id;
+    `;
+    const values = [
+      r.tipoDocumento, r.numeroNota || 'S/N', r.chaveAcesso || null,
+      r.fornecedorCnpj, r.fornecedorNome,
+      r.destinatarioCnpj || null, r.destinatarioNome || null,
+      r.optanteSimples, r.totalBruto, r.valorLiquido, r.totalRetidoGeral,
+      JSON.stringify(r),
+      r.numeroProcesso || null, r.numeroEmpenho || null
+    ];
+    const result = await pool.query(query, values);
+    res.json({ success: true, notaId: result.rows[0].id });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Erro ao salvar análise no banco de dados.' });
+  }
+});
+
 // Pesquisar notas salvos por CNPJ, Chave de Acesso, Número da Nota, Processo ou Empenho
 app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
   try {
