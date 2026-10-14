@@ -35,8 +35,7 @@ services:
   # -------------------------------------------------------------
   - type: web
     name: calc-impostos-frontend
-    env: static
-    plan: free
+    runtime: static
     rootDir: calc_impostos/frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
