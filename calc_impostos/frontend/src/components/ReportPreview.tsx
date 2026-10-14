@@ -184,28 +184,28 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         it.aliqPis = 0.65;
         it.aliqCofins = 3.0;
         it.codigoReceitaDarf = '6147';
-        it.naturezaRendimentoReinf = '17099';
+        it.naturezaRendimentoReinf = '17009'; // DDF025: Mercadorias e bens em geral
       } else if (novoPreset === '6190') {
         it.aliqIr = 4.8;
         it.aliqCsll = 1.0;
         it.aliqPis = 0.65;
         it.aliqCofins = 3.0;
         it.codigoReceitaDarf = '6190';
-        it.naturezaRendimentoReinf = '17006';
+        it.naturezaRendimentoReinf = '17099'; // DDF025: Demais serviços
       } else if (novoPreset === '6175') {
         it.aliqIr = 2.4;
         it.aliqCsll = 1.0;
         it.aliqPis = 0.65;
         it.aliqCofins = 3.0;
         it.codigoReceitaDarf = '6175';
-        it.naturezaRendimentoReinf = '17009';
+        it.naturezaRendimentoReinf = '17023'; // DDF025: Passagens e transporte
       } else if (novoPreset === '8767') {
         it.aliqIr = 1.2;
         it.aliqCsll = 1.0;
         it.aliqPis = 0.0;
         it.aliqCofins = 0.0;
         it.codigoReceitaDarf = '8767';
-        it.naturezaRendimentoReinf = '17022';
+        it.naturezaRendimentoReinf = '17022'; // DDF025: Isenção/alíquota zero PIS/COFINS (§ 5º art. 2º)
       } else if (novoPreset === 'ISENTO') {
         it.aliqIr = 0;
         it.aliqCsll = 0;
@@ -248,7 +248,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
       aliqInss: isNfse ? 11.0 : 0,
       aliqIss: isNfse ? 5.0 : 0,
       codigoReceitaDarf: isNfse ? '6190' : '6147',
-      naturezaRendimentoReinf: isNfse ? '17006' : '17099'
+      naturezaRendimentoReinf: isNfse ? '17099' : '17009'
     };
     setItensEditados(prev => [...prev, novoItem]);
     setModificado(true);

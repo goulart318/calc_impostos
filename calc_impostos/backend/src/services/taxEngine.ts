@@ -172,8 +172,8 @@ export class TaxEngine {
     if (codigoForcado === '6175') {
       return {
         codigoReceita: '6175',
-        naturezaReinf: '17009',
-        condicao: 'Transporte de Cargas ou Passageiros (7,05%)',
+        naturezaReinf: '17023',
+        condicao: 'Transporte de passageiros (Passagens aéreas/rodoviárias - 7,05%)',
         aliqIr: 2.40,
         aliqCsll: 1.00,
         aliqCofins: 3.00,
@@ -185,8 +185,8 @@ export class TaxEngine {
     if (codigoForcado === '6190') {
       return {
         codigoReceita: '6190',
-        naturezaReinf: '17006',
-        condicao: 'Prestação de Serviços / Locação em Geral (Regra 9,45%)',
+        naturezaReinf: '17099',
+        condicao: 'Prestação de Serviços em Geral (Regra 9,45%)',
         aliqIr: 4.80,
         aliqCsll: 1.00,
         aliqCofins: 3.00,
@@ -198,7 +198,7 @@ export class TaxEngine {
     if (codigoForcado === '6147') {
       return {
         codigoReceita: '6147',
-        naturezaReinf: '17099',
+        naturezaReinf: '17009',
         condicao: 'Mercadorias e bens em geral (Regra Geral 5,85% com PIS/COFINS)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
@@ -210,7 +210,7 @@ export class TaxEngine {
 
     const fallbackRegraGeral = {
       codigoReceita: '6147',
-      naturezaReinf: '17099',
+      naturezaReinf: '17009',
       condicao: 'Mercadorias e bens em geral (Regra Geral 5,85% - IR 1,2% + CSLL 1% + COFINS 3% + PIS 0,65%)',
       aliqIr: 1.20,
       aliqCsll: 1.00,
@@ -273,11 +273,11 @@ export class TaxEngine {
       };
     }
 
-    // Energia Elétrica (NCM 2716.00.00) - Código 6147 (5,85%)
+    // Energia Elétrica (NCM 2716.00.00) - Código 6147 (5,85%) / Natureza REINF 17002
     if (ncm.startsWith('2716')) {
       return {
         codigoReceita: '6147',
-        naturezaReinf: '17099',
+        naturezaReinf: '17002',
         condicao: 'Energia Elétrica (Regra Geral 5,85% - IR 1,2% + CSLL 1% + COFINS 3% + PIS 0,65%)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
@@ -334,7 +334,7 @@ export class TaxEngine {
     if (cod === '6147' || cod === '07.02' || cod === '7.02') {
       return {
         codigoReceita: '6147',
-        naturezaReinf: '17099',
+        naturezaReinf: '17003', // Serviços prestados com emprego de materiais / Construção Civil
         condicao: 'Serviços de Engenharia / Construção com Emprego de Materiais (5,85%)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
@@ -347,7 +347,7 @@ export class TaxEngine {
     if (cod === '6175') {
       return {
         codigoReceita: '6175',
-        naturezaReinf: '17009',
+        naturezaReinf: '17023', // Passagens aéreas, rodoviárias e demais serviços de transporte de passageiros
         condicao: 'Transporte de passageiros ou cargas (7,05%)',
         aliqIr: 2.40,
         aliqCsll: 1.00,
@@ -357,10 +357,11 @@ export class TaxEngine {
       };
     }
 
+    // Padrão de serviços gerais sujeito a retenção integral 9,45%: Natureza 17099 (Demais serviços)
     return {
       codigoReceita: '6190',
-      naturezaReinf: '17006',
-      condicao: 'Prestação de Serviços em Geral (Regra Padrão 9,45%)',
+      naturezaReinf: '17099',
+      condicao: 'Demais Serviços em Geral (Regra Padrão 9,45%)',
       aliqIr: 4.80,
       aliqCsll: 1.00,
       aliqCofins: 3.00,

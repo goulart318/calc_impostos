@@ -66,7 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_notas_numero_empenho ON notas_analisadas(numero_e
 
 -- Regras Iniciais para Medicamentos, Equipamentos, Combustíveis, Livros e Autopeças
 INSERT INTO ncm_regras (ncm_prefixo, descricao, descricao_categoria, codigo_receita, natureza_reinf, aliq_ir, aliq_csll, aliq_cofins, aliq_pis, condicao_aplicavel, fundamentacao_legal) VALUES
-('2710', 'Óleos de petróleo ou de minerais betuminosos, combustíveis e lubrificantes', 'Óleos de petróleo ou de minerais betuminosos, combustíveis e lubrificantes', '8739', '17021', 0.24, 1.00, 0.00, 0.00, 'Combustíveis / Regime Monofásico', 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 9.718/1998'),
+('2710', 'Óleos de petróleo ou de minerais betuminosos, combustíveis e lubrificantes', 'Óleos de petróleo ou de minerais betuminosos, combustíveis e lubrificantes', '8739', '17013', 0.24, 1.00, 0.00, 0.00, 'Combustíveis / Regime Monofásico', 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 9.718/1998'),
 ('3001', 'Glandulas e outros organos para usos terapeuticos', 'Glandulas e outros organos para usos terapeuticos', '8767', '17022', 1.20, 1.00, 0.00, 0.00, 'Medicamentos com Aliquota Zero de PIS/COFINS', 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 10.147/2000'),
 ('3002', 'Soro humano; sangue humano; vacinas, toxinas e produtos similares', 'Soro humano; sangue humano; vacinas, toxinas e produtos similares', '8767', '17022', 1.20, 1.00, 0.00, 0.00, 'Medicamentos com Aliquota Zero de PIS/COFINS', 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 10.147/2000'),
 ('3003', 'Medicamentos em doses especificas', 'Medicamentos em doses especificas', '8767', '17022', 1.20, 1.00, 0.00, 0.00, 'Medicamentos com Aliquota Zero de PIS/COFINS', 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 10.147/2000'),
@@ -88,7 +88,7 @@ INSERT INTO ncm_regras (ncm_prefixo, descricao, descricao_categoria, codigo_rece
 ('901839', 'Cateteres, canulas e instrumentos analogos', 'Cateteres, canulas e instrumentos analogos', '8767', '17022', 1.20, 1.00, 0.00, 0.00, 'Cateteres medicos com Aliquota Zero PIS/COFINS', 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Decreto 6.426/2008'),
 ('9019', 'Aparelhos de mecanoterapia, massagem, ozonioterapia, oxigenoterapia e respiratórios', 'Aparelhos de mecanoterapia, massagem, ozonioterapia, oxigenoterapia e respiratórios', '8767', '17022', 1.20, 1.00, 0.00, 0.00, 'Uso hospitalar / Alíquota zero PIS/COFINS', 'Art. 2º § 5º da IN RFB nº 1.234/2012'),
 ('9022', 'Aparelhos de raios X e aparelhos que utilizem radiações alfa, beta ou gama', 'Aparelhos de raios X e aparelhos que utilizem radiações alfa, beta ou gama', '8767', '17022', 1.20, 1.00, 0.00, 0.00, 'Diagnóstico médico / Alíquota zero PIS/COFINS', 'Art. 2º § 5º da IN RFB nº 1.234/2012'),
-('2716', 'Energia Elétrica', 'Energia Elétrica', '6147', '17099', 1.20, 1.00, 3.00, 0.65, 'Energia Elétrica / Regra Geral (5,85%)', 'Anexo I da IN RFB nº 1.234/2012 - Código 6147')
+('2716', 'Energia Elétrica', 'Energia Elétrica', '6147', '17002', 1.20, 1.00, 3.00, 0.65, 'Energia Elétrica / Regra Geral (5,85%)', 'Anexo I da IN RFB nº 1.234/2012 - Código 6147')
 ON CONFLICT (ncm_prefixo) DO UPDATE SET
   descricao = EXCLUDED.descricao,
   descricao_categoria = EXCLUDED.descricao_categoria,

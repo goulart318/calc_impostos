@@ -1,0 +1,71 @@
+
+
+Tabela de código de Natureza de Rendimento a ser utilizado na situação DDF025 
+EFD-Reinf (Evento R-4020)
+Código 
+Natureza 
+Rendimento
+Natureza do Bem Fornecido ou do Serviço Prestado
+Código de 
+Receita
+17001    Alimentação6147
+17002    Energia elétrica6147
+17003    Serviços prestados com emprego de materiais6147
+17004    Construção Civil por empreitada com emprego de materiais6147
+17005    Serviços hospitalares de que trata o art. 30 da Instrução Normativa RFB nº 1.234, de 11 de janeiro de 20126147
+17006    Transporte de cargas, exceto os relacionados no código 87676147
+17007
+Serviços de auxílio diagnóstico e terapia, patologia clínica, imagenologia, anatomia patológica e citopatológica,
+medicina nuclear e análises e patologias clínicas, exames por métodos gráficos, procedimentos endoscópicos,
+radioterapia, quimioterapia, diálise e oxigenoterapia hiperbárica de que trata o art. 31 e parágrafo único da
+Instrução Normativa RFB nº 1.234, de 11 de janeiro de 2012
+6147
+17008
+Produtos farmacêuticos, de perfumaria, de toucador ou de higiene pessoal adquiridos de produtor, importador,
+distribuidor ou varejista, exceto os relacionados no código 8767
+6147
+17009    Mercadorias e bens em geral6147
+17013
+Gasolina, exceto gasolina de aviação, óleo diesel e gás liquefeito de petróleo (GLP), derivados de petróleo ou
+de gás natural e querosene de aviação adquiridos de distribuidores e comerciantes varejistas
+8739
+17014    Álcool etílico hidratado nacional, inclusive para fins carburantes adquirido de comerciante varejista8739
+17015    Biodiesel adquirido de distribuidores e comerciantes varejistas8739
+17019
+Produtos de perfumaria, de toucador e de higiene pessoal a que se refere o § 1º do art. 22 da Instrução
+Normativa RFB nº 1.234, de 2012, adquiridos de distribuidores e de comerciantes varejistas
+8767
+17020    Produtos a que se refere o § 2º do art. 22 da Instrução Normativa RFB nº 1.234, de 20128767
+17021    Produtos de que tratam as alíneas “c” a “k” do inciso I do art. 5º da Instrução Normativa RFB nº 1.234, de 20128767
+17022
+Outros produtos ou serviços beneficiados com isenção, não incidência ou Alíquotas zero da Cofins e da
+Contribuição para o PIS/Pasep, observado o disposto no § 5º do art. 2º da Instrução Normativa RFB nº 1.234,
+de 2012
+8767
+17023
+Passagens aéreas, rodoviárias e demais serviços de transporte de passageiros, inclusive, tarifa de embarque,
+exceto transporte internacional de passageiros, efetuado por empresas nacionais
+6175
+17024    Transporte internacional de passageiros efetuado por empresas nacionais8850
+17025    Serviços prestados por associações profissionais ou assemelhadas e cooperativas8863
+17026
+Serviços prestados por bancos comerciais, bancos de investimento, bancos de desenvolvimento, caixas
+econômicas, sociedades de crédito, financiamento e investimento, sociedades de crédito imobiliário, e câmbio,
+distribuidoras de títulos e valores mobiliários, empresas de arrendamento mercantil, cooperativas de crédito,
+empresas de seguros privados e de capitalização e entidades abertas de previdência complementar
+6188
+17027    Seguro Saúde6188
+17028    Serviços de abastecimento de água6190
+17029    Telefone6190
+17030    Correio e telégrafos6190
+17031    Vigilância6190
+17032    Limpeza6190
+17033    Locação de mão de obra6190
+17034    Intermediação de negócios6190
+17035    Administração, locação ou cessão de bens imóveis, móveis e direitos de qualquer natureza6190
+17037
+Plano de saúde humano, veterinário ou odontológico com valores fixos por servidor, por empregado ou por
+animal
+6190
+17050    Propaganda e Publicidade, em conformidade ao art 16 da IN RFB 1234/2012, referente ao § 4º do citado artigo6190
+17099    Demais serviços6190
