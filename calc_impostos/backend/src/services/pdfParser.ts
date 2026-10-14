@@ -229,7 +229,7 @@ export class PdfParser {
       if (matchIr) destaqueIr = parseFloat(matchIr[1].replace(/\./g, '').replace(',', '.'));
 
       // Rigor no INSS: Verifica se no campo da Contribuição Previdenciária consta '-' ou Vazio ou '0,00'
-      const matchInssStrict = text.match(/Contribuição\s*Previdenciária\s*-\s*Retida\s*[\n\r]*\s*([R\$\d\.,-]+)/i);
+      const matchInssStrict = text.match(/Contribuição\s*Previdenciária\s*[-–—]\s*Retida\s*[\r\n]+\s*(?:R\$\s*)?([R\$\d\.,-]+)/i);
       if (matchInssStrict && matchInssStrict[1]) {
         const valStr = matchInssStrict[1].trim();
         if (valStr !== '-' && !valStr.includes('-') && valStr !== '0,00' && valStr !== '0') {
@@ -260,9 +260,11 @@ export class PdfParser {
       }
 
       if (destaqueSocial === 0) {
-        const matchSocial = text.match(/Contribuições\s*Sociais\s*-\s*Retidas[^\d]*R?\$?\s*([\d\.,]+)/i) ||
+        const matchSocial = text.match(/Contribuições\s*Sociais\s*[-–—]\s*Retidas\s*[\r\n]+\s*(?:R\$\s*)?([\d\.,]+)/i) ||
                             text.match(/PIS\/COFINS\/CSLL\s*Retidos[^\d]*R?\$?\s*([\d\.,]+)/i);
-        if (matchSocial) destaqueSocial = parseFloat(matchSocial[1].replace(/\./g, '').replace(',', '.'));
+        if (matchSocial && matchSocial[1]) {
+          destaqueSocial = parseFloat(matchSocial[1].replace(/\./g, '').replace(',', '.'));
+        }
       }
 
       // ISSQN e Redução de Base — restringe a busca ao bloco do ISSQN para não capturar

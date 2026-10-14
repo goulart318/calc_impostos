@@ -79,6 +79,16 @@ export interface ResultadoConsolidado {
   naturezasEFDReinf: { codigo: string; descricao: string; valor: number }[];
   codigosReceitaDarf: { codigo: string; valor: number }[];
   fundamentacaoLegalResumo: string[];
+
+  auditoriaInss?: {
+    aliquotaOficialEsperada: number;
+    aliquotaEfetivaSobreTotal: number;
+    valorInssEsperadoTotal: number;
+    valorInssDestacado: number;
+    correspondeAliquotaOficial: boolean;
+    tipoApuracao: 'CONFERE_11_PORCENTO' | 'DIVERGENCIA_BASE_OU_ALIQUOTA' | 'ISENTO_OU_NAO_DESTACADO';
+    mensagemAlerta?: string;
+  };
 }
 
 export const gerarNomeArquivoPdf = (numeroNota?: string, fornecedorNome?: string): string => {
@@ -1000,12 +1010,35 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                 <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalPis)}</td>
               </tr>
-              <tr>
+              <tr style={{ background: currentData.auditoriaInss?.correspondeAliquotaOficial ? '#f8fafc' : (currentData.auditoriaInss?.tipoApuracao === 'DIVERGENCIA_BASE_OU_ALIQUOTA' ? '#fffbeb' : undefined) }}>
                 <td>
-                  <strong>INSS</strong> — Retenção Previdenciária
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <strong>INSS</strong> — Retenção Previdenciária
+                    {currentData.auditoriaInss?.correspondeAliquotaOficial && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                        ✓ 11% CONFERE
+                      </span>
+                    )}
+                    {currentData.auditoriaInss && !currentData.auditoriaInss.correspondeAliquotaOficial && (
+                      <span style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                        ⚠️ ALÍQUOTA EFETIVA {currentData.auditoriaInss.aliquotaEfetivaSobreTotal}%
+                      </span>
+                    )}
+                  </div>
                   {Boolean(currentData.totalMateriaisInssDeducao && currentData.totalMateriaisInssDeducao > 0) && (
                     <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '2px' }}>
                       (BC Mão de Obra: {formatBRL(currentData.baseCalculoInssTotal || 0)} - Abatimento de Materiais: {formatBRL(currentData.totalMateriaisInssDeducao || 0)})
+                    </div>
+                  )}
+                  {currentData.auditoriaInss?.mensagemAlerta && (
+                    <div style={{ 
+                      marginTop: '4px', 
+                      fontSize: '0.73rem', 
+                      lineHeight: 1.35, 
+                      color: currentData.auditoriaInss.correspondeAliquotaOficial ? '#166534' : '#92400e',
+                      fontWeight: 500
+                    }}>
+                      {currentData.auditoriaInss.mensagemAlerta}
                     </div>
                   )}
                 </td>

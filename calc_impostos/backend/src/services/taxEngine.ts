@@ -121,10 +121,20 @@ export interface ResultadoConsolidado {
   issRetidoTomador: boolean;
   totalRetidoGeral: number;
   valorLiquido: number;
-
   naturezasEFDReinf: { codigo: string; descricao: string; valor: number }[];
   codigosReceitaDarf: { codigo: string; valor: number }[];
   fundamentacaoLegalResumo: string[];
+
+  // Auditoria e Conferência Específica de INSS (11% oficial vs Base Reduzida / CPRB 3,5%)
+  auditoriaInss?: {
+    aliquotaOficialEsperada: number; // 11% (ou 3,5% se CPRB)
+    aliquotaEfetivaSobreTotal: number; // (totalInss / totalBruto) * 100
+    valorInssEsperadoTotal: number;
+    valorInssDestacado: number;
+    correspondeAliquotaOficial: boolean;
+    tipoApuracao: 'CONFERE_11_PORCENTO' | 'DIVERGENCIA_BASE_OU_ALIQUOTA' | 'ISENTO_OU_NAO_DESTACADO';
+    mensagemAlerta?: string;
+  };
 }
 
 export class TaxEngine {
@@ -610,6 +620,45 @@ export class TaxEngine {
       valor: Number(valor.toFixed(2))
     }));
 
+    // Auditoria e Conferência de INSS (11% oficial vs Redução de Base / CPRB)
+    let auditoriaInss: ResultadoConsolidado['auditoriaInss'] = undefined;
+    if (ehServico && (totalInss > 0 || params.retencaoInss || (params.valorInssDestacado && params.valorInssDestacado > 0))) {
+      const aliqEsperada = params.optanteCprb ? 3.50 : 11.00;
+      const valorEsperadoIntegral = Number(((totalBruto * aliqEsperada) / 100).toFixed(2));
+      const aliqEfetiva = totalBruto > 0 ? Number(((totalInss / totalBruto) * 100).toFixed(2)) : 0;
+      
+      // Margem de tolerância de arredondamento de centavos (R$ 0,05)
+      const diferencaCentavos = Math.abs(totalInss - valorEsperadoIntegral);
+      const confereIntegral = diferencaCentavos <= 0.05;
+
+      let tipoApuracao: 'CONFERE_11_PORCENTO' | 'DIVERGENCIA_BASE_OU_ALIQUOTA' | 'ISENTO_OU_NAO_DESTACADO' = 'CONFERE_11_PORCENTO';
+      let mensagemAlerta: string | undefined = undefined;
+
+      if (confereIntegral) {
+        tipoApuracao = 'CONFERE_11_PORCENTO';
+        mensagemAlerta = `✓ Conferência realizada: O valor destacado de INSS (R$ ${totalInss.toFixed(2)}) corresponde exatamente à alíquota oficial integral de ${aliqEsperada}% sobre o total da nota fiscal (R$ ${totalBruto.toFixed(2)}).`;
+      } else {
+        tipoApuracao = 'DIVERGENCIA_BASE_OU_ALIQUOTA';
+        if (totalMateriaisInssDeducao > 0) {
+          mensagemAlerta = `⚠️ Atenção Fiscal: O valor de INSS retido (R$ ${totalInss.toFixed(2)} • alíq. efetiva ${aliqEfetiva}%) é menor que 11% integral (R$ ${valorEsperadoIntegral.toFixed(2)}) devido à Dedução de Materiais/Equipamentos da Base de Cálculo (R$ ${totalMateriaisInssDeducao.toFixed(2)} conf. Art. 120 e 121 da IN RFB nº 2.110/2022).`;
+        } else if (params.optanteCprb) {
+          mensagemAlerta = `ℹ️ Empresa Optante pela CPRB: Alíquota de INSS apurada a 3,5% conforme Art. 9º-A da Lei nº 12.546/2011 (R$ ${totalInss.toFixed(2)}).`;
+        } else {
+          mensagemAlerta = `⚠️ Alerta de Divergência no INSS: O valor destacado na nota fiscal (R$ ${totalInss.toFixed(2)}) NÃO corresponde à alíquota de 11% integral do total da nota (R$ ${valorEsperadoIntegral.toFixed(2)}). Alíquota efetiva apurada: ${aliqEfetiva}%. Verifique se há dedução de materiais/equipamentos da base de cálculo, contrato com cessão parcial de mão de obra ou enquadramento em CPRB.`;
+        }
+      }
+
+      auditoriaInss = {
+        aliquotaOficialEsperada: aliqEsperada,
+        aliquotaEfetivaSobreTotal: aliqEfetiva,
+        valorInssEsperadoTotal: valorEsperadoIntegral,
+        valorInssDestacado: totalInss,
+        correspondeAliquotaOficial: confereIntegral,
+        tipoApuracao,
+        mensagemAlerta
+      };
+    }
+
     return {
       tipoDocumento: params.tipoDocumento,
       numeroNota: params.numeroNota,
@@ -642,7 +691,8 @@ export class TaxEngine {
       valorLiquido: valorLiquidoTotal,
       naturezasEFDReinf,
       codigosReceitaDarf,
-      fundamentacaoLegalResumo: Array.from(fundSet)
+      fundamentacaoLegalResumo: Array.from(fundSet),
+      auditoriaInss
     };
   }
 }
