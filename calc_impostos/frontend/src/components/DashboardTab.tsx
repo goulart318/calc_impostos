@@ -10,6 +10,7 @@ import {
   Receipt,
   Download
 } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 interface AnalyticsData {
   totaisPorTributo: {
@@ -72,7 +73,7 @@ export const DashboardTab: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const url = `http://localhost:3001/api/dashboard/analytics${natureza ? `?natureza=${encodeURIComponent(natureza)}` : ''}`;
+      const url = `${API_BASE_URL}/api/dashboard/analytics${natureza ? `?natureza=${encodeURIComponent(natureza)}` : ''}`;
       const res = await fetch(url);
       if (!res.ok) {
         throw new Error('Falha ao carregar dados do servidor.');

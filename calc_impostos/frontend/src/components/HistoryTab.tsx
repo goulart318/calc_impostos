@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Database, FileText } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 export const HistoryTab: React.FC = () => {
   const [notas, setNotas] = useState<any[]>([]);
@@ -9,7 +10,7 @@ export const HistoryTab: React.FC = () => {
   const carregarNotas = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:3001/api/notas');
+      const res = await fetch(`${API_BASE_URL}/api/notas`);
       if (res.ok) {
         const data = await res.json();
         setNotas(data);

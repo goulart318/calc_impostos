@@ -24,6 +24,7 @@ import { Anexo1Tab } from './components/Anexo1Tab';
 import { NcmMatrixTab } from './components/NcmMatrixTab';
 import { DashboardTab } from './components/DashboardTab';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './components/ProcessoConsolidadoModal';
+import { API_BASE_URL } from './config/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'analise' | 'historico' | 'anexo1' | 'ncm'>('analise');
@@ -147,7 +148,7 @@ export default function App() {
         optanteCprb
       };
 
-      const res = await fetch('http://localhost:3001/api/analisar', {
+      const res = await fetch(`${API_BASE_URL}/api/analisar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -166,7 +167,7 @@ export default function App() {
     if (!fornecedorCnpj) return;
     try {
       setConsultandoCnpj(true);
-      const res = await fetch(`http://localhost:3001/api/consultar-cnpj/${fornecedorCnpj.replace(/\D/g, '')}`);
+      const res = await fetch(`${API_BASE_URL}/api/consultar-cnpj/${fornecedorCnpj.replace(/\D/g, '')}`);
       if (res.ok) {
         const data = await res.json();
         setFornecedorNome(data.razaoSocial || fornecedorNome);
@@ -197,7 +198,7 @@ export default function App() {
       if (numeroProcesso) formData.append('numeroProcesso', numeroProcesso);
       if (numeroEmpenho) formData.append('numeroEmpenho', numeroEmpenho);
 
-      const endpoint = isXml ? 'http://localhost:3001/api/upload-xml' : 'http://localhost:3001/api/upload-pdf';
+      const endpoint = isXml ? `${API_BASE_URL}/api/upload-xml` : `${API_BASE_URL}/api/upload-pdf`;
       const res = await fetch(endpoint, {
         method: 'POST',
         body: formData
@@ -278,7 +279,7 @@ export default function App() {
       if (numeroProcesso) formData.append('numeroProcesso', numeroProcesso);
       if (numeroEmpenho) formData.append('numeroEmpenho', numeroEmpenho);
 
-      const res = await fetch('http://localhost:3001/api/upload-lote', {
+      const res = await fetch(`${API_BASE_URL}/api/upload-lote`, {
         method: 'POST',
         body: formData
       });
@@ -344,7 +345,7 @@ export default function App() {
         numeroProcesso: numeroProcesso || resultado.numeroProcesso || null,
         numeroEmpenho: numeroEmpenho || resultado.numeroEmpenho || null
       };
-      const res = await fetch('http://localhost:3001/api/notas/salvar', {
+      const res = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(notaParaSalvar)

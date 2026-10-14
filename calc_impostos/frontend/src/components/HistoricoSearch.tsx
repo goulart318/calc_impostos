@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, FileText, Download, RefreshCw, Calendar, Building, Layers } from 'lucide-react';
 import { gerarNomeArquivoPdf, type ResultadoConsolidado } from './ReportPreview';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './ProcessoConsolidadoModal';
+import { API_BASE_URL } from '../config/api';
 
 interface NotaSalvaResumo {
   id: number;
@@ -43,7 +44,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   const carregarNotas = async (queryStr: string = '') => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/notas/pesquisar?q=${encodeURIComponent(queryStr)}`);
+      const res = await fetch(`${API_BASE_URL}/api/notas/pesquisar?q=${encodeURIComponent(queryStr)}`);
       if (res.ok) {
         const data = await res.json();
         setNotas(data);
@@ -90,7 +91,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
       setConsolidando(true);
       const ids = Array.from(selectedIds);
       const promessas = ids.map(id => 
-        fetch(`http://localhost:3001/api/notas/${id}`).then(r => r.json())
+        fetch(`${API_BASE_URL}/api/notas/${id}`).then(r => r.json())
       );
       const notasCompletas: ResultadoConsolidado[] = await Promise.all(promessas);
 
@@ -179,7 +180,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   const handleReabrirNota = async (id: number) => {
     setLoadingId(id);
     try {
-      const res = await fetch(`http://localhost:3001/api/notas/${id}`);
+      const res = await fetch(`${API_BASE_URL}/api/notas/${id}`);
       if (res.ok) {
         const data: ResultadoConsolidado = await res.json();
         onSelectNota(data);
@@ -193,11 +194,11 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
 
   const handleDownloadPdfDirect = async (id: number, numeroNota: string, fornecedorNome?: string) => {
     try {
-      const resNota = await fetch(`http://localhost:3001/api/notas/${id}`);
+      const resNota = await fetch(`${API_BASE_URL}/api/notas/${id}`);
       if (!resNota.ok) return;
       const dataFull: ResultadoConsolidado = await resNota.json();
 
-      const resPdf = await fetch('http://localhost:3001/api/gerar-pdf', {
+      const resPdf = await fetch(`${API_BASE_URL}/api/gerar-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataFull)

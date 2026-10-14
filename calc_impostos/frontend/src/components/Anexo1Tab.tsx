@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 export const Anexo1Tab: React.FC = () => {
   const [regras, setRegras] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/tabelas/anexo1')
+    fetch(`${API_BASE_URL}/api/tabelas/anexo1`)
       .then(r => r.json())
       .then(d => setRegras(d))
       .catch(e => console.warn(e));

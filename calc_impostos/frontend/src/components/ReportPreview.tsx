@@ -14,6 +14,7 @@ import {
   Sliders,
   Check
 } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 export interface ItemCalculado {
   numeroItem: number;
@@ -319,7 +320,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         }))
       };
 
-      const res = await fetch('http://localhost:3001/api/recalcular', {
+      const res = await fetch(`${API_BASE_URL}/api/recalcular`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -346,7 +347,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   const handleDownloadPdf = async () => {
     try {
       setBaixandoPdf(true);
-      const response = await fetch('http://localhost:3001/api/gerar-pdf', {
+      const response = await fetch(`${API_BASE_URL}/api/gerar-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentData)
@@ -372,7 +373,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   const handleSalvarPostgres = async () => {
     try {
       setSalvando(true);
-      const response = await fetch('http://localhost:3001/api/salvar-nota', {
+      const response = await fetch(`${API_BASE_URL}/api/salvar-nota`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentData)

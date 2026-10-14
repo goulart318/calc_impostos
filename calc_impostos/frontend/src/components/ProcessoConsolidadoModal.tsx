@@ -9,6 +9,7 @@ import {
   Printer
 } from 'lucide-react';
 import { type ResultadoConsolidado } from './ReportPreview';
+import { API_BASE_URL } from '../config/api';
 
 export interface ProcessoConsolidadoData {
   numeroProcesso?: string;
@@ -83,7 +84,7 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
         observacoes: observacoes.trim() || undefined
       };
 
-      const res = await fetch('http://localhost:3001/api/processo/gerar-pdf-consolidado', {
+      const res = await fetch(`${API_BASE_URL}/api/processo/gerar-pdf-consolidado`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -115,7 +116,7 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
       setSalvando(true);
       let salvas = 0;
       for (const nota of dados.notas) {
-        const res = await fetch('http://localhost:3001/api/notas/salvar', {
+        const res = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(nota)
