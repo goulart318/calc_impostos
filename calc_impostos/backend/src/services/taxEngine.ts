@@ -250,14 +250,21 @@ export class TaxEngine {
                                   ncm.startsWith('3004') || ncm.startsWith('3005') || ncm.startsWith('3006');
     const ehEquipamentoHospitalar = ncm.startsWith('9018') || ncm.startsWith('9019') || ncm.startsWith('9022');
     
-    // Tabela 4.3.13 do SPED / Decreto 6.426/2008: Apenas 9021.10 (ortopedia/fraturas), 9021.3 (próteses) e 9021.40 (auditivos)
-    const ehProteseOuAparelhoOrtopedicoAliqZero = ncm.startsWith('902110') || ncm.startsWith('90213') || ncm.startsWith('902140');
+    // Tabela 4.3.13 do SPED / Decreto 6.426/2008 / Grupo 300 - Saúde e Acessibilidade:
+    // 8713 e 8714.20 (cadeiras de rodas e partes)
+    // 9021.10 (ortopedia/fraturas), 9021.3 (próteses), 9021.40 / 9021.90.82 / 9021.90.92 (auditivos)
+    // 9021.90.19 (neuroestimuladores/implantes cocleares)
+    const ehAssistivaOuOrtopedicoAliqZero = 
+      ncm.startsWith('8713') || ncm.startsWith('871420') ||
+      ncm.startsWith('902110') || ncm.startsWith('90213') || 
+      ncm.startsWith('902140') || ncm.startsWith('90219082') || 
+      ncm.startsWith('90219092') || ncm.startsWith('90219019');
 
-    if (ehMedicamentoOuVacina || ehEquipamentoHospitalar || ehProteseOuAparelhoOrtopedicoAliqZero) {
+    if (ehMedicamentoOuVacina || ehEquipamentoHospitalar || ehAssistivaOuOrtopedicoAliqZero) {
       return {
         codigoReceita: '8767',
         naturezaReinf: '17022',
-        condicao: 'Artigos Ortopédicos / Próteses / Medicamentos com Alíquota Zero PIS/COFINS (Decreto 6.426/2008 c/c IN 1234/2012)',
+        condicao: 'Saúde / Próteses / Aparelhos Ortopédicos / Medicamentos com Alíquota Zero PIS/COFINS (Decreto 6.426/2008 c/c IN 1234/2012)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
         aliqCofins: 0.00,
