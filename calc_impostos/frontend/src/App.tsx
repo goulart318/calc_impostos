@@ -205,11 +205,27 @@ export default function App() {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Falha ao processar arquivo.');
+        let errMsg = 'Falha ao processar arquivo.';
+        try {
+          const errData = await res.json();
+          errMsg = errData.error || errMsg;
+        } catch {
+          const txt = await res.text().catch(() => '');
+          if (txt.includes('502') || txt.includes('503') || txt.includes('Service Unavailable') || !txt) {
+            errMsg = 'O backend está inicializando (Cold Start do Render). Por favor, aguarde cerca de 30 segundos e envie novamente.';
+          } else {
+            errMsg = `Erro ${res.status}: ${txt.substring(0, 100)}`;
+          }
+        }
+        throw new Error(errMsg);
       }
 
-      const data: ResultadoConsolidado = await res.json();
+      let data: ResultadoConsolidado;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('O servidor respondeu de forma incompleta. Aguarde alguns segundos (o servidor pode estar acordando) e tente novamente.');
+      }
       if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
       if (numeroEmpenho && !data.numeroEmpenho) data.numeroEmpenho = numeroEmpenho;
       setResultado(data);
