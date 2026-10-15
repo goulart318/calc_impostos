@@ -164,6 +164,8 @@ export default function App() {
       }
 
       const data = await res.json();
+      if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
+      if (numeroEmpenho && !data.numeroEmpenho) data.numeroEmpenho = numeroEmpenho;
       setResultado(data);
       setMensagemSucesso(`✓ Retenções calculadas com sucesso para a Nota Fiscal ${data.numeroNota || numeroNota}!`);
       setTimeout(() => setMensagemSucesso(null), 6000);
@@ -738,7 +740,13 @@ export default function App() {
                         type="text" 
                         className="form-input" 
                         value={numeroProcesso} 
-                        onChange={(e) => setNumeroProcesso(formatarProcessoSei(e.target.value))} 
+                        onChange={(e) => {
+                          const val = formatarProcessoSei(e.target.value);
+                          setNumeroProcesso(val);
+                          if (resultado) {
+                            setResultado(prev => prev ? { ...prev, numeroProcesso: val } : null);
+                          }
+                        }} 
                         placeholder="Ex: 23068.012345/2026-99"
                         style={{ fontFamily: 'var(--font-mono)' }}
                       />
@@ -750,7 +758,13 @@ export default function App() {
                         type="text" 
                         className="form-input" 
                         value={numeroEmpenho} 
-                        onChange={(e) => setNumeroEmpenho(e.target.value.toUpperCase())} 
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase();
+                          setNumeroEmpenho(val);
+                          if (resultado) {
+                            setResultado(prev => prev ? { ...prev, numeroEmpenho: val } : null);
+                          }
+                        }} 
                         placeholder="Ex: 2026NE000123"
                         style={{ fontFamily: 'var(--font-mono)' }}
                       />
@@ -1135,7 +1149,11 @@ export default function App() {
                     </div>
                     <ReportPreview 
                       data={resultado} 
-                      onUpdateData={(novoResultado) => setResultado(novoResultado)}
+                      onUpdateData={(novoResultado) => {
+                        setResultado(novoResultado);
+                        if (novoResultado.numeroProcesso !== undefined) setNumeroProcesso(novoResultado.numeroProcesso);
+                        if (novoResultado.numeroEmpenho !== undefined) setNumeroEmpenho(novoResultado.numeroEmpenho);
+                      }}
                     />
                   </div>
                 ) : (

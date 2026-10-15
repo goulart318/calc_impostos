@@ -171,7 +171,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
     (data.itens || []).map(itemParaEditavel)
   );
 
-  // Sincroniza se a prop data mudar externamente (ex: carregamento de nova nota ou recálculo no formulário principal)
+  // Sincroniza se a prop data mudar externamente (ex: carregamento de nova nota, alteração de processo/empenho ou recálculo no formulário principal)
   useEffect(() => {
     setCurrentData(data);
     setDadosOriginais(data);
@@ -180,6 +180,8 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   }, [
     data.numeroNota, 
     data.chaveAcesso, 
+    data.numeroProcesso,
+    data.numeroEmpenho,
     data.fornecedorCnpj, 
     data.totalBruto, 
     data.totalContaVinculada, 
@@ -579,16 +581,50 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
 
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>PROCESSO SEI Nº</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.numeroProcesso ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {currentData.numeroProcesso || 'Não informado'}
-              </div>
+              {modoEdicao ? (
+                <input
+                  type="text"
+                  className="form-input"
+                  value={currentData.numeroProcesso || ''}
+                  onChange={(e) => {
+                    const novoProcesso = e.target.value;
+                    const atualizado = { ...currentData, numeroProcesso: novoProcesso };
+                    setCurrentData(atualizado);
+                    setModificado(true);
+                    if (onUpdateData) onUpdateData(atualizado);
+                  }}
+                  placeholder="Ex: 23068.012345/2026-99"
+                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px' }}
+                />
+              ) : (
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.numeroProcesso ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {currentData.numeroProcesso || 'Não informado'}
+                </div>
+              )}
             </div>
 
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>NOTA DE EMPENHO</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.numeroEmpenho ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {currentData.numeroEmpenho || 'Não informada'}
-              </div>
+              {modoEdicao ? (
+                <input
+                  type="text"
+                  className="form-input"
+                  value={currentData.numeroEmpenho || ''}
+                  onChange={(e) => {
+                    const novoEmpenho = e.target.value.toUpperCase();
+                    const atualizado = { ...currentData, numeroEmpenho: novoEmpenho };
+                    setCurrentData(atualizado);
+                    setModificado(true);
+                    if (onUpdateData) onUpdateData(atualizado);
+                  }}
+                  placeholder="Ex: 2026NE000123"
+                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px' }}
+                />
+              ) : (
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.numeroEmpenho ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {currentData.numeroEmpenho || 'Não informada'}
+                </div>
+              )}
             </div>
 
             <div>
