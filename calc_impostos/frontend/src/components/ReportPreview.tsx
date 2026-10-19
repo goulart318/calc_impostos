@@ -27,6 +27,7 @@ export interface ItemCalculado {
   codigoReceitaDarf: string;
   naturezaRendimentoReinf: string;
   fundamentacaoLegal: string;
+  alertaIncompatibilidade?: string;
   aliqIr: number;
   aliqCsll: number;
   aliqCofins: number;
@@ -79,6 +80,7 @@ export interface ResultadoConsolidado {
   naturezasEFDReinf: { codigo: string; descricao: string; valor: number }[];
   codigosReceitaDarf: { codigo: string; valor: number }[];
   fundamentacaoLegalResumo: string[];
+  alertasCriticaFiscal?: string[];
 
   auditoriaInss?: {
     aliquotaOficialEsperada: number;
@@ -209,6 +211,89 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
     'ISENTO': { ir: 0.00, csll: 0.00, cofins: 0.00, pis: 0.00, totalFed: 0.00, reinfPadrao: 'ISENTO', desc: 'Dispensa / Imune de Retenção Federal (0%)' },
   };
 
+  // Mapeamento oficial de compatibilidade entre Código da Receita DARF e Naturezas de Rendimento (EFD-Reinf DDF025 / IN 1234/2012)
+  const MAPA_DARF_NATUREZAS: Record<string, { naturezasValidas: string[]; darfSugeridoDesc: string }> = {
+    '6147': {
+      naturezasValidas: ['17001', '17002', '17003', '17004', '17005', '17006', '17007', '17008', '17009'],
+      darfSugeridoDesc: '6147 (5,85% — Bens, Mercadorias, Obras c/ Materiais e Serviços Hospitalares)'
+    },
+    '6190': {
+      naturezasValidas: ['17028', '17029', '17030', '17031', '17032', '17033', '17034', '17035', '17037', '17050', '17099'],
+      darfSugeridoDesc: '6190 (9,45% — Serviços em Geral, Vigilância, Limpeza, Locação Mão de Obra)'
+    },
+    '6175': {
+      naturezasValidas: ['17023'],
+      darfSugeridoDesc: '6175 (7,05% — Passagens e Transporte de Passageiros)'
+    },
+    '8767': {
+      naturezasValidas: ['17019', '17020', '17021', '17022'],
+      darfSugeridoDesc: '8767 (2,20% — Medicamentos/Produtos com Alíquota Zero de PIS/COFINS)'
+    },
+    '8739': {
+      naturezasValidas: ['17013', '17014', '17015'],
+      darfSugeridoDesc: '8739 (1,24% — Combustíveis de Comerciantes Varejistas)'
+    },
+    '9060': {
+      naturezasValidas: ['17013', '17014', '17015'],
+      darfSugeridoDesc: '9060 (4,89% — Combustíveis de Refinarias / Produtores / Distribuidores)'
+    },
+    '8850': {
+      naturezasValidas: ['17024'],
+      darfSugeridoDesc: '8850 (3,40% — Transporte Internacional de Passageiros)'
+    },
+    '8863': {
+      naturezasValidas: ['17025'],
+      darfSugeridoDesc: '8863 (4,65% — Serviços de Cooperativas e Associações)'
+    },
+    '6188': {
+      naturezasValidas: ['17026', '17027'],
+      darfSugeridoDesc: '6188 (7,05% — Bancos e Seguro Saúde)'
+    },
+    'ISENTO': {
+      naturezasValidas: ['ISENTO'],
+      darfSugeridoDesc: 'ISENTO (0,00% — Rendimento Imune ou Não Sujeito a Retenção)'
+    }
+  };
+
+  // Mapeamento reverso para encontrar o código DARF oficial a partir de uma Natureza de Rendimento
+  const MAPA_NATUREZA_PARA_DARF: Record<string, string> = {
+    '17001': '6147', '17002': '6147', '17003': '6147', '17004': '6147', '17005': '6147', '17006': '6147', '17007': '6147', '17008': '6147', '17009': '6147',
+    '17013': '8739', '17014': '8739', '17015': '8739',
+    '17019': '8767', '17020': '8767', '17021': '8767', '17022': '8767',
+    '17023': '6175',
+    '17024': '8850',
+    '17025': '8863',
+    '17026': '6188', '17027': '6188',
+    '17028': '6190', '17029': '6190', '17030': '6190', '17031': '6190', '17032': '6190', '17033': '6190', '17034': '6190', '17035': '6190', '17037': '6190', '17050': '6190', '17099': '6190',
+    'ISENTO': 'ISENTO'
+  };
+
+  const validarIncompatibilidadeItem = (codDarf?: string, natReinf?: string): { incompativel: boolean; mensagem?: string; darfEsperado?: string } => {
+    if (!codDarf || !natReinf) return { incompativel: false };
+    const darfLimpo = codDarf.trim().toUpperCase();
+    const natLimpa = natReinf.trim().toUpperCase();
+
+    const darfEsperado = MAPA_NATUREZA_PARA_DARF[natLimpa];
+    if (darfEsperado) {
+      if (darfEsperado !== darfLimpo && !(darfEsperado === '8739' && darfLimpo === '9060')) {
+        return {
+          incompativel: true,
+          darfEsperado,
+          mensagem: `A Natureza de Rendimento ${natLimpa} exige o DARF ${darfEsperado}, mas está selecionado o DARF ${darfLimpo}.`
+        };
+      }
+    } else if (MAPA_DARF_NATUREZAS[darfLimpo]) {
+      const info = MAPA_DARF_NATUREZAS[darfLimpo];
+      if (!info.naturezasValidas.includes(natLimpa) && natLimpa !== 'OUTRO') {
+        return {
+          incompativel: true,
+          mensagem: `A Natureza ${natLimpa} não é compatível com o DARF ${darfLimpo}. Naturezas aceitas: ${info.naturezasValidas.join(', ')}.`
+        };
+      }
+    }
+    return { incompativel: false };
+  };
+
   const handleMudarPreset = (index: number, novoPreset: string) => {
     setItensEditados(prev => {
       const clone = [...prev];
@@ -254,6 +339,25 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
             it.naturezaRendimentoReinf = currentData.tipoDocumento === 'NFSE' ? '17003' : '17009';
           } else {
             it.naturezaRendimentoReinf = conf.reinfPadrao;
+          }
+        }
+      }
+
+      // Se o usuário digitou ou selecionou uma Natureza de Rendimento que possui DARF obrigatório específico
+      if (campo === 'naturezaRendimentoReinf') {
+        const natNormalizada = String(valor || '').trim().toUpperCase();
+        const darfCorrespondente = MAPA_NATUREZA_PARA_DARF[natNormalizada];
+        if (darfCorrespondente && darfCorrespondente !== it.codigoReceitaDarf) {
+          // Se o usuário selecionou uma natureza de outro grupo (ex: 17099 de serviços tendo DARF 6147, ou 17022 de alíq zero tendo 6147)
+          // Atualiza o código DARF e as alíquotas padrão automaticamente para manter coerência
+          if (TABELA_RECEITAS_DARF[darfCorrespondente]) {
+            const conf = TABELA_RECEITAS_DARF[darfCorrespondente];
+            it.codigoReceitaDarf = darfCorrespondente;
+            it.aliqIr = conf.ir;
+            it.aliqCsll = conf.csll;
+            it.aliqPis = conf.pis;
+            it.aliqCofins = conf.cofins;
+            it.preset = darfCorrespondente;
           }
         }
       }
@@ -313,6 +417,21 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   };
 
   const handleRecalcular = async () => {
+    // Crítica de Incompatibilidade entre Natureza e DARF
+    const itensIncompativeis = itensEditados
+      .map((it, idx) => ({ it, erro: validarIncompatibilidadeItem(it.codigoReceitaDarf, it.naturezaRendimentoReinf), idx }))
+      .filter(x => x.erro.incompativel);
+
+    if (itensIncompativeis.length > 0) {
+      const msgs = itensIncompativeis.map(x => `• Item #${x.it.numeroItem}: ${x.erro.mensagem}`).join('\n');
+      const prosseguir = confirm(
+        `⚠️ ATENÇÃO: DIVERGÊNCIA FISCAL DETECTADA:\n\n${msgs}\n\nDeseja continuar com o recálculo mesmo com esta incompatibilidade?`
+      );
+      if (!prosseguir) {
+        return;
+      }
+    }
+
     try {
       setRecalculando(true);
       const payload = {
@@ -561,6 +680,32 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
               </button>
             )}
           </div>
+
+          {/* Banner de Crítica Fiscal Consolidada no Painel de Edição */}
+          {(() => {
+            const incompativeis = itensEditados.filter(it => validarIncompatibilidadeItem(it.codigoReceitaDarf, it.naturezaRendimentoReinf).incompativel);
+            if (incompativeis.length === 0) return null;
+            return (
+              <div style={{
+                width: '100%',
+                marginTop: '10px',
+                padding: '10px 14px',
+                borderRadius: '6px',
+                background: '#fef2f2',
+                border: '1px solid #ef4444',
+                color: '#991b1b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                fontSize: '0.82rem'
+              }}>
+                <AlertTriangle size={20} color="#dc2626" style={{ flexShrink: 0 }} />
+                <div>
+                  <strong>⚠️ Crítica Fiscal de Incompatibilidade:</strong> Existe(m) {incompativeis.length} item(ns) com Natureza de Rendimento incompatível com o Código DARF selecionado. Revise os alertas nos cards abaixo antes de recalcular ou salvar.
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -755,6 +900,28 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
               <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px' }}>
                 ⚖️ <strong>Fundamentação Legal:</strong> {item.fundamentacaoLegal}
               </div>
+
+              {(() => {
+                const erro = validarIncompatibilidadeItem(item.codigoReceitaDarf, item.naturezaRendimentoReinf);
+                if (!erro.incompativel) return null;
+                return (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: '#fef2f2',
+                    border: '1px solid #f87171',
+                    color: '#991b1b',
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <AlertTriangle size={16} color="#dc2626" />
+                    <span><strong>Atenção (Incompatibilidade Tributária):</strong> {erro.mensagem}</span>
+                  </div>
+                );
+              })()}
             </div>
           ))
         ) : (
@@ -1040,6 +1207,53 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                   </div>
                 </div>
               </div>
+
+              {/* Crítica visual de Incompatibilidade entre DARF e Natureza */}
+              {(() => {
+                const erro = validarIncompatibilidadeItem(item.codigoReceitaDarf, item.naturezaRendimentoReinf);
+                if (!erro.incompativel) return null;
+                return (
+                  <div style={{
+                    marginTop: '10px',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: '#fef2f2',
+                    border: '1px solid #f87171',
+                    color: '#991b1b',
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertTriangle size={18} color="#dc2626" />
+                      <span><strong>Incompatibilidade Fiscal:</strong> {erro.mensagem}</span>
+                    </div>
+                    {erro.darfEsperado && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleAtualizarCampo(index, 'codigoReceitaDarf', erro.darfEsperado);
+                        }}
+                        style={{
+                          background: '#dc2626',
+                          color: '#ffffff',
+                          border: 'none',
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Corrigir para DARF {erro.darfEsperado}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ))
         )}

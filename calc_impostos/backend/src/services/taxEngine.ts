@@ -32,6 +32,7 @@ export interface ItemCalculado {
   codigoReceitaDarf: string;
   naturezaRendimentoReinf: string;
   fundamentacaoLegal: string;
+  alertaIncompatibilidade?: string;
   
   // Alíquotas (%)
   aliqIr: number;
@@ -124,6 +125,7 @@ export interface ResultadoConsolidado {
   naturezasEFDReinf: { codigo: string; descricao: string; valor: number }[];
   codigosReceitaDarf: { codigo: string; valor: number }[];
   fundamentacaoLegalResumo: string[];
+  alertasCriticaFiscal?: string[];
 
   // Auditoria e Conferência Específica de INSS (11% oficial vs Base Reduzida / CPRB 3,5%)
   auditoriaInss?: {
@@ -777,6 +779,25 @@ export class TaxEngine {
         });
       }
 
+      // Validação de compatibilidade fiscal entre Natureza de Rendimento e Código DARF (IN 1234 e EFD-Reinf DDF025)
+      const mapaNaturezaParaDarfOficial: Record<string, string> = {
+        '17001': '6147', '17002': '6147', '17003': '6147', '17004': '6147', '17005': '6147', '17006': '6147', '17007': '6147', '17008': '6147', '17009': '6147',
+        '17013': '8739', '17014': '8739', '17015': '8739',
+        '17019': '8767', '17020': '8767', '17021': '8767', '17022': '8767',
+        '17023': '6175',
+        '17024': '8850',
+        '17025': '8863',
+        '17026': '6188', '17027': '6188',
+        '17028': '6190', '17029': '6190', '17030': '6190', '17031': '6190', '17032': '6190', '17033': '6190', '17034': '6190', '17035': '6190', '17037': '6190', '17050': '6190', '17099': '6190',
+        'ISENTO': 'ISENTO'
+      };
+
+      let alertaIncompatibilidadeItem: string | undefined = undefined;
+      const darfEsperado = mapaNaturezaParaDarfOficial[natReinfFinal];
+      if (darfEsperado && darfEsperado !== codReceitaFinal && !(darfEsperado === '8739' && codReceitaFinal === '9060')) {
+        alertaIncompatibilidadeItem = `A Natureza de Rendimento ${natReinfFinal} exige o Código DARF ${darfEsperado}, mas está configurado o DARF ${codReceitaFinal}.`;
+      }
+
       itensCalculados.push({
         numeroItem: itemInput.numeroItem || (i + 1),
         descricao: itemInput.descricao || (ehServico ? 'Serviço prestado' : 'Mercadoria adquirida'),
@@ -788,6 +809,7 @@ export class TaxEngine {
         codigoReceitaDarf: codReceitaFinal,
         naturezaRendimentoReinf: natReinfFinal,
         fundamentacaoLegal: fundamentacaoItem,
+        alertaIncompatibilidade: alertaIncompatibilidadeItem,
         aliqIr,
         aliqCsll,
         aliqCofins,
@@ -898,6 +920,9 @@ export class TaxEngine {
       naturezasEFDReinf,
       codigosReceitaDarf,
       fundamentacaoLegalResumo: Array.from(fundSet),
+      alertasCriticaFiscal: itensCalculados
+        .filter(it => Boolean(it.alertaIncompatibilidade))
+        .map(it => `Item #${it.numeroItem}: ${it.alertaIncompatibilidade}`),
       auditoriaInss
     };
   }
