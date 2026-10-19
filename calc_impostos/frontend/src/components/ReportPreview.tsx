@@ -1392,41 +1392,41 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                 );
               })()}
 
-              <tr style={{ background: '#fafafa' }}>
+              <tr style={{ background: '#f7fee7', borderLeft: '4px solid #84cc16' }}>
                 <td style={{ paddingLeft: '28px' }}>
-                  <span style={{ color: '#64748b', marginRight: '6px' }}>↳</span>
-                  <strong>IR</strong> — Imposto de Renda
+                  <span style={{ color: '#4d7c0f', fontWeight: 800, marginRight: '6px' }}>↳</span>
+                  <strong style={{ color: '#365314' }}>IR</strong> — Imposto de Renda
                 </td>
-                <td>{currentData.totalBruto > 0 ? `${((currentData.totalIr / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
-                <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
-                <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalIr)}</td>
+                <td style={{ color: '#365314', fontWeight: 600 }}>{currentData.totalBruto > 0 ? `${((currentData.totalIr / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
+                <td style={{ fontSize: '0.78rem', color: '#4d7c0f' }}>IN RFB nº 1.234/2012</td>
+                <td style={{ textAlign: 'right', fontWeight: 700, color: '#365314' }}>{formatBRL(currentData.totalIr)}</td>
               </tr>
-              <tr style={{ background: '#fafafa' }}>
+              <tr style={{ background: '#f7fee7', borderLeft: '4px solid #84cc16' }}>
                 <td style={{ paddingLeft: '28px' }}>
-                  <span style={{ color: '#64748b', marginRight: '6px' }}>↳</span>
-                  <strong>CSLL</strong> — Contribuição Social s/ Lucro
+                  <span style={{ color: '#4d7c0f', fontWeight: 800, marginRight: '6px' }}>↳</span>
+                  <strong style={{ color: '#365314' }}>CSLL</strong> — Contribuição Social s/ Lucro
                 </td>
-                <td>{currentData.totalBruto > 0 ? `${((currentData.totalCsll / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
-                <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
-                <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalCsll)}</td>
+                <td style={{ color: '#365314', fontWeight: 600 }}>{currentData.totalBruto > 0 ? `${((currentData.totalCsll / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
+                <td style={{ fontSize: '0.78rem', color: '#4d7c0f' }}>IN RFB nº 1.234/2012</td>
+                <td style={{ textAlign: 'right', fontWeight: 700, color: '#365314' }}>{formatBRL(currentData.totalCsll)}</td>
               </tr>
-              <tr style={{ background: '#fafafa' }}>
+              <tr style={{ background: '#f7fee7', borderLeft: '4px solid #84cc16' }}>
                 <td style={{ paddingLeft: '28px' }}>
-                  <span style={{ color: '#64748b', marginRight: '6px' }}>↳</span>
-                  <strong>COFINS</strong> — Seguridade Social
+                  <span style={{ color: '#4d7c0f', fontWeight: 800, marginRight: '6px' }}>↳</span>
+                  <strong style={{ color: '#365314' }}>COFINS</strong> — Seguridade Social
                 </td>
-                <td>{currentData.totalBruto > 0 ? `${((currentData.totalCofins / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
-                <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
-                <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalCofins)}</td>
+                <td style={{ color: '#365314', fontWeight: 600 }}>{currentData.totalBruto > 0 ? `${((currentData.totalCofins / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
+                <td style={{ fontSize: '0.78rem', color: '#4d7c0f' }}>IN RFB nº 1.234/2012</td>
+                <td style={{ textAlign: 'right', fontWeight: 700, color: '#365314' }}>{formatBRL(currentData.totalCofins)}</td>
               </tr>
-              <tr style={{ background: '#fafafa' }}>
+              <tr style={{ background: '#f7fee7', borderLeft: '4px solid #84cc16', borderBottom: '1px solid #d9f99d' }}>
                 <td style={{ paddingLeft: '28px' }}>
-                  <span style={{ color: '#64748b', marginRight: '6px' }}>↳</span>
-                  <strong>PIS/PASEP</strong> — Integração Social
+                  <span style={{ color: '#4d7c0f', fontWeight: 800, marginRight: '6px' }}>↳</span>
+                  <strong style={{ color: '#365314' }}>PIS/PASEP</strong> — Integração Social
                 </td>
-                <td>{currentData.totalBruto > 0 ? `${((currentData.totalPis / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
-                <td style={{ fontSize: '0.78rem', color: '#64748b' }}>IN RFB nº 1.234/2012</td>
-                <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalPis)}</td>
+                <td style={{ color: '#365314', fontWeight: 600 }}>{currentData.totalBruto > 0 ? `${((currentData.totalPis / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
+                <td style={{ fontSize: '0.78rem', color: '#4d7c0f' }}>IN RFB nº 1.234/2012</td>
+                <td style={{ textAlign: 'right', fontWeight: 700, color: '#365314' }}>{formatBRL(currentData.totalPis)}</td>
               </tr>
               <tr style={{ background: currentData.auditoriaInss?.correspondeAliquotaOficial ? '#f8fafc' : (currentData.auditoriaInss?.tipoApuracao === 'DIVERGENCIA_BASE_OU_ALIQUOTA' ? '#fffbeb' : undefined) }}>
                 <td>

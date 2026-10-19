@@ -233,7 +233,7 @@ export class PdfReportGenerator {
                              (resultado.itens[0]?.aliqCofins || 0) + 
                              (resultado.itens[0]?.aliqPis || 0);
 
-        const rows = [
+        const rows: { nome: string; aliq: number; valor: number; legal: string; destaque?: boolean; isSubItem?: boolean }[] = [
           { 
             nome: 'TRIBUTOS FEDERAIS AGREGADOS (IR+CSLL+COFINS+PIS) [SIAFI]', 
             aliq: aliqFedTotal, 
@@ -241,10 +241,10 @@ export class PdfReportGenerator {
             legal: 'IN RFB nº 1.234/2012',
             destaque: true 
           },
-          { nome: '  ↳ IR (Imposto de Renda)', aliq: resultado.itens[0]?.aliqIr || 0, valor: resultado.totalIr, legal: 'IN RFB nº 1.234/2012' },
-          { nome: '  ↳ CSLL (Contribuição Social sobre o Lucro Líquido)', aliq: resultado.itens[0]?.aliqCsll || 0, valor: resultado.totalCsll, legal: 'IN RFB nº 1.234/2012' },
-          { nome: '  ↳ COFINS (Contribuição para Seguridade)', aliq: resultado.itens[0]?.aliqCofins || 0, valor: resultado.totalCofins, legal: 'IN RFB nº 1.234/2012' },
-          { nome: '  ↳ PIS/PASEP (Programa de Integração Social)', aliq: resultado.itens[0]?.aliqPis || 0, valor: resultado.totalPis, legal: 'IN RFB nº 1.234/2012' },
+          { nome: '   |-- IR (Imposto de Renda)', aliq: resultado.itens[0]?.aliqIr || 0, valor: resultado.totalIr, legal: 'IN RFB nº 1.234/2012', isSubItem: true },
+          { nome: '   |-- CSLL (Contribuição Social sobre o Lucro Líquido)', aliq: resultado.itens[0]?.aliqCsll || 0, valor: resultado.totalCsll, legal: 'IN RFB nº 1.234/2012', isSubItem: true },
+          { nome: '   |-- COFINS (Contribuição para Seguridade)', aliq: resultado.itens[0]?.aliqCofins || 0, valor: resultado.totalCofins, legal: 'IN RFB nº 1.234/2012', isSubItem: true },
+          { nome: '   |-- PIS/PASEP (Programa de Integração Social)', aliq: resultado.itens[0]?.aliqPis || 0, valor: resultado.totalPis, legal: 'IN RFB nº 1.234/2012', isSubItem: true },
           { 
             nome: temDeducaoMateriais 
               ? `INSS — Retenção Previdenciária (BC: ${formatBRL(resultado.baseCalculoInssTotal || resultado.totalBruto)})` 
@@ -255,8 +255,8 @@ export class PdfReportGenerator {
           },
           { 
             nome: temReducaoIss 
-              ? `ISSQN — Imposto Sobre Serviços (Vitória/ES - Redução ${resultado.percentualReducaoIssAplicado}%)` 
-              : 'ISSQN — Imposto Sobre Serviços (Vitória/ES)', 
+              ? `ISSQN — Imposto Sobre Serviços (${resultado.municipioTomador || 'Vitória/ES'} - Redução ${resultado.percentualReducaoIssAplicado}%)` 
+              : `ISSQN — Imposto Sobre Serviços (${resultado.municipioTomador || 'Vitória/ES'})`, 
             aliq: resultado.itens[0]?.aliqIss || 5, 
             valor: resultado.totalIss, 
             legal: 'Lei Municipal nº 6.075/2003 c/c LC nº 116/2003' 
@@ -273,12 +273,30 @@ export class PdfReportGenerator {
         }
 
         rows.forEach((r, rIdx) => {
-          const rowBg = rIdx % 2 === 0 ? lightBg : '#ffffff';
+          let rowBg = rIdx % 2 === 0 ? lightBg : '#ffffff';
+          let textColor = primaryColor;
+          let fontStyle = 'Helvetica';
+
+          if (r.destaque) {
+            rowBg = '#f0fdf4';
+            textColor = '#166534';
+            fontStyle = 'Helvetica-Bold';
+          } else if (r.isSubItem) {
+            rowBg = '#f7fee7';
+            textColor = '#365314';
+            fontStyle = 'Helvetica';
+          }
+
           doc.rect(35, currentY, 525, 17).fillAndStroke(rowBg, borderColor);
 
-          doc.fillColor(primaryColor).fontSize(8).font('Helvetica-Bold').text(r.nome, 45, currentY + 4, { width: 270, ellipsis: true });
-          doc.fillColor(textMuted).fontSize(7.5).font('Helvetica').text(r.aliq > 0 ? `(${r.aliq.toFixed(2)}%)` : '---', 320, currentY + 4);
-          doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold').text(formatBRL(r.valor), 420, currentY + 3, { width: 130, align: 'right' });
+          // Borda lateral verde conectando o grupo de tributos federais
+          if (r.destaque || r.isSubItem) {
+            doc.rect(35, currentY, 3.5, 17).fillAndStroke(r.destaque ? '#16a34a' : '#84cc16', r.destaque ? '#16a34a' : '#84cc16');
+          }
+
+          doc.fillColor(textColor).fontSize(7.5).font(fontStyle).text(r.nome, 45, currentY + 4, { width: 270, ellipsis: true });
+          doc.fillColor(r.isSubItem ? '#4d7c0f' : textMuted).fontSize(7).font('Helvetica').text(r.aliq > 0 ? `(${r.aliq.toFixed(2)}%)` : '---', 320, currentY + 4);
+          doc.fillColor(textColor).fontSize(8).font(r.destaque ? 'Helvetica-Bold' : 'Helvetica').text(formatBRL(r.valor), 420, currentY + 3, { width: 130, align: 'right' });
 
           currentY += 17;
         });
