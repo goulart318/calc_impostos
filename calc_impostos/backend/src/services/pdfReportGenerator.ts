@@ -87,36 +87,40 @@ export class PdfReportGenerator {
         // 3. QUADRO DE INFORMAÇÕES DA NOTA, PROCESSO SEI E EMPENHO
         // ==========================================
         const boxY = 90;
-        const boxH = 56;
+        const boxH = 68;
         doc.rect(35, boxY, 525, boxH).fillAndStroke(lightBg, borderColor);
 
-        // Linha 1: Número da Nota e Fornecedor
+        // Coluna 1: Número da Nota
         doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NUMERO DA NOTA', 45, boxY + 5);
-        doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text(resultado.numeroNota || '---', 45, boxY + 15);
+        doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text(resultado.numeroNota || '---', 45, boxY + 16);
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('FORNECEDOR (RAZAO SOCIAL / CNPJ / CIDADE-UF)', 145, boxY + 5);
+        // Coluna 2: Fornecedor (Razão Social e CNPJ) na Linha 1, Sede (Cidade/UF) na Linha 2
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('FORNECEDOR (EMITENTE)', 145, boxY + 5);
         const cnpjFmt = resultado.fornecedorCnpj ? ` • CNPJ: ${resultado.fornecedorCnpj}` : '';
-        const cidUfFmt = (resultado.fornecedorMunicipio || resultado.fornecedorUf) 
-          ? ` • Sede: ${resultado.fornecedorMunicipio || ''}${resultado.fornecedorUf ? `/${resultado.fornecedorUf}` : ''}` 
-          : '';
         doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold')
-           .text(`${resultado.fornecedorNome}${cnpjFmt}${cidUfFmt}`, 145, boxY + 15, { width: 405, ellipsis: true });
+           .text(`${resultado.fornecedorNome}${cnpjFmt}`, 145, boxY + 15, { width: 405, ellipsis: true });
+
+        const cidUfFmt = (resultado.fornecedorMunicipio || resultado.fornecedorUf) 
+          ? `Local da Sede: ${resultado.fornecedorMunicipio || ''}${resultado.fornecedorUf ? ` / ${resultado.fornecedorUf}` : ''}` 
+          : 'Local da Sede: Não informado';
+        doc.fillColor('#475569').fontSize(7.5).font('Helvetica')
+           .text(cidUfFmt, 145, boxY + 27, { width: 405, ellipsis: true });
 
         // Divisor interno
-        doc.moveTo(45, boxY + 29).lineTo(550, boxY + 29).strokeColor('#e2e8f0').stroke();
+        doc.moveTo(45, boxY + 39).lineTo(550, boxY + 39).strokeColor('#e2e8f0').stroke();
 
-        // Linha 2: Processo SEI, Nota de Empenho e Data de Emissão
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('PROCESSO SEI Nº', 45, boxY + 32);
+        // Linha 3 (inferior): Processo SEI, Nota de Empenho e Data de Emissão
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('PROCESSO SEI Nº', 45, boxY + 43);
         doc.fillColor(resultado.numeroProcesso ? '#0f172a' : '#64748b').fontSize(8.5).font('Helvetica-Bold')
-           .text(resultado.numeroProcesso || 'Não informado', 45, boxY + 42);
+           .text(resultado.numeroProcesso || 'Não informado', 45, boxY + 53);
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NOTA DE EMPENHO', 280, boxY + 32);
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NOTA DE EMPENHO', 280, boxY + 43);
         doc.fillColor(resultado.numeroEmpenho ? '#0f172a' : '#64748b').fontSize(8.5).font('Helvetica-Bold')
-           .text(resultado.numeroEmpenho || 'Não informada', 280, boxY + 42);
+           .text(resultado.numeroEmpenho || 'Não informada', 280, boxY + 53);
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('DATA EMISSÃO', 450, boxY + 32);
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('DATA EMISSÃO', 450, boxY + 43);
         doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold')
-           .text(resultado.dataEmissao || '---', 450, boxY + 42);
+           .text(resultado.dataEmissao || '---', 450, boxY + 53);
 
         // ==========================================
         // 4. QUADRO DE ENQUADRAMENTO TRIBUTÁRIO (SIMPLES NACIONAL / REGIME TRIBUTÁRIO)
@@ -258,25 +262,39 @@ export class PdfReportGenerator {
           },
           { 
             nome: (() => {
+              const normalizar = (str?: string) => (str || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^A-Za-z0-9]/g, '')
+                .toUpperCase();
+
               const prestLocal = resultado.localPrestacaoServico ? resultado.localPrestacaoServico.trim() : (resultado.municipioTomador || 'Vitória');
               const tomador = resultado.municipioTomador ? resultado.municipioTomador.trim() : 'Vitória';
-              const prestFora = prestLocal.toUpperCase() !== tomador.toUpperCase();
+              const prestFora = normalizar(prestLocal) !== normalizar(tomador);
 
               if (prestFora) {
-                return `ISSQN — Fora do Município [Executado em ${prestLocal}] (Alíq. 0% - Não retém)`;
+                return `ISSQN — Serviço Executado Fora do Município do Tomador [Executado em ${prestLocal}] (Alíq. 0% - Não retém)`;
               }
               if (temReducaoIss) {
-                return `ISSQN — Imposto Sobre Serviços (${tomador} - Redução ${resultado.percentualReducaoIssAplicado}%)`;
+                return `ISSQN — Imposto Sobre Serviços (${tomador}/ES - Redução ${resultado.percentualReducaoIssAplicado}%)`;
               }
-              return `ISSQN — Imposto Sobre Serviços (${tomador} - Executado Localmente)`;
+              return `ISSQN — Imposto Sobre Serviços (${tomador}/ES - Executado Localmente)`;
             })(), 
             aliq: resultado.itens[0]?.aliqIss !== undefined ? resultado.itens[0]?.aliqIss : 0, 
             valor: resultado.totalIss, 
             legal: (() => {
+              const normalizar = (str?: string) => (str || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^A-Za-z0-9]/g, '')
+                .toUpperCase();
+
               const prestLocal = resultado.localPrestacaoServico ? resultado.localPrestacaoServico.trim() : (resultado.municipioTomador || 'Vitória');
               const tomador = resultado.municipioTomador ? resultado.municipioTomador.trim() : 'Vitória';
-              return prestLocal.toUpperCase() !== tomador.toUpperCase()
-                ? 'Art. 3º da LC nº 116/2003 (Sem retenção na fonte)'
+              const prestFora = normalizar(prestLocal) !== normalizar(tomador);
+
+              return prestFora
+                ? 'Art. 3º da LC nº 116/2003 (Sem retenção na fonte local)'
                 : 'Lei Municipal nº 6.075/2003 c/c LC nº 116/2003';
             })()
           }

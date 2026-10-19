@@ -508,12 +508,29 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   };
 
   const handleDownloadPdf = async () => {
+    let proc = (currentData.numeroProcesso || '').trim();
+    if (!proc) {
+      const digitado = prompt(
+        '⚠️ O Número do Processo SEI é OBRIGATÓRIO para a instrução processual.\n\nPor favor, informe o Número do Processo (Ex: 23068.012345/2026-99):'
+      );
+      if (!digitado || !digitado.trim()) {
+        alert('Geração de relatório cancelada: O número do processo SEI precisa ser informado.');
+        return;
+      }
+      proc = digitado.trim();
+      const atualizado = { ...currentData, numeroProcesso: proc };
+      setCurrentData(atualizado);
+      if (onUpdateData) onUpdateData(atualizado);
+    }
+
     try {
       setBaixandoPdf(true);
+      const payloadEnvio = { ...currentData, numeroProcesso: proc };
+
       const response = await fetch(`${API_BASE_URL}/api/gerar-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentData)
+        body: JSON.stringify(payloadEnvio)
       });
 
       if (!response.ok) throw new Error('Falha ao gerar PDF');
@@ -526,6 +543,24 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
       document.body.appendChild(a);
       a.click();
       a.remove();
+
+      // Gravação automática no banco de dados ao gerar o relatório PDF
+      try {
+        setSalvando(true);
+        const saveRes = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadEnvio)
+        });
+        if (saveRes.ok) {
+          setSalvo(true);
+          setTimeout(() => setSalvo(false), 4000);
+        }
+      } catch (errSave) {
+        console.warn('Gravação automática após download falhou:', errSave);
+      } finally {
+        setSalvando(false);
+      }
     } catch (err: any) {
       alert('Erro ao baixar PDF: ' + err.message);
     } finally {
@@ -814,20 +849,15 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
               <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <span>{currentData.fornecedorNome}</span>
                 {currentData.fornecedorCnpj && <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.78rem' }}>({currentData.fornecedorCnpj})</span>}
-                {(currentData.fornecedorMunicipio || currentData.fornecedorUf) && (
-                  <span style={{ 
-                    background: '#f1f5f9', 
-                    color: '#334155', 
-                    fontSize: '0.72rem', 
-                    fontWeight: 700, 
-                    padding: '2px 6px', 
-                    borderRadius: '4px',
-                    border: '1px solid #cbd5e1'
-                  }}>
-                    📍 {currentData.fornecedorMunicipio ? currentData.fornecedorMunicipio : ''}{currentData.fornecedorUf ? `/${currentData.fornecedorUf}` : ''}
-                  </span>
-                )}
               </div>
+              {(currentData.fornecedorMunicipio || currentData.fornecedorUf) && (
+                <div style={{ marginTop: '3px', fontSize: '0.75rem', color: '#475569', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>📍 Local da Sede:</span>
+                  <span style={{ color: '#0f172a', fontWeight: 700 }}>
+                    {currentData.fornecedorMunicipio ? currentData.fornecedorMunicipio : ''}{currentData.fornecedorUf ? ` / ${currentData.fornecedorUf}` : ''}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1483,28 +1513,42 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
               </tr>
               <tr>
                 <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <strong>ISSQN</strong> — Imposto Municipal ({currentData.municipioTomador || 'Vitória/ES'})
-                    {currentData.localPrestacaoServico && currentData.municipioTomador && (
-                      currentData.localPrestacaoServico.trim().toUpperCase() !== currentData.municipioTomador.trim().toUpperCase() ? (
-                        <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
-                          FORA DO MUNICÍPIO (ALÍQ. 0%)
-                        </span>
-                      ) : (
-                        <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
-                          LOCAL: {currentData.localPrestacaoServico}
-                        </span>
-                      )
-                    )}
-                  </div>
-                  {currentData.localPrestacaoServico && (
-                    <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
-                      Local de Prestação: <strong>{currentData.localPrestacaoServico}</strong> 
-                      {currentData.municipioTomador && currentData.localPrestacaoServico.trim().toUpperCase() !== currentData.municipioTomador.trim().toUpperCase() && (
-                        <span> — Não cabe retenção pelo tomador em {currentData.municipioTomador} (Art. 3º da LC nº 116/2003).</span>
-                      )}
-                    </div>
-                  )}
+                  {(() => {
+                    const normalizar = (str?: string) => (str || '')
+                      .normalize('NFD')
+                      .replace(/[\u0300-\u036f]/g, '')
+                      .replace(/[^A-Za-z0-9]/g, '')
+                      .toUpperCase();
+
+                    const prest = currentData.localPrestacaoServico ? currentData.localPrestacaoServico.trim() : (currentData.municipioTomador || 'Vitória');
+                    const tomador = currentData.municipioTomador ? currentData.municipioTomador.trim() : 'Vitória';
+                    const executadoFora = normalizar(prest) !== normalizar(tomador);
+
+                    return (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong>ISSQN</strong> — Imposto Municipal ({tomador}/ES)
+                          {executadoFora ? (
+                            <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                              FORA DO MUNICÍPIO (ALÍQ. 0%)
+                            </span>
+                          ) : (
+                            <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                              EXECUTADO LOCALMENTE ({prest})
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                          Local de Prestação: <strong>{prest}</strong>
+                          {executadoFora ? (
+                            <span> — Não cabe retenção na fonte pelo tomador em {tomador} (Art. 3º da LC nº 116/2003).</span>
+                          ) : (
+                            <span> — Retenção devida no município de {tomador} (Art. 3º da LC nº 116/2003).</span>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </td>
                 <td>{currentData.totalBruto > 0 ? `${((currentData.totalIss / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
                 <td>Lei Municipal nº 6.075/2003 c/c LC 116</td>
