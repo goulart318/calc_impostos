@@ -339,6 +339,8 @@ export default function App() {
       if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
       if (numeroEmpenho && !data.notaEmpenho) data.notaEmpenho = numeroEmpenho;
       setProcessoModalData(data);
+      setMensagemSucesso(`✓ Processamento em lote de ${files.length} documento(s) concluído com sucesso!`);
+      setTimeout(() => setMensagemSucesso(null), 7000);
     } catch (err: any) {
       alert('Erro no processamento do lote: ' + err.message);
     } finally {
@@ -497,31 +499,46 @@ export default function App() {
 
       {/* Conteúdo Principal */}
       <main className="main-content">
-        {/* Banner de Notificação de Sucesso */}
+        {/* Toast Notificação Flutuante de Sucesso (visível em qualquer ponto da tela) */}
         {mensagemSucesso && (
-          <div style={{
-            margin: '0 0 16px 0',
-            padding: '12px 18px',
-            background: '#ecfdf5',
-            border: '2px solid #10b981',
-            borderRadius: 'var(--radius-md)',
-            color: '#065f46',
-            fontWeight: 700,
-            fontSize: '0.92rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
-            animation: 'fadeIn 0.3s ease-in-out'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <CheckCircle2 size={22} color="#059669" />
-              <span>{mensagemSucesso}</span>
+          <div className="floating-toast" role="alert" aria-live="assertive">
+            <div style={{
+              background: '#ecfdf5',
+              padding: '8px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <CheckCircle2 size={24} color="#059669" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#065f46', marginBottom: '2px' }}>
+                Análise Concluída!
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#1e293b', lineHeight: 1.4 }}>
+                {mensagemSucesso}
+              </div>
             </div>
             <button 
               type="button" 
               onClick={() => setMensagemSucesso(null)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#047857', fontWeight: 800, fontSize: '1rem' }}
+              title="Fechar notificação"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#64748b',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontSize: '1.1rem',
+                fontWeight: 'bold',
+                lineHeight: 1,
+                alignSelf: 'flex-start'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#0f172a')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
             >
               ✕
             </button>
