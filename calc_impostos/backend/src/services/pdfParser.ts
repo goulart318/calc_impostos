@@ -88,17 +88,36 @@ export class PdfParser {
     // 3. NÚMERO DA NOTA FISCAL
     let numeroNota = '';
     
-    // Para NFS-e padrão nacional ou municipal, busca com prioridade máxima o campo específico "Número da NFS-e"
-    const matchNumeroNfseDireto = text.match(/(?:N[úu]mero\s*da\s*NFS-e|NÚMERODANFS-e|NÚMERO DA NFS-e|N[ºo\.]\s*NFS-e)[^\d]*0*([1-9]\d{0,10})/i);
-    if (matchNumeroNfseDireto && matchNumeroNfseDireto[1]) {
-      numeroNota = matchNumeroNfseDireto[1].replace(/\./g, '');
+    // Se temos a Chave de Acesso de NFS-e padrão nacional (50 dígitos), extrai o número diretamente da chave
+    // Na chave de 50 dígitos, os dígitos 24 a 36 (13 posições) representam o Número da NFS-e / DPS (frequentemente prefixado pelo ano ex: 2026000026936 -> 26936)
+    if (chaveAcesso && chaveAcesso.length === 50) {
+      const rawNum = chaveAcesso.substring(23, 36);
+      const mYear = rawNum.match(/^(20\d{2})0*([1-9]\d*)$/);
+      if (mYear) {
+        numeroNota = mYear[2];
+      } else {
+        const semZeros = rawNum.replace(/^0+/, '');
+        if (semZeros) numeroNota = semZeros;
+      }
     }
 
     // Se temos a Chave de Acesso de NF-e modelo 55 (44 dígitos), o número da NF-e está nas posições 26 a 34 (9 dígitos)
-    if (!numeroNota && !ehServico && chaveAcesso && chaveAcesso.length === 44) {
+    if (!numeroNota && chaveAcesso && chaveAcesso.length === 44) {
       const numChave = chaveAcesso.substring(25, 34).replace(/^0+/, '');
       if (numChave && numChave !== '0') {
         numeroNota = numChave;
+      }
+    }
+
+    // Para NFS-e quando não houver chave de 50 dígitos, busca o campo específico "Número da NFS-e"
+    if (!numeroNota) {
+      const matchNumeroNfseDireto = text.match(/(?:N[úu]mero\s*da\s*NFS-e|NÚMERODANFS-e|NÚMERO DA NFS-e|N[ºo\.]\s*NFS-e)[^\d]*0*([1-9]\d{0,10})/i);
+      if (matchNumeroNfseDireto && matchNumeroNfseDireto[1]) {
+        let n = matchNumeroNfseDireto[1].replace(/\./g, '');
+        // Se vier com o ano embutido ex: 2026000026936
+        const mYear = n.match(/^(20\d{2})0*([1-9]\d*)$/);
+        if (mYear) n = mYear[2];
+        numeroNota = n;
       }
     }
 

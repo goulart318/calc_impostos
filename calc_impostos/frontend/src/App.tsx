@@ -71,6 +71,8 @@ export default function App() {
   // Estados de NFS-e (Serviços)
   const [percentualReducaoIss, setPercentualReducaoIss] = useState<number>(0);
   const [retencaoIss, setRetencaoIss] = useState<boolean>(true); // DEFAULT = TRUE para tomador público
+  const [aliquotaIssPersonalizada, setAliquotaIssPersonalizada] = useState<number>(5.0);
+  const [habilitarAliquotaPersonalizadaIss, setHabilitarAliquotaPersonalizadaIss] = useState<boolean>(false);
   const [valorInssDestacado, setValorInssDestacado] = useState<number>(0);
   const [valorMateriaisInss, setValorMateriaisInss] = useState<number>(0);
   const [valorContaVinculada, setValorContaVinculada] = useState<number>(0);
@@ -140,6 +142,7 @@ export default function App() {
         optanteSimples,
         percentualReducaoIss,
         retencaoIss,
+        aliqIss: habilitarAliquotaPersonalizadaIss ? Number(aliquotaIssPersonalizada) : undefined,
         retencaoInss: retencaoInss || Boolean(valorInssDestacado > 0 || valorMateriaisInss > 0),
         valorInssDestacado,
         valorMateriaisInss,
@@ -879,16 +882,50 @@ export default function App() {
                       </div>
 
                       <div className="form-group" style={{ flex: 1 }}>
-                        <label className="form-label" style={{ fontWeight: 600 }}>Imposto Municipal (ISSQN 5%)</label>
-                        <div style={{ marginTop: '6px' }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>Imposto Municipal (ISSQN)</label>
+                        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
                             <input 
                               type="checkbox" 
                               checked={retencaoIss} 
                               onChange={(e) => setRetencaoIss(e.target.checked)} 
                             />
-                            <span>ISSQN Retido pelo Tomador na Fonte (Vitória/ES)</span>
+                            <span>ISSQN Retido pelo Tomador na Fonte</span>
                           </label>
+
+                          {retencaoIss && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px', background: '#ffffff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.8rem', color: '#1e293b' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={habilitarAliquotaPersonalizadaIss} 
+                                  onChange={(e) => setHabilitarAliquotaPersonalizadaIss(e.target.checked)} 
+                                />
+                                <span style={{ fontWeight: 600 }}>Alíquota Específica / Fornecedor</span>
+                              </label>
+
+                              {habilitarAliquotaPersonalizadaIss ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <input 
+                                    type="number"
+                                    min="0"
+                                    max="10"
+                                    step="0.01"
+                                    className="form-input"
+                                    value={aliquotaIssPersonalizada}
+                                    onChange={(e) => setAliquotaIssPersonalizada(parseFloat(e.target.value) || 0)}
+                                    style={{ width: '75px', padding: '4px 6px', fontSize: '0.82rem', fontWeight: 700, textAlign: 'right' }}
+                                    placeholder="5.00"
+                                  />
+                                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>%</span>
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                  (Padrão: 5,00% Vitória/ES)
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

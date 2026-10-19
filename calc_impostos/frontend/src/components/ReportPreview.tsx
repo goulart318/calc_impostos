@@ -12,7 +12,8 @@ import {
   Trash2,
   RotateCcw,
   Sliders,
-  Check
+  Check,
+  AlertTriangle
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 
