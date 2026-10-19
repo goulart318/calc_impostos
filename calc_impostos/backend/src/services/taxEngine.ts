@@ -68,6 +68,8 @@ export interface ParametrosCalculo {
   numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
+  fornecedorMunicipio?: string;
+  fornecedorUf?: string;
   destinatarioNome?: string;
   destinatarioCnpj?: string;
   optanteSimples: boolean;
@@ -98,6 +100,8 @@ export interface ResultadoConsolidado {
   numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
+  fornecedorMunicipio?: string;
+  fornecedorUf?: string;
   destinatarioNome?: string;
   destinatarioCnpj?: string;
   optanteSimples: boolean;
@@ -933,6 +937,8 @@ export class TaxEngine {
       numeroEmpenho: params.numeroEmpenho,
       fornecedorNome: params.fornecedorNome,
       fornecedorCnpj: params.fornecedorCnpj,
+      fornecedorMunicipio: params.fornecedorMunicipio,
+      fornecedorUf: params.fornecedorUf,
       destinatarioNome: params.destinatarioNome,
       destinatarioCnpj: params.destinatarioCnpj,
       optanteSimples: params.optanteSimples,

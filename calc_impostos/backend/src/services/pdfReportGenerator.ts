@@ -94,10 +94,13 @@ export class PdfReportGenerator {
         doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NUMERO DA NOTA', 45, boxY + 5);
         doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text(resultado.numeroNota || '---', 45, boxY + 15);
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('FORNECEDOR (RAZAO SOCIAL / CNPJ)', 145, boxY + 5);
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('FORNECEDOR (RAZAO SOCIAL / CNPJ / CIDADE-UF)', 145, boxY + 5);
         const cnpjFmt = resultado.fornecedorCnpj ? ` • CNPJ: ${resultado.fornecedorCnpj}` : '';
-        doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold')
-           .text(`${resultado.fornecedorNome}${cnpjFmt}`, 145, boxY + 15, { width: 405, ellipsis: true });
+        const cidUfFmt = (resultado.fornecedorMunicipio || resultado.fornecedorUf) 
+          ? ` • Sede: ${resultado.fornecedorMunicipio || ''}${resultado.fornecedorUf ? `/${resultado.fornecedorUf}` : ''}` 
+          : '';
+        doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold')
+           .text(`${resultado.fornecedorNome}${cnpjFmt}${cidUfFmt}`, 145, boxY + 15, { width: 405, ellipsis: true });
 
         // Divisor interno
         doc.moveTo(45, boxY + 29).lineTo(550, boxY + 29).strokeColor('#e2e8f0').stroke();
@@ -254,12 +257,28 @@ export class PdfReportGenerator {
             legal: temDeducaoMateriais ? 'Art. 120 e 121 da IN RFB nº 2.110/2022' : 'IN RFB nº 2.110/2022' 
           },
           { 
-            nome: temReducaoIss 
-              ? `ISSQN — Imposto Sobre Serviços (${resultado.municipioTomador || 'Vitória/ES'} - Redução ${resultado.percentualReducaoIssAplicado}%)` 
-              : `ISSQN — Imposto Sobre Serviços (${resultado.municipioTomador || 'Vitória/ES'})`, 
-            aliq: resultado.itens[0]?.aliqIss || 5, 
+            nome: (() => {
+              const prestLocal = resultado.localPrestacaoServico ? resultado.localPrestacaoServico.trim() : (resultado.municipioTomador || 'Vitória');
+              const tomador = resultado.municipioTomador ? resultado.municipioTomador.trim() : 'Vitória';
+              const prestFora = prestLocal.toUpperCase() !== tomador.toUpperCase();
+
+              if (prestFora) {
+                return `ISSQN — Fora do Município [Executado em ${prestLocal}] (Alíq. 0% - Não retém)`;
+              }
+              if (temReducaoIss) {
+                return `ISSQN — Imposto Sobre Serviços (${tomador} - Redução ${resultado.percentualReducaoIssAplicado}%)`;
+              }
+              return `ISSQN — Imposto Sobre Serviços (${tomador} - Executado Localmente)`;
+            })(), 
+            aliq: resultado.itens[0]?.aliqIss !== undefined ? resultado.itens[0]?.aliqIss : 0, 
             valor: resultado.totalIss, 
-            legal: 'Lei Municipal nº 6.075/2003 c/c LC nº 116/2003' 
+            legal: (() => {
+              const prestLocal = resultado.localPrestacaoServico ? resultado.localPrestacaoServico.trim() : (resultado.municipioTomador || 'Vitória');
+              const tomador = resultado.municipioTomador ? resultado.municipioTomador.trim() : 'Vitória';
+              return prestLocal.toUpperCase() !== tomador.toUpperCase()
+                ? 'Art. 3º da LC nº 116/2003 (Sem retenção na fonte)'
+                : 'Lei Municipal nº 6.075/2003 c/c LC nº 116/2003';
+            })()
           }
         ];
 

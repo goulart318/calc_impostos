@@ -68,6 +68,9 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
     let fonteConsultaCnpj = undefined;
     let situacaoCadastral = 'ATIVA';
 
+    let fornecedorMunicipio = undefined;
+    let fornecedorUf = undefined;
+
     if (notaExtraida.fornecedorCnpj) {
       try {
         const cnpjInfo = await CnpjService.consultarCnpj(notaExtraida.fornecedorCnpj);
@@ -76,6 +79,8 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
         dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
         fonteConsultaCnpj = cnpjInfo.fonteConsulta;
         situacaoCadastral = cnpjInfo.situacaoCadastral;
+        fornecedorMunicipio = cnpjInfo.municipio;
+        fornecedorUf = cnpjInfo.uf;
         if (cnpjInfo.razaoSocial && (!notaExtraida.fornecedorNome || notaExtraida.fornecedorNome === 'Fornecedor Desconhecido')) {
           notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
         }
@@ -92,6 +97,8 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
       numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
       fornecedorNome: notaExtraida.fornecedorNome,
       fornecedorCnpj: notaExtraida.fornecedorCnpj,
+      fornecedorMunicipio: req.body.fornecedorMunicipio || fornecedorMunicipio,
+      fornecedorUf: req.body.fornecedorUf || fornecedorUf,
       destinatarioNome: notaExtraida.destinatarioNome,
       destinatarioCnpj: notaExtraida.destinatarioCnpj,
       optanteSimples: optanteSimples,
@@ -134,6 +141,8 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
     let dataOpcaoSimples = undefined;
     let fonteConsultaCnpj = undefined;
     let situacaoCadastral = 'ATIVA';
+    let fornecedorMunicipio = undefined;
+    let fornecedorUf = undefined;
 
     if (notaExtraida.fornecedorCnpj) {
       try {
@@ -143,6 +152,8 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
         dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
         fonteConsultaCnpj = cnpjInfo.fonteConsulta;
         situacaoCadastral = cnpjInfo.situacaoCadastral;
+        fornecedorMunicipio = cnpjInfo.municipio;
+        fornecedorUf = cnpjInfo.uf;
         if (cnpjInfo.razaoSocial) {
           notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
         }
@@ -169,6 +180,8 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
       numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
       fornecedorNome: notaExtraida.fornecedorNome,
       fornecedorCnpj: notaExtraida.fornecedorCnpj,
+      fornecedorMunicipio: req.body.fornecedorMunicipio || fornecedorMunicipio,
+      fornecedorUf: req.body.fornecedorUf || fornecedorUf,
       destinatarioNome: notaExtraida.destinatarioNome,
       destinatarioCnpj: notaExtraida.destinatarioCnpj,
       optanteSimples: optanteSimples,
@@ -228,6 +241,9 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
         let fonteConsultaCnpj = undefined;
         let situacaoCadastral = 'ATIVA';
 
+        let fornecedorMunicipio = undefined;
+        let fornecedorUf = undefined;
+
         if (notaExtraida.fornecedorCnpj) {
           const cnpjLimpo = notaExtraida.fornecedorCnpj.replace(/\D/g, '');
           if (cnpjCache.has(cnpjLimpo)) {
@@ -237,6 +253,8 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
             dataOpcaoSimples = cached.dataOpcaoSimples;
             fonteConsultaCnpj = cached.fonteConsulta;
             situacaoCadastral = cached.situacaoCadastral;
+            fornecedorMunicipio = cached.municipio;
+            fornecedorUf = cached.uf;
             if (cached.razaoSocial) {
               notaExtraida.fornecedorNome = cached.razaoSocial;
             }
@@ -249,6 +267,8 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
               dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
               fonteConsultaCnpj = cnpjInfo.fonteConsulta;
               situacaoCadastral = cnpjInfo.situacaoCadastral;
+              fornecedorMunicipio = cnpjInfo.municipio;
+              fornecedorUf = cnpjInfo.uf;
               if (cnpjInfo.razaoSocial) {
                 notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
               }
@@ -266,6 +286,8 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
           numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
           fornecedorNome: notaExtraida.fornecedorNome,
           fornecedorCnpj: notaExtraida.fornecedorCnpj,
+          fornecedorMunicipio,
+          fornecedorUf,
           destinatarioNome: notaExtraida.destinatarioNome,
           destinatarioCnpj: notaExtraida.destinatarioCnpj,
           optanteSimples: optanteSimples,

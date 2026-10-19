@@ -37,6 +37,7 @@ export default function App() {
   const [numeroEmpenho, setNumeroEmpenho] = useState('');
   const [fornecedorCnpj, setFornecedorCnpj] = useState('');
   const [fornecedorNome, setFornecedorNome] = useState('');
+  const [fornecedorCidadeUf, setFornecedorCidadeUf] = useState('');
   const [optanteSimples, setOptanteSimples] = useState(false);
   const [situacaoCadastral, setSituacaoCadastral] = useState('ATIVA');
   const [consultandoCnpj, setConsultandoCnpj] = useState(false);
@@ -165,6 +166,8 @@ export default function App() {
         numeroEmpenho: numeroEmpenho || undefined,
         fornecedorNome: fornecedorNome || 'Fornecedor Não Informado',
         fornecedorCnpj: fornecedorCnpj || '',
+        fornecedorMunicipio: fornecedorCidadeUf ? fornecedorCidadeUf.split('/')[0].trim() : undefined,
+        fornecedorUf: fornecedorCidadeUf && fornecedorCidadeUf.includes('/') ? fornecedorCidadeUf.split('/')[1].trim() : undefined,
         destinatarioNome,
         destinatarioCnpj,
         optanteSimples,
@@ -226,6 +229,9 @@ export default function App() {
         setFornecedorNome(data.razaoSocial || fornecedorNome);
         setOptanteSimples(data.optanteSimples);
         if (data.situacaoCadastral) setSituacaoCadastral(data.situacaoCadastral);
+        if (data.municipio || data.uf) {
+          setFornecedorCidadeUf(`${data.municipio || ''}${data.uf ? `/${data.uf}` : ''}`.trim());
+        }
       }
     } catch (e) {
       alert('Não foi possível consultar o CNPJ.');
@@ -288,6 +294,9 @@ export default function App() {
       setChaveAcesso(data.chaveAcesso || '');
       setFornecedorCnpj(data.fornecedorCnpj || '');
       setFornecedorNome(data.fornecedorNome || '');
+      if (data.fornecedorMunicipio || data.fornecedorUf) {
+        setFornecedorCidadeUf(`${data.fornecedorMunicipio || ''}${data.fornecedorUf ? `/${data.fornecedorUf}` : ''}`.trim());
+      }
       setDestinatarioCnpj(data.destinatarioCnpj || '');
       setDestinatarioNome(data.destinatarioNome || '');
       setOptanteSimples(data.optanteSimples || false);
@@ -399,6 +408,9 @@ export default function App() {
     setNumeroEmpenho(nota.numeroEmpenho || '');
     setFornecedorCnpj(nota.fornecedorCnpj || '');
     setFornecedorNome(nota.fornecedorNome || '');
+    if (nota.fornecedorMunicipio || nota.fornecedorUf) {
+      setFornecedorCidadeUf(`${nota.fornecedorMunicipio || ''}${nota.fornecedorUf ? `/${nota.fornecedorUf}` : ''}`.trim());
+    }
     setDestinatarioCnpj(nota.destinatarioCnpj || '');
     setDestinatarioNome(nota.destinatarioNome || '');
     setOptanteSimples(nota.optanteSimples || false);
@@ -870,6 +882,11 @@ export default function App() {
                         <span style={{ marginLeft: '8px', fontSize: '0.75rem', fontWeight: 600, color: '#16a34a' }}>
                           • Cadastral: {situacaoCadastral}
                         </span>
+                        {fornecedorCidadeUf && (
+                          <span style={{ marginLeft: '8px', fontSize: '0.75rem', fontWeight: 700, color: '#0369a1' }}>
+                            • Município Sede: 📍 {fornecedorCidadeUf}
+                          </span>
+                        )}
                       </div>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Fonte: Receita Federal</span>
                     </div>

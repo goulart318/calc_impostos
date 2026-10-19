@@ -53,6 +53,8 @@ export interface ResultadoConsolidado {
   numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
+  fornecedorMunicipio?: string;
+  fornecedorUf?: string;
   destinatarioNome?: string;
   destinatarioCnpj?: string;
   optanteSimples: boolean;
@@ -446,6 +448,8 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         numeroEmpenho: currentData.numeroEmpenho,
         fornecedorNome: currentData.fornecedorNome,
         fornecedorCnpj: currentData.fornecedorCnpj,
+        fornecedorMunicipio: currentData.fornecedorMunicipio,
+        fornecedorUf: currentData.fornecedorUf,
         destinatarioNome: currentData.destinatarioNome,
         destinatarioCnpj: currentData.destinatarioCnpj,
         optanteSimples: currentData.optanteSimples,
@@ -810,6 +814,19 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
               <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <span>{currentData.fornecedorNome}</span>
                 {currentData.fornecedorCnpj && <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.78rem' }}>({currentData.fornecedorCnpj})</span>}
+                {(currentData.fornecedorMunicipio || currentData.fornecedorUf) && (
+                  <span style={{ 
+                    background: '#f1f5f9', 
+                    color: '#334155', 
+                    fontSize: '0.72rem', 
+                    fontWeight: 700, 
+                    padding: '2px 6px', 
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e1'
+                  }}>
+                    📍 {currentData.fornecedorMunicipio ? currentData.fornecedorMunicipio : ''}{currentData.fornecedorUf ? `/${currentData.fornecedorUf}` : ''}
+                  </span>
+                )}
               </div>
             </div>
           </div>
