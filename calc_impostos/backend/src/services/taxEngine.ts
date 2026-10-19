@@ -166,16 +166,42 @@ export class TaxEngine {
       };
     }
 
-    if (codigoForcado === '8767' || codigoForcado === '6188') {
+    if (codigoForcado === '8767') {
       return {
-        codigoReceita: codigoForcado,
+        codigoReceita: '8767',
         naturezaReinf: '17022',
-        condicao: 'Medicamentos / Monofásicos PIS/COFINS (Art. 2º § 5º IN 1234/2012 - 2,20%)',
+        condicao: 'Produtos/Serviços com Alíquota Zero de PIS/COFINS (Art. 2º § 5º IN 1234/2012 - 2,20%)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
         aliqCofins: 0.00,
         aliqPis: 0.00,
-        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012 c/c Lei 10.147/2000'
+        fundamentacao: 'Anexo I c/c Art. 2º § 5º da IN RFB nº 1.234/2012 - Código 8767'
+      };
+    }
+
+    if (codigoForcado === '8739') {
+      return {
+        codigoReceita: '8739',
+        naturezaReinf: '17013',
+        condicao: 'Combustíveis e Derivados adquiridos de varejistas/distribuidores (1,24%)',
+        aliqIr: 0.24,
+        aliqCsll: 1.00,
+        aliqCofins: 0.00,
+        aliqPis: 0.00,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 8739'
+      };
+    }
+
+    if (codigoForcado === '9060') {
+      return {
+        codigoReceita: '9060',
+        naturezaReinf: '17013',
+        condicao: 'Combustíveis adquiridos de refinarias/produtores/importadores (4,89%)',
+        aliqIr: 0.24,
+        aliqCsll: 1.00,
+        aliqCofins: 3.00,
+        aliqPis: 0.65,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 9060'
       };
     }
 
@@ -189,6 +215,45 @@ export class TaxEngine {
         aliqCofins: 3.00,
         aliqPis: 0.65,
         fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 6175'
+      };
+    }
+
+    if (codigoForcado === '8850') {
+      return {
+        codigoReceita: '8850',
+        naturezaReinf: '17024',
+        condicao: 'Transporte internacional de passageiros por empresas nacionais (3,40%)',
+        aliqIr: 2.40,
+        aliqCsll: 1.00,
+        aliqCofins: 0.00,
+        aliqPis: 0.00,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 8850'
+      };
+    }
+
+    if (codigoForcado === '8863') {
+      return {
+        codigoReceita: '8863',
+        naturezaReinf: '17025',
+        condicao: 'Serviços prestados por associações e cooperativas (4,65%)',
+        aliqIr: 0.00,
+        aliqCsll: 1.00,
+        aliqCofins: 3.00,
+        aliqPis: 0.65,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 8863'
+      };
+    }
+
+    if (codigoForcado === '6188') {
+      return {
+        codigoReceita: '6188',
+        naturezaReinf: '17026',
+        condicao: 'Instituições Financeiras e Seguro Saúde (7,05%)',
+        aliqIr: 2.40,
+        aliqCsll: 1.00,
+        aliqCofins: 3.00,
+        aliqPis: 0.65,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 6188'
       };
     }
 
@@ -209,7 +274,7 @@ export class TaxEngine {
       return {
         codigoReceita: '6147',
         naturezaReinf: '17009',
-        condicao: 'Mercadorias e bens em geral (Regra Geral 5,85% com PIS/COFINS)',
+        condicao: 'Mercadorias, bens em geral e serviços hospitalares/materiais (Regra 5,85%)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
         aliqCofins: 3.00,
@@ -328,16 +393,29 @@ export class TaxEngine {
       };
     }
 
-    if (cod === '8767' || cod === '6188') {
+    if (cod === '8767') {
       return {
-        codigoReceita: cod,
+        codigoReceita: '8767',
         naturezaReinf: '17022',
-        condicao: 'Serviços Hospitalares / Monofásico PIS/COFINS (2,20%)',
+        condicao: 'Serviços/Produtos com Alíquota Zero de PIS/COFINS (2,20%)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
         aliqCofins: 0.00,
         aliqPis: 0.00,
-        fundamentacao: 'Art. 2º § 5º da IN RFB nº 1.234/2012'
+        fundamentacao: 'Anexo I c/c Art. 2º § 5º da IN RFB nº 1.234/2012'
+      };
+    }
+
+    if (cod === '8739') {
+      return {
+        codigoReceita: '8739',
+        naturezaReinf: '17013',
+        condicao: 'Combustíveis e derivados de varejistas (1,24%)',
+        aliqIr: 0.24,
+        aliqCsll: 1.00,
+        aliqCofins: 0.00,
+        aliqPis: 0.00,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 8739'
       };
     }
 
@@ -345,7 +423,7 @@ export class TaxEngine {
       return {
         codigoReceita: '6147',
         naturezaReinf: '17003', // Serviços prestados com emprego de materiais / Construção Civil
-        condicao: 'Serviços de Engenharia / Construção com Emprego de Materiais (5,85%)',
+        condicao: 'Serviços de Engenharia / Obras com Emprego de Materiais / Hospitalares (5,85%)',
         aliqIr: 1.20,
         aliqCsll: 1.00,
         aliqCofins: 3.00,
@@ -364,6 +442,45 @@ export class TaxEngine {
         aliqCofins: 3.00,
         aliqPis: 0.65,
         fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 6175'
+      };
+    }
+
+    if (cod === '8850') {
+      return {
+        codigoReceita: '8850',
+        naturezaReinf: '17024',
+        condicao: 'Transporte internacional de passageiros (3,40%)',
+        aliqIr: 2.40,
+        aliqCsll: 1.00,
+        aliqCofins: 0.00,
+        aliqPis: 0.00,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 8850'
+      };
+    }
+
+    if (cod === '8863') {
+      return {
+        codigoReceita: '8863',
+        naturezaReinf: '17025',
+        condicao: 'Serviços prestados por cooperativas/associações (4,65%)',
+        aliqIr: 0.00,
+        aliqCsll: 1.00,
+        aliqCofins: 3.00,
+        aliqPis: 0.65,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 8863'
+      };
+    }
+
+    if (cod === '6188') {
+      return {
+        codigoReceita: '6188',
+        naturezaReinf: '17026',
+        condicao: 'Serviços Financeiros e Seguro Saúde (7,05%)',
+        aliqIr: 2.40,
+        aliqCsll: 1.00,
+        aliqCofins: 3.00,
+        aliqPis: 0.65,
+        fundamentacao: 'Anexo I da IN RFB nº 1.234/2012 - Código 6188'
       };
     }
 
@@ -476,11 +593,100 @@ export class TaxEngine {
       }
 
       // Aplicação de overrides manuais do usuário se definidos na edição inline
+      if (itemInput.manualCodigoDarf) {
+        codReceitaFinal = itemInput.manualCodigoDarf.trim();
+        // Se o código DARF foi alterado manualmente e não houve override manual explícito de cada alíquota,
+        // recalcula automaticamente as alíquotas e natureza padrão desse código:
+        if (itemInput.manualAliqIr === undefined && itemInput.manualAliqCsll === undefined &&
+            itemInput.manualAliqPis === undefined && itemInput.manualAliqCofins === undefined) {
+          if (codReceitaFinal === '6147') {
+            aliqIr = 1.20;
+            aliqCsll = 1.00;
+            aliqCofins = 3.00;
+            aliqPis = 0.65;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = ehServico ? '17003' : '17009';
+            condicaoFinal = 'Mercadorias, bens em geral e serviços hospitalares/materiais (Regra 5,85%)';
+            fundamentacaoItem = 'Anexo I da IN RFB nº 1.234/2012 - Código 6147';
+          } else if (codReceitaFinal === '6190') {
+            aliqIr = 4.80;
+            aliqCsll = 1.00;
+            aliqCofins = 3.00;
+            aliqPis = 0.65;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = '17099';
+            condicaoFinal = 'Prestação de Serviços em Geral (Regra 9,45%)';
+            fundamentacaoItem = 'Anexo I da IN RFB nº 1.234/2012 - Código 6190';
+          } else if (codReceitaFinal === '8767') {
+            aliqIr = 1.20;
+            aliqCsll = 1.00;
+            aliqCofins = 0.00;
+            aliqPis = 0.00;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = '17022';
+            condicaoFinal = 'Produtos/Serviços com Alíquota Zero de PIS/COFINS (2,20%)';
+            fundamentacaoItem = 'Anexo I c/c Art. 2º § 5º da IN RFB nº 1.234/2012 - Código 8767';
+          } else if (codReceitaFinal === '6175') {
+            aliqIr = 2.40;
+            aliqCsll = 1.00;
+            aliqCofins = 3.00;
+            aliqPis = 0.65;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = '17023';
+            condicaoFinal = 'Transporte de passageiros (Passagens aéreas/rodoviárias - 7,05%)';
+            fundamentacaoItem = 'Anexo I da IN RFB nº 1.234/2012 - Código 6175';
+          } else if (codReceitaFinal === '8739') {
+            aliqIr = 0.24;
+            aliqCsll = 1.00;
+            aliqCofins = 0.00;
+            aliqPis = 0.00;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = '17013';
+            condicaoFinal = 'Combustíveis e Derivados adquiridos de varejistas/distribuidores (1,24%)';
+            fundamentacaoItem = 'Anexo I da IN RFB nº 1.234/2012 - Código 8739';
+          } else if (codReceitaFinal === '9060') {
+            aliqIr = 0.24;
+            aliqCsll = 1.00;
+            aliqCofins = 3.00;
+            aliqPis = 0.65;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = '17013';
+            condicaoFinal = 'Combustíveis adquiridos de refinarias/produtores/importadores (4,89%)';
+            fundamentacaoItem = 'Anexo I da IN RFB nº 1.234/2012 - Código 9060';
+          } else if (codReceitaFinal === '8850') {
+            aliqIr = 2.40;
+            aliqCsll = 1.00;
+            aliqCofins = 0.00;
+            aliqPis = 0.00;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = '17024';
+            condicaoFinal = 'Transporte internacional de passageiros por empresas nacionais (3,40%)';
+            fundamentacaoItem = 'Anexo I da IN RFB nº 1.234/2012 - Código 8850';
+          } else if (codReceitaFinal === '8863') {
+            aliqIr = 0.00;
+            aliqCsll = 1.00;
+            aliqCofins = 3.00;
+            aliqPis = 0.65;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = '17025';
+            condicaoFinal = 'Serviços prestados por associações e cooperativas (4,65%)';
+            fundamentacaoItem = 'Anexo I da IN RFB nº 1.234/2012 - Código 8863';
+          } else if (codReceitaFinal === '6188') {
+            aliqIr = 2.40;
+            aliqCsll = 1.00;
+            aliqCofins = 3.00;
+            aliqPis = 0.65;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = '17026';
+            condicaoFinal = 'Instituições Financeiras e Seguro Saúde (7,05%)';
+            fundamentacaoItem = 'Anexo I da IN RFB nº 1.234/2012 - Código 6188';
+          } else if (codReceitaFinal === 'ISENTO') {
+            aliqIr = 0;
+            aliqCsll = 0;
+            aliqCofins = 0;
+            aliqPis = 0;
+            if (!itemInput.manualNaturezaReinf) natReinfFinal = 'ISENTO';
+            condicaoFinal = 'Operação Isenta / Imune de Retenção Federal';
+            fundamentacaoItem = 'Operação dispensada / isenta de retenção federal';
+          }
+        }
+      }
+
       if (itemInput.manualAliqIr !== undefined) aliqIr = itemInput.manualAliqIr;
       if (itemInput.manualAliqCsll !== undefined) aliqCsll = itemInput.manualAliqCsll;
       if (itemInput.manualAliqCofins !== undefined) aliqCofins = itemInput.manualAliqCofins;
       if (itemInput.manualAliqPis !== undefined) aliqPis = itemInput.manualAliqPis;
-      if (itemInput.manualCodigoDarf) codReceitaFinal = itemInput.manualCodigoDarf;
       if (itemInput.manualNaturezaReinf) natReinfFinal = itemInput.manualNaturezaReinf;
       if (itemInput.manualFundamentacao) fundamentacaoItem = itemInput.manualFundamentacao;
 
@@ -543,8 +749,8 @@ export class TaxEngine {
 
       baseCalculoIssTotal += baseCalculoIss;
 
-      const aliqTotalFederal = aliqIr + aliqCsll + aliqCofins + aliqPis;
-      const aliqTotalGeral = aliqTotalFederal + aliqInss + (issRetidoTomador ? aliqIss : 0);
+      const aliqTotalFederal = Number((aliqIr + aliqCsll + aliqCofins + aliqPis).toFixed(2));
+      const aliqTotalGeral = Number((aliqTotalFederal + aliqInss + (issRetidoTomador ? aliqIss : 0)).toFixed(2));
 
       const valorIr = Number(((valorBruto * aliqIr) / 100).toFixed(2));
       const valorCsll = Number(((valorBruto * aliqCsll) / 100).toFixed(2));

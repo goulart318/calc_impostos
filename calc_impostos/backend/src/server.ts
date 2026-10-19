@@ -552,6 +552,22 @@ app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint para listagem de NCMs e Regras Tributárias
+app.get('/api/tabelas/ncm', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(`
+      SELECT ncm_prefixo, descricao, descricao_categoria, codigo_receita, natureza_reinf,
+             aliq_ir, aliq_csll, aliq_cofins, aliq_pis, condicao_aplicavel, fundamentacao_legal
+      FROM ncm_regras
+      ORDER BY ncm_prefixo ASC;
+    `);
+    res.json(result.rows);
+  } catch (error: any) {
+    console.warn('Erro ao consultar ncm_regras no PostgreSQL:', error.message);
+    res.json([]);
+  }
+});
+
 // Endpoint Analytics para o Dashboard Tributário
 app.get('/api/dashboard/analytics', async (req: Request, res: Response) => {
   try {

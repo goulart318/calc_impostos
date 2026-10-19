@@ -195,46 +195,38 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
     return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
+  // Mapeamento oficial de alíquotas e naturezas padrão da IN 1234/2012 e Tabela DDF025 EFD-Reinf
+  const TABELA_RECEITAS_DARF: Record<string, { ir: number; csll: number; cofins: number; pis: number; totalFed: number; reinfPadrao: string; desc: string }> = {
+    '6147': { ir: 1.20, csll: 1.00, cofins: 3.00, pis: 0.65, totalFed: 5.85, reinfPadrao: '17009', desc: 'Mercadorias / Bens / Obras (5,85%)' },
+    '6190': { ir: 4.80, csll: 1.00, cofins: 3.00, pis: 0.65, totalFed: 9.45, reinfPadrao: '17099', desc: 'Prestação de Serviços em Geral (9,45%)' },
+    '6175': { ir: 2.40, csll: 1.00, cofins: 3.00, pis: 0.65, totalFed: 7.05, reinfPadrao: '17023', desc: 'Transporte de Passageiros / Cargas (7,05%)' },
+    '8767': { ir: 1.20, csll: 1.00, cofins: 0.00, pis: 0.00, totalFed: 2.20, reinfPadrao: '17022', desc: 'Produtos / Medicamentos Alíquota Zero PIS/COFINS (2,20%)' },
+    '8739': { ir: 0.24, csll: 1.00, cofins: 0.00, pis: 0.00, totalFed: 1.24, reinfPadrao: '17013', desc: 'Combustíveis de Varejistas / Distribuidores (1,24%)' },
+    '9060': { ir: 0.24, csll: 1.00, cofins: 3.00, pis: 0.65, totalFed: 4.89, reinfPadrao: '17013', desc: 'Combustíveis de Refinarias / Produtores (4,89%)' },
+    '8850': { ir: 2.40, csll: 1.00, cofins: 0.00, pis: 0.00, totalFed: 3.40, reinfPadrao: '17024', desc: 'Transporte Internacional de Passageiros (3,40%)' },
+    '8863': { ir: 0.00, csll: 1.00, cofins: 3.00, pis: 0.65, totalFed: 4.65, reinfPadrao: '17025', desc: 'Cooperativas e Associações Profissionais (4,65%)' },
+    '6188': { ir: 2.40, csll: 1.00, cofins: 3.00, pis: 0.65, totalFed: 7.05, reinfPadrao: '17026', desc: 'Bancos e Seguro Saúde (7,05%)' },
+    'ISENTO': { ir: 0.00, csll: 0.00, cofins: 0.00, pis: 0.00, totalFed: 0.00, reinfPadrao: 'ISENTO', desc: 'Dispensa / Imune de Retenção Federal (0%)' },
+  };
+
   const handleMudarPreset = (index: number, novoPreset: string) => {
     setItensEditados(prev => {
       const clone = [...prev];
       const it = { ...clone[index], preset: novoPreset };
 
-      if (novoPreset === '6147') {
-        it.aliqIr = 1.2;
-        it.aliqCsll = 1.0;
-        it.aliqPis = 0.65;
-        it.aliqCofins = 3.0;
-        it.codigoReceitaDarf = '6147';
-        it.naturezaRendimentoReinf = '17009'; // DDF025: Mercadorias e bens em geral
-      } else if (novoPreset === '6190') {
-        it.aliqIr = 4.8;
-        it.aliqCsll = 1.0;
-        it.aliqPis = 0.65;
-        it.aliqCofins = 3.0;
-        it.codigoReceitaDarf = '6190';
-        it.naturezaRendimentoReinf = '17099'; // DDF025: Demais serviços
-      } else if (novoPreset === '6175') {
-        it.aliqIr = 2.4;
-        it.aliqCsll = 1.0;
-        it.aliqPis = 0.65;
-        it.aliqCofins = 3.0;
-        it.codigoReceitaDarf = '6175';
-        it.naturezaRendimentoReinf = '17023'; // DDF025: Passagens e transporte
-      } else if (novoPreset === '8767') {
-        it.aliqIr = 1.2;
-        it.aliqCsll = 1.0;
-        it.aliqPis = 0.0;
-        it.aliqCofins = 0.0;
-        it.codigoReceitaDarf = '8767';
-        it.naturezaRendimentoReinf = '17022'; // DDF025: Isenção/alíquota zero PIS/COFINS (§ 5º art. 2º)
-      } else if (novoPreset === 'ISENTO') {
-        it.aliqIr = 0;
-        it.aliqCsll = 0;
-        it.aliqPis = 0;
-        it.aliqCofins = 0;
-        it.codigoReceitaDarf = 'ISENTO';
-        it.naturezaRendimentoReinf = 'ISENTO';
+      if (TABELA_RECEITAS_DARF[novoPreset]) {
+        const conf = TABELA_RECEITAS_DARF[novoPreset];
+        it.aliqIr = conf.ir;
+        it.aliqCsll = conf.csll;
+        it.aliqPis = conf.pis;
+        it.aliqCofins = conf.cofins;
+        it.codigoReceitaDarf = novoPreset;
+        // Ajusta natureza de acordo com serviço ou mercadoria se for 6147
+        if (novoPreset === '6147') {
+          it.naturezaRendimentoReinf = currentData.tipoDocumento === 'NFSE' ? '17003' : '17009';
+        } else {
+          it.naturezaRendimentoReinf = conf.reinfPadrao;
+        }
       }
 
       clone[index] = it;
@@ -246,7 +238,27 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   const handleAtualizarCampo = (index: number, campo: keyof ItemEditavel, valor: any) => {
     setItensEditados(prev => {
       const clone = [...prev];
-      clone[index] = { ...clone[index], [campo]: valor };
+      const it = { ...clone[index], [campo]: valor };
+
+      // Se o usuário digitou ou selecionou um código DARF reconhecido (ex: 6147, 6190, 8767, etc.)
+      if (campo === 'codigoReceitaDarf') {
+        const codNormalizado = String(valor || '').trim().toUpperCase();
+        if (TABELA_RECEITAS_DARF[codNormalizado]) {
+          const conf = TABELA_RECEITAS_DARF[codNormalizado];
+          it.aliqIr = conf.ir;
+          it.aliqCsll = conf.csll;
+          it.aliqPis = conf.pis;
+          it.aliqCofins = conf.cofins;
+          it.preset = codNormalizado;
+          if (codNormalizado === '6147') {
+            it.naturezaRendimentoReinf = currentData.tipoDocumento === 'NFSE' ? '17003' : '17009';
+          } else {
+            it.naturezaRendimentoReinf = conf.reinfPadrao;
+          }
+        }
+      }
+
+      clone[index] = it;
       return clone;
     });
     setModificado(true);
@@ -939,20 +951,24 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                     />
                     <select
                       className="form-select"
-                      value={['6147', '6190', '6175', '8767', 'ISENTO'].includes(item.codigoReceitaDarf) ? item.codigoReceitaDarf : 'OUTRO'}
+                      value={['6147', '6190', '6175', '8767', '8739', '9060', '8850', '8863', '6188', 'ISENTO'].includes(item.codigoReceitaDarf) ? item.codigoReceitaDarf : 'OUTRO'}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val !== 'OUTRO') {
                           handleAtualizarCampo(index, 'codigoReceitaDarf', val);
-                          if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
                         }
                       }}
                       style={{ fontSize: '0.8rem', padding: '4px 6px', flex: 1, borderColor: '#cbd5e1' }}
                     >
-                      <option value="6147">6147 — Mercadorias / Bens / Obras (5,85%)</option>
+                      <option value="6147">6147 — Mercadorias / Bens em Geral / Obras / Hospitais (5,85%)</option>
                       <option value="6190">6190 — Prestação de Serviços em Geral (9,45%)</option>
                       <option value="6175">6175 — Transporte de Passageiros / Cargas (7,05%)</option>
-                      <option value="8767">8767 — Medicamentos / Monofásicos PIS/COFINS (2,20%)</option>
+                      <option value="8767">8767 — Medicamentos / Isenção ou Alíquota Zero PIS/COFINS (2,20%)</option>
+                      <option value="8739">8739 — Combustíveis de Comerciantes Varejistas (1,24%)</option>
+                      <option value="9060">9060 — Combustíveis de Refinarias / Produtores / Distribuidores (4,89%)</option>
+                      <option value="8850">8850 — Transporte Internacional de Passageiros (3,40%)</option>
+                      <option value="8863">8863 — Serviços Prestados por Associações / Cooperativas (4,65%)</option>
+                      <option value="6188">6188 — Bancos / Instituições Financeiras / Seguro Saúde (7,05%)</option>
                       <option value="ISENTO">ISENTO — Dispensa / Imune de Retenção Federal (0%)</option>
                       <option value="OUTRO">Outro Código (digitar ao lado)</option>
                     </select>
@@ -961,7 +977,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
 
                 <div>
                   <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-                    📌 NATUREZA DE RENDIMENTO (EFD-REINF R-4020):
+                    📌 NATUREZA DE RENDIMENTO (EFD-REINF R-4020 - DDF025):
                   </label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <input
@@ -972,27 +988,52 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                         handleAtualizarCampo(index, 'naturezaRendimentoReinf', e.target.value.toUpperCase());
                         if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
                       }}
-                      placeholder="Ex: 17009, 17022, 17099, 17033"
+                      placeholder="Ex: 17009, 17008, 17022, 17099, 17033"
                       style={{ padding: '6px 10px', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', fontWeight: 700, width: '130px' }}
                     />
                     <select
                       className="form-select"
-                      value={['17009', '17022', '17099', '17033', '17023', '17002', 'ISENTO'].includes(item.naturezaRendimentoReinf) ? item.naturezaRendimentoReinf : 'OUTRO'}
+                      value={['17001', '17002', '17003', '17004', '17005', '17006', '17007', '17008', '17009', '17013', '17014', '17015', '17019', '17020', '17021', '17022', '17023', '17024', '17025', '17026', '17027', '17028', '17029', '17030', '17031', '17032', '17033', '17034', '17035', '17037', '17050', '17099', 'ISENTO'].includes(item.naturezaRendimentoReinf) ? item.naturezaRendimentoReinf : 'OUTRO'}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val !== 'OUTRO') {
                           handleAtualizarCampo(index, 'naturezaRendimentoReinf', val);
-                          if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
                         }
                       }}
                       style={{ fontSize: '0.8rem', padding: '4px 6px', flex: 1, borderColor: '#cbd5e1' }}
                     >
-                      <option value="17009">17009 — Bens / Mercadorias para Consumo ou Revenda</option>
-                      <option value="17022">17022 — Medicamentos / Produtos com Alíquota Zero PIS/COFINS</option>
-                      <option value="17099">17099 — Demais Serviços sujeitos à retenção de tributos</option>
-                      <option value="17033">17033 — Locação / Cessão de mão de obra (dedicação exclusiva)</option>
-                      <option value="17023">17023 — Serviços de transporte de passageiros</option>
-                      <option value="17002">17002 — Energia Elétrica</option>
+                      <option value="17009">17009 — Mercadorias e bens em geral [DARF 6147]</option>
+                      <option value="17008">17008 — Medicamentos / Higiene adquiridos de produtor/distribuidor [DARF 6147]</option>
+                      <option value="17001">17001 — Alimentação [DARF 6147]</option>
+                      <option value="17002">17002 — Energia elétrica [DARF 6147]</option>
+                      <option value="17003">17003 — Serviços com emprego de materiais [DARF 6147]</option>
+                      <option value="17004">17004 — Construção Civil por empreitada com materiais [DARF 6147]</option>
+                      <option value="17005">17005 — Serviços hospitalares (art. 30 IN 1234) [DARF 6147]</option>
+                      <option value="17006">17006 — Transporte de cargas em geral [DARF 6147]</option>
+                      <option value="17007">17007 — Serviços de auxílio diagnóstico, terapia e patologia [DARF 6147]</option>
+                      <option value="17022">17022 — Medicamentos / Produtos com Alíquota Zero de PIS/COFINS [DARF 8767]</option>
+                      <option value="17019">17019 — Perfumaria/higiene do § 1º art. 22 adquiridos de varejo [DARF 8767]</option>
+                      <option value="17020">17020 — Produtos do § 2º do art. 22 [DARF 8767]</option>
+                      <option value="17021">17021 — Produtos das alíneas "c" a "k" inciso I art. 5º [DARF 8767]</option>
+                      <option value="17013">17013 — Gasolina, diesel, GLP de varejistas [DARF 8739]</option>
+                      <option value="17014">17014 — Álcool etílico de comerciante varejista [DARF 8739]</option>
+                      <option value="17015">17015 — Biodiesel de distribuidores/varejistas [DARF 8739]</option>
+                      <option value="17023">17023 — Passagens e transporte de passageiros [DARF 6175]</option>
+                      <option value="17024">17024 — Transporte internacional de passageiros [DARF 8850]</option>
+                      <option value="17025">17025 — Serviços de associações e cooperativas [DARF 8863]</option>
+                      <option value="17026">17026 — Bancos e instituições financeiras [DARF 6188]</option>
+                      <option value="17027">17027 — Seguro Saúde [DARF 6188]</option>
+                      <option value="17099">17099 — Demais serviços prestados em geral [DARF 6190]</option>
+                      <option value="17031">17031 — Vigilância [DARF 6190]</option>
+                      <option value="17032">17032 — Limpeza e conservação [DARF 6190]</option>
+                      <option value="17033">17033 — Locação / Cessão de mão de obra [DARF 6190]</option>
+                      <option value="17028">17028 — Serviços de abastecimento de água [DARF 6190]</option>
+                      <option value="17029">17029 — Telefone [DARF 6190]</option>
+                      <option value="17030">17030 — Correio e telégrafos [DARF 6190]</option>
+                      <option value="17034">17034 — Intermediação de negócios [DARF 6190]</option>
+                      <option value="17035">17035 — Administração, locação ou cessão de bens [DARF 6190]</option>
+                      <option value="17037">17037 — Plano de saúde humano/odontológico fixo por servidor [DARF 6190]</option>
+                      <option value="17050">17050 — Propaganda e Publicidade (art. 16 § 4º) [DARF 6190]</option>
                       <option value="ISENTO">ISENTO — Rendimento não sujeito a retenção</option>
                       <option value="OUTRO">Outra Natureza (digitar ao lado)</option>
                     </select>
