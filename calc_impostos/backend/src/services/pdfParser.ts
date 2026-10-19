@@ -78,7 +78,8 @@ export class PdfParser {
 
     // 2. CHAVE DE ACESSO
     let chaveAcesso = '';
-    const chaveMatch = text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)?(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}|\d{50})/i);
+    const chaveMatch = text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)([\d\s-]{44,60})/i) ||
+                       text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)?(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}|\d{44,50})/i);
     if (chaveMatch) {
       const candidata = chaveMatch[1].replace(/[\s-]/g, '');
       if (candidata.length >= 44 && candidata.length <= 50) chaveAcesso = candidata;
@@ -86,8 +87,15 @@ export class PdfParser {
 
     // 3. NÚMERO DA NOTA FISCAL
     let numeroNota = '';
-    // Se temos a Chave de Acesso de 44 a 50 dígitos (padrão NF-e modelo 55), o número da NF-e está garantido nas posições 26 a 34 (9 dígitos)
-    if (chaveAcesso && chaveAcesso.length >= 44) {
+    
+    // Para NFS-e padrão nacional ou municipal, busca com prioridade máxima o campo específico "Número da NFS-e"
+    const matchNumeroNfseDireto = text.match(/(?:N[úu]mero\s*da\s*NFS-e|NÚMERODANFS-e|NÚMERO DA NFS-e|N[ºo\.]\s*NFS-e)[^\d]*0*([1-9]\d{0,10})/i);
+    if (matchNumeroNfseDireto && matchNumeroNfseDireto[1]) {
+      numeroNota = matchNumeroNfseDireto[1].replace(/\./g, '');
+    }
+
+    // Se temos a Chave de Acesso de NF-e modelo 55 (44 dígitos), o número da NF-e está nas posições 26 a 34 (9 dígitos)
+    if (!numeroNota && !ehServico && chaveAcesso && chaveAcesso.length === 44) {
       const numChave = chaveAcesso.substring(25, 34).replace(/^0+/, '');
       if (numChave && numChave !== '0') {
         numeroNota = numChave;
@@ -97,9 +105,6 @@ export class PdfParser {
     if (!numeroNota) {
       const padroesNumero = [
         /N[úu]mero\s*da\s*Nota\s*Fiscal[^\d]*0*([1-9]\d{0,10})/i,
-        /NÚMERODANFS-e[^\d]*0*([1-9]\d{0,10})/i,
-        /NÚMERO DA NFS-e[^\d]*0*([1-9]\d{0,10})/i,
-        /N[ºo\.]\s*NFS-e[^\d]*0*([1-9]\d{0,10})/i,
         /N[ºo\.]\s*0*([0-9]{1,3}(?:\.[0-9]{3})+)/i,
         /N[ºo]\.?\s*0*([1-9]\d{2,8})\b/i,
         /(?:N[úu]mero da Nota|N[úu]mero|NF-e|NFS-e)\s*[:\.]?\s*0*([1-9]\d{0,8})\b/i
@@ -120,41 +125,43 @@ export class PdfParser {
     let destinatarioNome = '';
 
     if (ehServico) {
-      const idxPrestador = text.search(/PRESTADOR\s*\/\s*FORNECEDOR|PRESTADOR DE SERVIÇOS|IDENTIFICAÇÃO DO PRESTADOR/i);
-      const idxTomador = text.search(/TOMADOR\s*\/\s*ADQUIRENTE|TOMADOR DE SERVIÇOS|IDENTIFICAÇÃO DO TOMADOR/i);
+      // Reconhece todas as variações de Prestador / Emitente e Tomador (Destinatário)
+      const idxPrestador = text.search(/EMITENTE\s*(?:DA\s*NFS-e)?|PRESTADOR\s*(?:DO\s*SERVI[ÇC]O|DE\s*SERVI[ÇC]OS|\/\s*FORNECEDOR)?|IDENTIFICA[ÇC][ÃA]O\s*DO\s*PRESTADOR/i);
+      const idxTomador = text.search(/TOMADOR\s*(?:DO\s*SERVI[ÇC]O|DE\s*SERVI[ÇC]OS|\/\s*ADQUIRENTE)?|IDENTIFICA[ÇC][ÃA]O\s*DO\s*TOMADOR/i);
 
-      // Regex de nome genérico: captura "Nome/Razão Social:" até o próximo rótulo conhecido
-      const regexRazaoSocial = /Nome\s*\/?\s*Raz[ãa]o\s*Social\s*:?\s*([^\n]{4,120}?)(?=\s*Nome\s*Fantasia|\s*Endere[çc]o|\s*Inscri[çc][ãa]o|\s*CEP|\s*Cidade|\s*E-?mail|\n|$)/i;
+      // Regex de captura de nome empresarial / razão social
+      const regexNomeRazao = /(?:Nome\s*\/?\s*Nome\s*Empresarial|Nome\s*\/?\s*Raz[ãa]o\s*Social|Raz[ãa]o\s*Social)\s*[:\n\r]+\s*([^\n\r]{3,120})/i;
 
       if (idxPrestador !== -1) {
-        const fimTrechoPrest = idxTomador !== -1 && idxTomador > idxPrestador ? idxTomador : idxPrestador + 600;
+        const fimTrechoPrest = idxTomador !== -1 && idxTomador > idxPrestador ? idxTomador : idxPrestador + 700;
         const trechoPrestador = text.substring(idxPrestador, fimTrechoPrest);
 
         fornecedorCnpj = this.extrairCnpjLimpo(trechoPrestador);
 
-        const matchRazaoPrest = trechoPrestador.match(regexRazaoSocial);
-        if (matchRazaoPrest && matchRazaoPrest[1]) {
-          fornecedorNome = this.formatarNomeEmpresa(matchRazaoPrest[1]);
+        const matchNomePrest = trechoPrestador.match(regexNomeRazao);
+        if (matchNomePrest && matchNomePrest[1]) {
+          fornecedorNome = this.formatarNomeEmpresa(matchNomePrest[1]);
         } else {
-          const matchNomePrest = trechoPrestador.match(/(COMER[^\n]{4,60}|CETAN[^\n]{4,60}|[A-Z0-9\s\.\-&]{5,60}LTDA|[A-Z0-9\s\.\-&]{5,60}EPP|[A-Z0-9\s\.\-&]{5,60}S\/A)/i);
-          if (matchNomePrest && matchNomePrest[0]) {
-            fornecedorNome = this.formatarNomeEmpresa(matchNomePrest[0]);
+          const matchGenericoPrest = trechoPrestador.match(/(COMER[^\n]{4,60}|CETAN[^\n]{4,60}|[A-Z0-9\s\.\-&]{5,60}LTDA|[A-Z0-9\s\.\-&]{5,60}EPP|[A-Z0-9\s\.\-&]{5,60}S\/A)/i);
+          if (matchGenericoPrest && matchGenericoPrest[0]) {
+            fornecedorNome = this.formatarNomeEmpresa(matchGenericoPrest[0]);
           }
         }
       }
 
       if (idxTomador !== -1) {
-        const fimTrechoTom = idxPrestador !== -1 && idxPrestador > idxTomador ? idxPrestador : idxTomador + 600;
+        const fimTrechoTom = idxPrestador !== -1 && idxPrestador > idxTomador ? idxPrestador : idxTomador + 700;
         const trechoTomador = text.substring(idxTomador, fimTrechoTom);
+
         destinatarioCnpj = this.extrairCnpjLimpo(trechoTomador);
 
-        const matchRazaoTom = trechoTomador.match(regexRazaoSocial);
-        if (matchRazaoTom && matchRazaoTom[1]) {
-          destinatarioNome = this.formatarNomeEmpresa(matchRazaoTom[1]);
+        const matchNomeTom = trechoTomador.match(regexNomeRazao);
+        if (matchNomeTom && matchNomeTom[1]) {
+          destinatarioNome = this.formatarNomeEmpresa(matchNomeTom[1]);
         } else {
-          const matchNomeTom = trechoTomador.match(/(EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES[^\n]*|EBSERH[^\n]*)/i);
-          if (matchNomeTom && matchNomeTom[0]) {
-            destinatarioNome = this.formatarNomeEmpresa(matchNomeTom[0]);
+          const matchGenericoTom = trechoTomador.match(/(EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES[^\n]*|EBSERH[^\n]*)/i);
+          if (matchGenericoTom && matchGenericoTom[0]) {
+            destinatarioNome = this.formatarNomeEmpresa(matchGenericoTom[0]);
           }
         }
       }
