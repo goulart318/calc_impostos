@@ -287,7 +287,7 @@ export default function App() {
         cst: it.cst || '01',
         codigoServico: it.codigoServico,
         valorBruto: it.valorBruto,
-        condicaoEspecial: it.codigoReceitaDarf === '8767' ? '8767' : (it.codigoReceitaDarf === '6147' ? '6147' : undefined)
+        condicaoEspecial: it.codigoReceitaDarf || undefined
       })));
 
       setMensagemSucesso(`✓ Nota Fiscal ${data.numeroNota || 'processada'} carregada e analisada com sucesso!`);
@@ -379,7 +379,7 @@ export default function App() {
       cst: it.cst || '01',
       codigoServico: it.codigoServico,
       valorBruto: it.valorBruto,
-      condicaoEspecial: it.codigoReceitaDarf === '8767' ? '8767' : (it.codigoReceitaDarf === '6147' ? '6147' : undefined)
+      condicaoEspecial: it.codigoReceitaDarf || undefined
     })));
 
     setActiveTab('analise');
@@ -1108,9 +1108,13 @@ export default function App() {
                                     style={{ padding: '6px 8px', fontSize: '0.75rem' }}
                                   >
                                     <option value="">Automático (NCM/CST)</option>
+                                    <option value="6147">Cód 6147 (5,85% Bens/Obras)</option>
                                     <option value="8767">Cód 8767 (2,20% Alíq. Zero)</option>
-                                    <option value="6147">Cód 6147 (5,85% Geral)</option>
-                                    <option value="8739">Cód 8739 (1,24% Combustível)</option>
+                                    <option value="6190">Cód 6190 (9,45% Serviços)</option>
+                                    <option value="6175">Cód 6175 (7,05% Transporte)</option>
+                                    <option value="8739">Cód 8739 (1,24% Combustível Varejo)</option>
+                                    <option value="9060">Cód 9060 (4,89% Combustível Refinaria)</option>
+                                    <option value="ISENTO">Cód ISENTO (0% Dispensa)</option>
                                   </select>
                                 </td>
                               )}
@@ -1170,6 +1174,17 @@ export default function App() {
                         setResultado(novoResultado);
                         if (novoResultado.numeroProcesso !== undefined) setNumeroProcesso(novoResultado.numeroProcesso);
                         if (novoResultado.numeroEmpenho !== undefined) setNumeroEmpenho(novoResultado.numeroEmpenho);
+                        if (novoResultado.itens && novoResultado.itens.length > 0) {
+                          setItens(novoResultado.itens.map(it => ({
+                            numeroItem: it.numeroItem,
+                            descricao: it.descricao,
+                            ncm: it.ncm || '',
+                            cst: it.cst || '01',
+                            codigoServico: it.codigoServico,
+                            valorBruto: it.valorBruto,
+                            condicaoEspecial: it.codigoReceitaDarf || undefined
+                          })));
+                        }
                       }}
                     />
                   </div>
