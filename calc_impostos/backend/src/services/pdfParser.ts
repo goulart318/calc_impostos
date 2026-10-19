@@ -86,19 +86,30 @@ export class PdfParser {
 
     // 3. NÚMERO DA NOTA FISCAL
     let numeroNota = '';
-    const padroesNumero = [
-      /N[úu]mero\s*da\s*Nota\s*Fiscal[^\d]*0*([1-9]\d{0,10})/i,
-      /NÚMERODANFS-e[^\d]*0*([1-9]\d{0,10})/i,
-      /NÚMERO DA NFS-e[^\d]*0*([1-9]\d{0,10})/i,
-      /N[ºo\.]\s*NFS-e[^\d]*0*([1-9]\d{0,10})/i,
-      /(?:N[ºo\.]|N[úu]mero da Nota|N[úu]mero|NF-e|NFS-e)\s*[:\.]?\s*0*([1-9]\d{0,8})/i,
-      /N[ºo]\s*([0-9]{1,3}(?:\.[0-9]{3})*)/i
-    ];
-    for (const padrao of padroesNumero) {
-      const match = text.match(padrao);
-      if (match && match[1]) {
-        numeroNota = match[1].replace(/\./g, '');
-        break;
+    // Se temos a Chave de Acesso de 44 a 50 dígitos (padrão NF-e modelo 55), o número da NF-e está garantido nas posições 26 a 34 (9 dígitos)
+    if (chaveAcesso && chaveAcesso.length >= 44) {
+      const numChave = chaveAcesso.substring(25, 34).replace(/^0+/, '');
+      if (numChave && numChave !== '0') {
+        numeroNota = numChave;
+      }
+    }
+
+    if (!numeroNota) {
+      const padroesNumero = [
+        /N[úu]mero\s*da\s*Nota\s*Fiscal[^\d]*0*([1-9]\d{0,10})/i,
+        /NÚMERODANFS-e[^\d]*0*([1-9]\d{0,10})/i,
+        /NÚMERO DA NFS-e[^\d]*0*([1-9]\d{0,10})/i,
+        /N[ºo\.]\s*NFS-e[^\d]*0*([1-9]\d{0,10})/i,
+        /N[ºo\.]\s*0*([0-9]{1,3}(?:\.[0-9]{3})+)/i,
+        /N[ºo]\.?\s*0*([1-9]\d{2,8})\b/i,
+        /(?:N[úu]mero da Nota|N[úu]mero|NF-e|NFS-e)\s*[:\.]?\s*0*([1-9]\d{0,8})\b/i
+      ];
+      for (const padrao of padroesNumero) {
+        const match = text.match(padrao);
+        if (match && match[1]) {
+          numeroNota = match[1].replace(/\./g, '');
+          break;
+        }
       }
     }
 
@@ -353,15 +364,52 @@ export class PdfParser {
           : text.substring(idxInicioProd);
       }
 
-      // Regex melhorada: detecta linha de produto completa ou NCM em qualquer formato
-      // Exemplo: "90219012 740 5102 UN 1,00 15.000,00" ou "2716.00.00" ou "27160000"
-      const regexLinhaItem = /(?:^|\s)([0-9]{4}\.?[0-9]{2}\.?[0-9]{2})\s+([0-9]{2,3})\s+([0-9]{4})\s+([A-Za-z]{2,4})\s+([\d\.,]+)\s+([\d\.,]+)/gm;
-      let matchLinha;
-      while ((matchLinha = regexLinhaItem.exec(secaoProdutos)) !== null) {
-        const ncmLimpo = matchLinha[1].replace(/\D/g, '');
-        const cstLimpo = matchLinha[2].substring(0, 2);
-        if (this.ehNcmValido(ncmLimpo) && !ncmsEncontrados.some(x => x.ncm === ncmLimpo)) {
-          ncmsEncontrados.push({ ncm: ncmLimpo, cst: cstLimpo });
+      // 1) Busca detalhada por linha na seção de produtos (suporta tabelas compactadas/coladas)
+      const linhasSecao = secaoProdutos.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+      let descrCandidata = '';
+      for (const linha of linhasSecao) {
+        if (/^(?:DADOS|C[ÓO]DIGO|DESCRI|VALOR|UNIT|TOTAL|DESC|B\.C[ÁA]LC|ICMS|AL[ÍI]Q|IPI)/i.test(linha)) {
+          continue;
+        }
+
+        // Procura linha que comece com NCM válido de 8 dígitos colado ou com espaços
+        // Exemplo: "901839291/406108NO190,000017,50003.325,000..." ou "9018.39.29"
+        const matchColadoLinha = linha.match(/^(\d{8})(?:(\d|\d\/\d{2}|\d{3}))?(\d{4})?([A-Za-z]{2,4})?([\d\.,]+)/);
+        if (matchColadoLinha) {
+          const candidato = matchColadoLinha[1];
+          if (this.ehNcmValido(candidato)) {
+            const rawCst = matchColadoLinha[2] || '01';
+            const cstLimpo = rawCst.replace(/\D/g, '').substring(0, 2) || '01';
+            if (!ncmsEncontrados.some(x => x.ncm === candidato)) {
+              ncmsEncontrados.push({
+                ncm: candidato,
+                cst: cstLimpo,
+                descricao: descrCandidata || undefined
+              });
+            }
+            descrCandidata = '';
+            continue;
+          }
+        }
+
+        // Se não for linha de NCM, mas for texto de descrição válido (ignora Lote, Reg. ANVISA, etc.)
+        if (!linha.startsWith('Reg.') && !linha.startsWith('Lote:') && !linha.startsWith('Validade:') && !/^\d{2}\/\d{2}\/\d{4}$/.test(linha)) {
+          if (!descrCandidata) {
+            descrCandidata = linha;
+          }
+        }
+      }
+
+      // 2) Se não encontrou por linha, tenta expressões regulares gerais
+      if (ncmsEncontrados.length === 0) {
+        const regexLinhaItem = /(?:^|\s)([0-9]{4}\.?[0-9]{2}\.?[0-9]{2})\s+([0-9]{2,3})\s+([0-9]{4})\s+([A-Za-z]{2,4})\s+([\d\.,]+)\s+([\d\.,]+)/gm;
+        let matchLinha;
+        while ((matchLinha = regexLinhaItem.exec(secaoProdutos)) !== null) {
+          const ncmLimpo = matchLinha[1].replace(/\D/g, '');
+          const cstLimpo = matchLinha[2].substring(0, 2);
+          if (this.ehNcmValido(ncmLimpo) && !ncmsEncontrados.some(x => x.ncm === ncmLimpo)) {
+            ncmsEncontrados.push({ ncm: ncmLimpo, cst: cstLimpo });
+          }
         }
       }
 
@@ -397,7 +445,29 @@ export class PdfParser {
         }
       }
 
+      // Detecção de retenções federais expressas nas Informações Complementares da NF-e
+      // Exemplo: "IMPOSTOS RETIDOS NA FONTE: PIS R$ 21,61 0,65% ,COFINS R$ 99,75 3,00% ,CSLL R$ 33,25 1,00% ,IRRF R$ 39,90 1,20%"
+      let aliqIrDestaqueNfe: number | undefined;
+      let aliqCsllDestaqueNfe: number | undefined;
+      let aliqCofinsDestaqueNfe: number | undefined;
+      let aliqPisDestaqueNfe: number | undefined;
+
+      const matchRetFonte = text.match(/IMPOSTOS\s*RETIDOS\s*NA\s*FONTE\s*:?\s*([^]+?)(?=(?:horas|Total|ISENTO|$))/i);
+      if (matchRetFonte) {
+        const blocoRet = matchRetFonte[1];
+        const pPis = blocoRet.match(/PIS\s*(?:R\$\s*)?([\d\.,]+)\s*([\d\.,]+)\s*%/i);
+        const pCofins = blocoRet.match(/COFINS\s*(?:R\$\s*)?([\d\.,]+)\s*([\d\.,]+)\s*%/i);
+        const pCsll = blocoRet.match(/CSLL\s*(?:R\$\s*)?([\d\.,]+)\s*([\d\.,]+)\s*%/i);
+        const pIr = blocoRet.match(/IRRF\s*(?:R\$\s*)?([\d\.,]+)\s*([\d\.,]+)\s*%/i);
+
+        if (pIr && pIr[2]) aliqIrDestaqueNfe = parseFloat(pIr[2].replace(',', '.'));
+        if (pCsll && pCsll[2]) aliqCsllDestaqueNfe = parseFloat(pCsll[2].replace(',', '.'));
+        if (pCofins && pCofins[2]) aliqCofinsDestaqueNfe = parseFloat(pCofins[2].replace(',', '.'));
+        if (pPis && pPis[2]) aliqPisDestaqueNfe = parseFloat(pPis[2].replace(',', '.'));
+      }
+
       // Detecção de descrições reais do produto
+      const descrFioGuia = text.match(/([A-Z0-9\-_]{2,20}FIO\s*GUIA[^\n\r]{4,80}|FIO\s*GUIA[^\n\r]{4,80})/i);
       const descrStent = text.match(/(STENT[^\n]{4,80})/i);
       const descrEnergia = text.match(/(ENERGIA EL[EÉ]TRICA[^\n]{4,80})/i);
       const descrDapagliflozina = text.match(/(DAPAGLIFLOZINA[^\n]{4,60})/i);
@@ -405,7 +475,8 @@ export class PdfParser {
       const descrCateter = text.match(/(Cateter para Terapia[^\n]{4,60})/i);
 
       let descrDefault = 'Item de Material / Mercadoria';
-      if (descrStent) descrDefault = descrStent[1].trim();
+      if (descrFioGuia) descrDefault = descrFioGuia[1].trim();
+      else if (descrStent) descrDefault = descrStent[1].trim();
       else if (descrEnergia) descrDefault = descrEnergia[1].trim();
       else if (descrDapagliflozina) descrDefault = descrDapagliflozina[1].trim();
       else if (descrSensor) descrDefault = descrSensor[1].trim();
@@ -414,13 +485,26 @@ export class PdfParser {
       if (ncmsEncontrados.length > 0) {
         const valorUnitarioSubtotal = valorTotal > 0 ? (valorTotal / ncmsEncontrados.length) : 0;
         ncmsEncontrados.forEach((itemNcm, idx) => {
-          itens.push({
+          const itemAdicionar: ItemAnaliseInput = {
             numeroItem: idx + 1,
             descricao: itemNcm.descricao || descrDefault,
             ncm: itemNcm.ncm,
             cst: itemNcm.cst || '01',
             valorBruto: Number(valorUnitarioSubtotal.toFixed(2))
-          });
+          };
+
+          // Se a nota fiscal traz retenção federal na fonte expressa pelo fornecedor (órgão público tomador)
+          if (aliqCofinsDestaqueNfe !== undefined && aliqPisDestaqueNfe !== undefined) {
+            itemAdicionar.manualAliqIr = aliqIrDestaqueNfe;
+            itemAdicionar.manualAliqCsll = aliqCsllDestaqueNfe;
+            itemAdicionar.manualAliqCofins = aliqCofinsDestaqueNfe;
+            itemAdicionar.manualAliqPis = aliqPisDestaqueNfe;
+            itemAdicionar.manualCodigoDarf = '6147';
+            itemAdicionar.manualNaturezaReinf = '17009';
+            itemAdicionar.manualFundamentacao = 'IN RFB nº 1.234/2012 (Código DARF 6147 - Retenção Ampla na Fonte destacada no documento fiscal)';
+          }
+
+          itens.push(itemAdicionar);
         });
       }
     }
