@@ -80,6 +80,8 @@ export interface ParametrosCalculo {
   aliqIss?: number; // Padrão 5.0% em Vitória/ES
   percentualReducaoIss?: number; // Ex: 20% para reformas/obras
   retencaoIss?: boolean; // Retido pelo Tomador vs Não Retido
+  localPrestacaoServico?: string; // Cidade/Município onde o serviço foi executado
+  municipioTomador?: string; // Cidade/Município do Órgão Tomador
   retencaoInss?: boolean;
   aliqInss?: number; // 11.0% ou 3.5% (CPRB)
   valorMateriaisInss?: number; // Abatimento de materiais da BC do INSS (IN 2.110/2022)
@@ -120,6 +122,9 @@ export interface ResultadoConsolidado {
   baseCalculoIssTotal: number;
   percentualReducaoIssAplicado: number;
   issRetidoTomador: boolean;
+  localPrestacaoServico?: string;
+  municipioTomador?: string;
+  aliqIssAplicada?: number;
   totalRetidoGeral: number;
   valorLiquido: number;
   naturezasEFDReinf: { codigo: string; descricao: string; valor: number }[];
@@ -724,23 +729,56 @@ export class TaxEngine {
 
       baseCalculoInssTotal += baseCalculoInss;
 
-      // 2. ISSQN (Municipal com suporte à Redução de Base de Cálculo em Vitória/ES)
+      // 2. ISSQN (Regra Territorial: LC 116/2003 c/c Local da Prestação vs Município do Tomador)
       let aliqIss = 0;
       let valorIss = 0;
       let baseCalculoIss = valorBruto;
 
       if (ehServico) {
-        baseCalculoIss = Number((valorBruto * (1 - percReducaoIss / 100)).toFixed(2));
-        aliqIss = params.aliqIss !== undefined ? params.aliqIss : 5.00;
+        // Normalização de nomes de municípios para comparação robusta (sem acentos, maiúsculas)
+        const normalizarCidade = (c?: string) => 
+          (c || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^A-Za-z0-9]/g, '')
+            .toUpperCase();
 
-        if (issRetidoTomador) {
-          valorIss = Number(((baseCalculoIss * aliqIss) / 100).toFixed(2));
-        }
+        const cidPrestacao = normalizarCidade(params.localPrestacaoServico);
+        const cidTomador = normalizarCidade(params.municipioTomador || 'VITORIA');
 
-        if (percReducaoIss > 0) {
-          fundSet.add(`Redução de Base do ISSQN (${percReducaoIss}%) c/c Código Tributário de Vitória/ES (Lei Municipal nº 6.075/2003)`);
+        // Se o local de prestação for informado e for diferente da cidade do órgão tomador:
+        // O ISS é devido no município de destino/prestação e NÃO no município do tomador (alíquota = 0% de retenção na fonte local)
+        const ehMesmaCidade = !cidPrestacao || cidPrestacao === cidTomador;
+
+        if (!ehMesmaCidade) {
+          aliqIss = 0;
+          valorIss = 0;
+          fundSet.add(`ISSQN não retido no município do tomador (${params.municipioTomador || 'Vitória/ES'}): Local de execução do serviço é em ${params.localPrestacaoServico || 'outro município'} (Art. 3º da Lei Complementar nº 116/2003).`);
         } else {
-          fundSet.add('Código Tributário de Vitória/ES (Lei Municipal nº 6.075/2003) c/c LC nº 116/2003');
+          // Serviço executado no mesmo município:
+          // Se o usuário digitou ou enviou uma alíquota explícita, respeita a alíquota informada
+          if (params.aliqIss !== undefined) {
+            aliqIss = params.aliqIss;
+          } else if (params.optanteSimples) {
+            // Se for Optante pelo Simples Nacional:
+            // Alíquota do Simples destacada na nota (normalmente entre 2% e 5%) ou padrão Simples 2%
+            aliqIss = 2.00;
+            fundSet.add('ISSQN apurado conforme alíquota do Simples Nacional (LC nº 123/2006 c/c Resolução CGSN nº 140/2018).');
+          } else {
+            // Empresa do Regime Normal executando serviço na cidade do tomador:
+            // Aplica ISSQN de forma integral (5,00% em Vitória/ES)
+            aliqIss = 5.00;
+            if (percReducaoIss > 0) {
+              fundSet.add(`Redução de Base do ISSQN (${percReducaoIss}%) c/c Código Tributário de Vitória/ES (Lei Municipal nº 6.075/2003)`);
+            } else {
+              fundSet.add('ISSQN Integral Retido na Fonte (Lei Municipal nº 6.075/2003 c/c LC nº 116/2003).');
+            }
+          }
+
+          baseCalculoIss = Number((valorBruto * (1 - percReducaoIss / 100)).toFixed(2));
+          if (issRetidoTomador) {
+            valorIss = Number(((baseCalculoIss * aliqIss) / 100).toFixed(2));
+          }
         }
       }
 
@@ -915,6 +953,9 @@ export class TaxEngine {
       baseCalculoIssTotal: Number(baseCalculoIssTotal.toFixed(2)),
       percentualReducaoIssAplicado: percReducaoIss,
       issRetidoTomador,
+      localPrestacaoServico: params.localPrestacaoServico,
+      municipioTomador: params.municipioTomador || 'Vitória',
+      aliqIssAplicada: itensCalculados.length > 0 ? itensCalculados[0].aliqIss : 0,
       totalRetidoGeral,
       valorLiquido: valorLiquidoTotal,
       naturezasEFDReinf,

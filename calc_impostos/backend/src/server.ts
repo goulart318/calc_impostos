@@ -151,6 +151,16 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
       }
     }
 
+    let municipioTomador = 'Vitória';
+    if (notaExtraida.destinatarioCnpj) {
+      try {
+        const infoTom = await CnpjService.consultarCnpj(notaExtraida.destinatarioCnpj);
+        if (infoTom.municipio) municipioTomador = infoTom.municipio;
+      } catch (e) {
+        // Fallback
+      }
+    }
+
     const params: ParametrosCalculo = {
       tipoDocumento: notaExtraida.tipoDocumento,
       numeroNota: notaExtraida.numeroNota,
@@ -166,9 +176,11 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
       dataEmissao: notaExtraida.dataEmissao,
       itens: notaExtraida.itens,
       codigoServicoPadrao: notaExtraida.codigoServicoNfse || '6190',
-      aliqIss: 5.00,
+      aliqIss: req.body.aliqIss !== undefined ? parseFloat(String(req.body.aliqIss)) : (notaExtraida.aliqIssNfseDestaque !== undefined ? notaExtraida.aliqIssNfseDestaque : undefined),
       percentualReducaoIss: parseFloat(String(req.body.percentualReducaoIss)) || notaExtraida.percentualReducaoIssNfse || 0,
       retencaoIss: req.body.retencaoIss !== undefined ? (req.body.retencaoIss === 'true' || req.body.retencaoIss === true) : (notaExtraida.issqnRetidoTomador !== undefined ? notaExtraida.issqnRetidoTomador : true),
+      localPrestacaoServico: req.body.localPrestacaoServico || notaExtraida.localPrestacaoServico,
+      municipioTomador: req.body.municipioTomador || municipioTomador,
       valorInssDestacado: parseFloat(String(req.body.valorInssDestacado)) || notaExtraida.destaqueInss || 0,
       valorMateriaisInss: parseFloat(String(req.body.valorMateriaisInss)) || (notaExtraida.percentualReducaoIssNfse ? Number((notaExtraida.valorTotal * (notaExtraida.percentualReducaoIssNfse / 100)).toFixed(2)) : 0),
       valorContaVinculada: parseFloat(String(req.body.valorContaVinculada)) || 0,

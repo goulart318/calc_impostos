@@ -76,6 +76,9 @@ export interface ResultadoConsolidado {
   baseCalculoIssTotal?: number;
   percentualReducaoIssAplicado?: number;
   issRetidoTomador?: boolean;
+  localPrestacaoServico?: string;
+  municipioTomador?: string;
+  aliqIssAplicada?: number;
   totalRetidoGeral: number;
   valorLiquido: number;
   naturezasEFDReinf: { codigo: string; descricao: string; valor: number }[];
@@ -454,6 +457,8 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         codigoServicoPadrao: currentData.tipoDocumento === 'NFSE' ? '6190' : undefined,
         percentualReducaoIss: currentData.percentualReducaoIssAplicado,
         retencaoIss: currentData.issRetidoTomador,
+        localPrestacaoServico: currentData.localPrestacaoServico,
+        municipioTomador: currentData.municipioTomador,
         valorMateriaisInss: currentData.totalMateriaisInssDeducao,
         valorContaVinculada: currentData.totalContaVinculada,
         itens: itensEditados.map(item => ({
@@ -1460,7 +1465,30 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalInss)}</td>
               </tr>
               <tr>
-                <td><strong>ISSQN</strong> — Imposto Municipal (Vitória/ES)</td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <strong>ISSQN</strong> — Imposto Municipal ({currentData.municipioTomador || 'Vitória/ES'})
+                    {currentData.localPrestacaoServico && currentData.municipioTomador && (
+                      currentData.localPrestacaoServico.trim().toUpperCase() !== currentData.municipioTomador.trim().toUpperCase() ? (
+                        <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                          FORA DO MUNICÍPIO (ALÍQ. 0%)
+                        </span>
+                      ) : (
+                        <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                          LOCAL: {currentData.localPrestacaoServico}
+                        </span>
+                      )
+                    )}
+                  </div>
+                  {currentData.localPrestacaoServico && (
+                    <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                      Local de Prestação: <strong>{currentData.localPrestacaoServico}</strong> 
+                      {currentData.municipioTomador && currentData.localPrestacaoServico.trim().toUpperCase() !== currentData.municipioTomador.trim().toUpperCase() && (
+                        <span> — Não cabe retenção pelo tomador em {currentData.municipioTomador} (Art. 3º da LC nº 116/2003).</span>
+                      )}
+                    </div>
+                  )}
+                </td>
                 <td>{currentData.totalBruto > 0 ? `${((currentData.totalIss / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
                 <td>Lei Municipal nº 6.075/2003 c/c LC 116</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalIss)}</td>

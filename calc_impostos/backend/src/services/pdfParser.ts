@@ -48,6 +48,8 @@ export class PdfParser {
     percentualReducaoIssNfse?: number;
     issqnRetidoTomador?: boolean;
     codigoServicoNfse?: string;
+    localPrestacaoServico?: string;
+    aliqIssNfseDestaque?: number;
   }> {
     const parseFn = typeof pdfParse === 'function' ? pdfParse : (pdfParse as any).default || pdfParse;
     const data = await parseFn(pdfBuffer);
@@ -260,6 +262,8 @@ export class PdfParser {
     let percentualReducaoIssNfse = 0;
     let issqnRetidoTomador = true; // DEFAULT = TRUE para tomador público
     let codigoServicoNfse = '6190';
+    let aliqIssNfseDestaque: number | undefined = undefined;
+    let localPrestacaoServico: string | undefined = undefined;
 
     if (ehServico) {
       const matchIr = text.match(/IRRF[^\d]*R?\$?\s*([\d\.,]+)/i);
@@ -329,6 +333,22 @@ export class PdfParser {
 
       if (upperText.includes('RETENÇÃO DO ISSQN\nNÃO RETIDO') || upperText.includes('NÃO RETIDO')) {
         issqnRetidoTomador = false; // Se constar explicitamente "Não Retido", marca como false
+      }
+
+      // Alíquota do ISS aplicada na NFS-e (ex: "Alíquota Aplicada\n2,00%" ou "Alíquota: 3,00%")
+      const matchAliqIssStrict = text.match(/(?:Al[íi]quota\s*Aplicada|Al[íi]quota\s*do\s*ISSQN|Al[íi]quota\s*:)[^\d%]*(\d{1,2}(?:[,\.]\d{1,2})?)\s*%/i);
+      if (matchAliqIssStrict && matchAliqIssStrict[1]) {
+        const alNum = parseFloat(matchAliqIssStrict[1].replace(',', '.'));
+        if (!isNaN(alNum) && alNum > 0 && alNum <= 10) {
+          aliqIssNfseDestaque = alNum;
+        }
+      }
+
+      // Local da prestação do serviço (Município onde o serviço foi executado)
+      const matchLocalPrest = text.match(/(?:Local\s*da\s*Presta[çc][ãa]o|LocaldaPresta[çc][ãa]o)[^\n]*\n\s*([^\n\r/]{3,60})/i) ||
+                              text.match(/(?:Munic[íi]pio\s*de\s*Incid[êe]ncia\s*do\s*ISSQN)[^\n]*\n\s*([^\n\r/]{3,60})/i);
+      if (matchLocalPrest && matchLocalPrest[1]) {
+        localPrestacaoServico = matchLocalPrest[1].trim();
       }
 
       // Código do Serviço: prioriza o Código de Tributação Nacional (XX.XX.XX) quando presente
@@ -564,7 +584,9 @@ export class PdfParser {
       bcIssqnNfse,
       percentualReducaoIssNfse,
       issqnRetidoTomador,
-      codigoServicoNfse
+      codigoServicoNfse,
+      localPrestacaoServico,
+      aliqIssNfseDestaque
     };
   }
 }

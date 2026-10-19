@@ -51,14 +51,42 @@ export default function App() {
     return `${limpo.slice(0, 5)}.${limpo.slice(5, 11)}/${limpo.slice(11, 15)}-${limpo.slice(15)}`;
   };
 
-  // CNPJ do Órgão do Usuário (Configurável e Salvo em LocalStorage)
+  // CNPJ e Município do Órgão do Usuário (Configuráveis e Salvos em LocalStorage)
   const [cnpjMeuEstabelecimento, setCnpjMeuEstabelecimento] = useState<string>(() => {
     return localStorage.getItem('cnpj_orgao_configurado') || '15.126.437/0006-58';
   });
 
-  const handleSalvarCnpjConfigurado = (val: string) => {
+  const [municipioMeuOrgao, setMunicipioMeuOrgao] = useState<string>(() => {
+    return localStorage.getItem('municipio_orgao_configurado') || 'Vitória';
+  });
+
+  const [localPrestacaoServico, setLocalPrestacaoServico] = useState<string>('Vitória');
+
+  const handleSalvarCnpjConfigurado = async (val: string) => {
     setCnpjMeuEstabelecimento(val);
     localStorage.setItem('cnpj_orgao_configurado', val);
+
+    // Consulta automática da cidade do órgão via API da Receita Federal
+    const cnpjLimpo = val.replace(/\D/g, '');
+    if (cnpjLimpo.length === 14) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/consultar-cnpj/${cnpjLimpo}`);
+        if (res.ok) {
+          const d = await res.json();
+          if (d.municipio) {
+            setMunicipioMeuOrgao(d.municipio);
+            localStorage.setItem('municipio_orgao_configurado', d.municipio);
+          }
+        }
+      } catch (e) {
+        // Silencioso
+      }
+    }
+  };
+
+  const handleSalvarMunicipioConfigurado = (cidade: string) => {
+    setMunicipioMeuOrgao(cidade);
+    localStorage.setItem('municipio_orgao_configurado', cidade);
   };
 
   // Dados do Destinatário/Tomador da Nota Fiscal Lido do Documento
@@ -143,6 +171,8 @@ export default function App() {
         percentualReducaoIss,
         retencaoIss,
         aliqIss: habilitarAliquotaPersonalizadaIss ? Number(aliquotaIssPersonalizada) : undefined,
+        localPrestacaoServico: tipoDocumento === 'NFSE' ? localPrestacaoServico : undefined,
+        municipioTomador: tipoDocumento === 'NFSE' ? municipioMeuOrgao : undefined,
         retencaoInss: retencaoInss || Boolean(valorInssDestacado > 0 || valorMateriaisInss > 0),
         valorInssDestacado,
         valorMateriaisInss,
@@ -266,6 +296,14 @@ export default function App() {
         setTipoDocumento('NFSE');
         setPercentualReducaoIss(data.percentualReducaoIssAplicado || 0);
         setRetencaoIss(data.issRetidoTomador !== undefined ? data.issRetidoTomador : true);
+        if (data.localPrestacaoServico) {
+          setLocalPrestacaoServico(data.localPrestacaoServico);
+        } else {
+          setLocalPrestacaoServico(municipioMeuOrgao);
+        }
+        if (data.aliqIssAplicada !== undefined) {
+          setAliquotaIssPersonalizada(data.aliqIssAplicada);
+        }
         if (data.totalInss && data.totalInss > 0) {
           setValorInssDestacado(data.totalInss);
           setRetencaoInss(true);
@@ -369,6 +407,12 @@ export default function App() {
     if (nota.tipoDocumento === 'NFSE') {
       setPercentualReducaoIss(nota.percentualReducaoIssAplicado || 0);
       setRetencaoIss(nota.issRetidoTomador !== undefined ? nota.issRetidoTomador : true);
+      if (nota.localPrestacaoServico) {
+        setLocalPrestacaoServico(nota.localPrestacaoServico);
+      }
+      if (nota.aliqIssAplicada !== undefined) {
+        setAliquotaIssPersonalizada(nota.aliqIssAplicada);
+      }
       setValorInssDestacado(nota.totalInss || 0);
       setValorMateriaisInss(nota.totalMateriaisInssDeducao || 0);
       setValorContaVinculada(nota.totalContaVinculada || 0);
@@ -606,19 +650,35 @@ export default function App() {
                 <div className="card" style={{ background: '#f8fafc', border: '1px solid #cbd5e1', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                     <div>
-                      <strong style={{ fontSize: '0.85rem', color: 'var(--text-main)' }}>🏢 CNPJ do Seu Órgão / Estabelecimento (Configurável):</strong>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Usado para validar se a nota fiscal foi emitida para o seu estabelecimento.</div>
+                      <strong style={{ fontSize: '0.85rem', color: 'var(--text-main)' }}>🏢 Seu Órgão / Estabelecimento Tomador:</strong>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Usado para conferir destinatário e determinar incidência territorial de ISSQN (LC 116/2003).</div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        style={{ padding: '4px 8px', fontSize: '0.82rem', width: '170px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
-                        value={cnpjMeuEstabelecimento} 
-                        onChange={(e) => handleSalvarCnpjConfigurado(e.target.value)} 
-                        placeholder="15.126.437/0006-58"
-                      />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <div>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>CNPJ DO ÓRGÃO:</span>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '4px 8px', fontSize: '0.82rem', width: '165px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
+                          value={cnpjMeuEstabelecimento} 
+                          onChange={(e) => handleSalvarCnpjConfigurado(e.target.value)} 
+                          placeholder="15.126.437/0006-58"
+                        />
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>CIDADE DO ÓRGÃO:</span>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '4px 8px', fontSize: '0.82rem', width: '130px', fontWeight: 700 }}
+                          value={municipioMeuOrgao} 
+                          onChange={(e) => handleSalvarMunicipioConfigurado(e.target.value)} 
+                          placeholder="Vitória"
+                          title="Cidade sede do seu órgão / tomador (obtida via Receita Federal ou ajustável manualmente)"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -843,8 +903,43 @@ export default function App() {
                   <div className="card" style={{ marginBottom: '20px', background: '#f8fafc', border: '1px solid #cbd5e1' }}>
                     <h3 className="card-title" style={{ margin: '0 0 12px 0' }}>
                       <Percent size={18} color="var(--primary)" />
-                      Configurações de Serviços, ISS (Vitória/ES) & INSS
+                      Configurações de Serviços, ISS (Territorialidade) & INSS
                     </h3>
+
+                    {/* Local da Prestação vs Cidade Sede do Órgão */}
+                    <div style={{ marginBottom: '14px', padding: '10px 12px', borderRadius: '6px', background: '#ffffff', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0369a1', margin: 0 }}>
+                          📍 Local de Execução / Prestação do Serviço:
+                        </label>
+                        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                          Regra LC 116/2003: ISS só incide se for executado em <strong>{municipioMeuOrgao}</strong>
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '6px 10px', fontSize: '0.82rem', flex: 1, fontWeight: 600 }}
+                          value={localPrestacaoServico} 
+                          onChange={(e) => setLocalPrestacaoServico(e.target.value)} 
+                          placeholder={`Ex: ${municipioMeuOrgao}, Extrema, Belo Horizonte`}
+                        />
+                        <button 
+                          type="button" 
+                          className="btn btn-outline" 
+                          style={{ padding: '6px 10px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                          onClick={() => setLocalPrestacaoServico(municipioMeuOrgao)}
+                        >
+                          Usar {municipioMeuOrgao}
+                        </button>
+                      </div>
+                      {localPrestacaoServico && localPrestacaoServico.trim().toUpperCase() !== municipioMeuOrgao.trim().toUpperCase() && (
+                        <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#b45309', fontWeight: 600 }}>
+                          ℹ️ Serviço executado fora de {municipioMeuOrgao} ({localPrestacaoServico}): Alíquota do ISS retido será 0,00% na fonte.
+                        </div>
+                      )}
+                    </div>
 
                     <div className="form-row" style={{ gap: '16px', marginBottom: '12px' }}>
                       <div className="form-group" style={{ flex: 1 }}>
