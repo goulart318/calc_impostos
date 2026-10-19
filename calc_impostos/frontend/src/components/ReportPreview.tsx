@@ -526,10 +526,15 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   const handleSalvarPostgres = async () => {
     try {
       setSalvando(true);
+      const payloadParaSalvar = {
+        ...currentData,
+        numeroProcesso: currentData.numeroProcesso || null,
+        numeroEmpenho: currentData.numeroEmpenho || null
+      };
       const response = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentData)
+        body: JSON.stringify(payloadParaSalvar)
       });
 
       if (!response.ok) {
@@ -580,9 +585,19 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
             className="btn btn-outline" 
             onClick={handleSalvarPostgres}
             disabled={salvando}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              fontSize: '0.85rem',
+              borderColor: salvo ? '#16a34a' : '#059669',
+              color: salvo ? '#16a34a' : '#059669',
+              background: salvo ? '#f0fdf4' : '#ffffff',
+              fontWeight: 600
+            }}
           >
-            {salvo ? <CheckCircle2 size={16} color="#16a34a" /> : <Database size={16} />}
-            {salvo ? 'Salvo no PostgreSQL!' : salvando ? 'Gravando...' : 'Salvar no PostgreSQL'}
+            {salvo ? <CheckCircle2 size={16} color="#16a34a" /> : <Database size={16} color="#059669" />}
+            {salvo ? 'Salvo no Banco!' : salvando ? 'Gravando...' : 'Salvar no Banco de Dados'}
           </button>
 
           <button 

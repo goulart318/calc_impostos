@@ -385,29 +385,6 @@ export default function App() {
     setActiveTab('analise');
   };
 
-  const handleSalvarAnaliseNoBanco = async () => {
-    if (!resultado) return;
-    try {
-      const notaParaSalvar = {
-        ...resultado,
-        numeroProcesso: numeroProcesso || resultado.numeroProcesso || null,
-        numeroEmpenho: numeroEmpenho || resultado.numeroEmpenho || null
-      };
-      const res = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(notaParaSalvar)
-      });
-      if (res.ok) {
-        alert('✓ Análise fiscal gravada com sucesso no histórico do PostgreSQL!');
-      } else {
-        alert('Erro ao gravar análise no banco de dados.');
-      }
-    } catch (e) {
-      alert('Erro de conexão ao salvar no banco.');
-    }
-  };
-
   const handleAddItem = () => {
     setItens([
       ...itens,
@@ -1158,16 +1135,6 @@ export default function App() {
               <div className="right-panel" id="secao-relatorio-conferencia">
                 {resultado ? (
                   <div>
-                    <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                      <button 
-                        className="btn-primary" 
-                        type="button" 
-                        onClick={handleSalvarAnaliseNoBanco}
-                        style={{ padding: '8px 16px', fontSize: '0.85rem', background: '#059669' }}
-                      >
-                        <Database size={16} /> Salvar Análise no Banco de Dados
-                      </button>
-                    </div>
                     <ReportPreview 
                       data={resultado} 
                       onUpdateData={(novoResultado) => {
