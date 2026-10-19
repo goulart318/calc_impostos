@@ -423,6 +423,10 @@ app.post('/api/recalcular', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Dados inválidos para recálculo de nota fiscal.' });
     }
 
+    if (req.body.aliqIss !== undefined) {
+      params.aliqIss = parseFloat(String(req.body.aliqIss));
+    }
+
     const resultado = await TaxEngine.processarNota(params);
     if (req.body.optanteSimei !== undefined) resultado.optanteSimei = req.body.optanteSimei;
     if (req.body.dataOpcaoSimples !== undefined) resultado.dataOpcaoSimples = req.body.dataOpcaoSimples;

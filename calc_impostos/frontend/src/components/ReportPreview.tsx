@@ -318,6 +318,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         } else {
           it.naturezaRendimentoReinf = conf.reinfPadrao;
         }
+        // Nota: NÃO altera it.aliqIss nem it.aliqInss ao mudar preset federal, preservando as customizações do usuário!
       }
 
       clone[index] = it;
@@ -349,13 +350,11 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         }
       }
 
-      // Se o usuário digitou ou selecionou uma Natureza de Rendimento que possui DARF obrigatório específico
+      // Se o usuário digitou ou selecionou uma Natureza de Rendimento que possui DARF correspondente
       if (campo === 'naturezaRendimentoReinf') {
         const natNormalizada = String(valor || '').trim().toUpperCase();
         const darfCorrespondente = MAPA_NATUREZA_PARA_DARF[natNormalizada];
         if (darfCorrespondente && darfCorrespondente !== it.codigoReceitaDarf) {
-          // Se o usuário selecionou uma natureza de outro grupo (ex: 17099 de serviços tendo DARF 6147, ou 17022 de alíq zero tendo 6147)
-          // Atualiza o código DARF e as alíquotas padrão automaticamente para manter coerência
           if (TABELA_RECEITAS_DARF[darfCorrespondente]) {
             const conf = TABELA_RECEITAS_DARF[darfCorrespondente];
             it.codigoReceitaDarf = darfCorrespondente;
@@ -465,6 +464,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         municipioTomador: currentData.municipioTomador,
         valorMateriaisInss: currentData.totalMateriaisInssDeducao,
         valorContaVinculada: currentData.totalContaVinculada,
+        aliqIss: currentData.aliqIssAplicada,
         itens: itensEditados.map(item => ({
           numeroItem: item.numeroItem,
           descricao: item.descricao,
@@ -476,8 +476,8 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
           manualAliqCsll: item.preset === 'MANUAL' ? item.aliqCsll : undefined,
           manualAliqPis: item.preset === 'MANUAL' ? item.aliqPis : undefined,
           manualAliqCofins: item.preset === 'MANUAL' ? item.aliqCofins : undefined,
-          manualAliqInss: item.preset === 'MANUAL' ? item.aliqInss : undefined,
-          manualAliqIss: item.preset === 'MANUAL' ? item.aliqIss : undefined,
+          manualAliqInss: item.aliqInss !== undefined ? Number(item.aliqInss) : undefined,
+          manualAliqIss: item.aliqIss !== undefined ? Number(item.aliqIss) : undefined,
           manualCodigoDarf: item.codigoReceitaDarf ? item.codigoReceitaDarf.trim() : undefined,
           manualNaturezaReinf: item.naturezaRendimentoReinf ? item.naturezaRendimentoReinf.trim() : undefined,
         }))
@@ -496,7 +496,10 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
 
       const resultadoNovo: ResultadoConsolidado = await res.json();
       setCurrentData(resultadoNovo);
-      setModificado(true);
+      setDadosOriginais(resultadoNovo);
+      setModificado(false);
+      // Preserva e atualiza o estado de itensEditados com os valores recém recalculados pelo motor
+      setItensEditados(resultadoNovo.itens.map(itemParaEditavel));
       if (onUpdateData) {
         onUpdateData(resultadoNovo);
       }
@@ -684,28 +687,53 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
 
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             {currentData.tipoDocumento === 'NFSE' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #bae6fd' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1' }}>🏦 Conta Vinculada (R$):</span>
-                <input 
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className="form-input"
-                  value={currentData.totalContaVinculada || ''}
-                  placeholder="0,00"
-                  onChange={(e) => {
-                    const novoVal = parseFloat(e.target.value) || 0;
-                    setCurrentData(prev => ({
-                      ...prev,
-                      totalContaVinculada: novoVal,
-                      totalRetidoGeral: Number(((prev.totalFederal + prev.totalInss + prev.totalIss + novoVal)).toFixed(2)),
-                      valorLiquido: Number((prev.totalBruto - (prev.totalFederal + prev.totalInss + prev.totalIss + novoVal)).toFixed(2))
-                    }));
-                    setModificado(true);
-                  }}
-                  style={{ width: '110px', padding: '4px 6px', fontSize: '0.8rem', fontWeight: 700, color: '#b45309' }}
-                />
-              </div>
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #bae6fd' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1' }}>🏛️ Alíquota ISS (%):</span>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="10"
+                    className="form-input"
+                    value={currentData.aliqIssAplicada !== undefined ? currentData.aliqIssAplicada : 5.00}
+                    placeholder="5.00"
+                    onChange={(e) => {
+                      const novaAliq = parseFloat(e.target.value) || 0;
+                      setCurrentData(prev => ({
+                        ...prev,
+                        aliqIssAplicada: novaAliq
+                      }));
+                      setItensEditados(prev => prev.map(it => ({ ...it, aliqIss: novaAliq })));
+                      setModificado(true);
+                    }}
+                    style={{ width: '80px', padding: '4px 6px', fontSize: '0.8rem', fontWeight: 700, color: '#0369a1', textAlign: 'right' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #bae6fd' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1' }}>🏦 Conta Vinculada (R$):</span>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="form-input"
+                    value={currentData.totalContaVinculada || ''}
+                    placeholder="0,00"
+                    onChange={(e) => {
+                      const novoVal = parseFloat(e.target.value) || 0;
+                      setCurrentData(prev => ({
+                        ...prev,
+                        totalContaVinculada: novoVal,
+                        totalRetidoGeral: Number(((prev.totalFederal + prev.totalInss + prev.totalIss + novoVal)).toFixed(2)),
+                        valorLiquido: Number((prev.totalBruto - (prev.totalFederal + prev.totalInss + prev.totalIss + novoVal)).toFixed(2))
+                      }));
+                      setModificado(true);
+                    }}
+                    style={{ width: '110px', padding: '4px 6px', fontSize: '0.8rem', fontWeight: 700, color: '#b45309' }}
+                  />
+                </div>
+              </>
             )}
 
             <button
@@ -1137,21 +1165,25 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                       step="0.01"
                       className="form-input"
                       value={item.aliqInss}
-                      disabled={item.preset !== 'MANUAL'}
                       onChange={(e) => handleAtualizarCampo(index, 'aliqInss', parseFloat(e.target.value) || 0)}
                       style={{ padding: '4px 6px', fontSize: '0.8rem', textAlign: 'right' }}
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '0.65rem', fontWeight: 700, color: '#475569', display: 'block' }}>ISS (%)</label>
+                    <label style={{ fontSize: '0.65rem', fontWeight: 700, color: '#0369a1', display: 'block' }}>ISS (%)</label>
                     <input
                       type="number"
                       step="0.01"
                       className="form-input"
                       value={item.aliqIss}
-                      disabled={item.preset !== 'MANUAL'}
-                      onChange={(e) => handleAtualizarCampo(index, 'aliqIss', parseFloat(e.target.value) || 0)}
-                      style={{ padding: '4px 6px', fontSize: '0.8rem', textAlign: 'right' }}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        handleAtualizarCampo(index, 'aliqIss', val);
+                        if (index === 0) {
+                          setCurrentData(prev => ({ ...prev, aliqIssAplicada: val }));
+                        }
+                      }}
+                      style={{ padding: '4px 6px', fontSize: '0.8rem', textAlign: 'right', fontWeight: 700, borderColor: '#38bdf8' }}
                     />
                   </div>
                 </div>
@@ -1179,7 +1211,6 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                       value={item.codigoReceitaDarf}
                       onChange={(e) => {
                         handleAtualizarCampo(index, 'codigoReceitaDarf', e.target.value.toUpperCase());
-                        if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
                       }}
                       placeholder="Ex: 6147, 6190, 8767, ISENTO"
                       style={{ padding: '6px 10px', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', fontWeight: 700, width: '130px' }}
@@ -1221,7 +1252,6 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                       value={item.naturezaRendimentoReinf}
                       onChange={(e) => {
                         handleAtualizarCampo(index, 'naturezaRendimentoReinf', e.target.value.toUpperCase());
-                        if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
                       }}
                       placeholder="Ex: 17009, 17008, 17022, 17099, 17033"
                       style={{ padding: '6px 10px', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', fontWeight: 700, width: '130px' }}
