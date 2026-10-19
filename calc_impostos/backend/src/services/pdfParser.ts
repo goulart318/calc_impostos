@@ -80,11 +80,17 @@ export class PdfParser {
 
     // 2. CHAVE DE ACESSO
     let chaveAcesso = '';
-    const chaveMatch = text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)([\d\s-]{44,60})/i) ||
-                       text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)?(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}|\d{44,50})/i);
-    if (chaveMatch) {
-      const candidata = chaveMatch[1].replace(/[\s-]/g, '');
-      if (candidata.length >= 44 && candidata.length <= 50) chaveAcesso = candidata;
+    const regexChaveDanfe44 = /\b(\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4})\b/;
+    const matchDanfe44 = text.match(regexChaveDanfe44);
+    if (matchDanfe44) {
+      chaveAcesso = matchDanfe44[1].replace(/\s/g, '');
+    } else {
+      const chaveMatch = text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)([\d\s-]{44,60})/i) ||
+                         text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)?(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}|\d{44,50})/i);
+      if (chaveMatch) {
+        const candidata = chaveMatch[1].replace(/[\s-]/g, '');
+        if (candidata.length >= 44 && candidata.length <= 50) chaveAcesso = candidata;
+      }
     }
 
     // 3. NÚMERO DA NOTA FISCAL
@@ -188,10 +194,12 @@ export class PdfParser {
       }
     }
 
-    // Fallbacks para DANFEs genéricas
+    // Fallbacks para DANFEs de NF-e e documentos estruturados
     const cnpjMatches = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g) || [];
+
+    // Se temos a chave de acesso de 44 dígitos da NF-e, o CNPJ do emitente é 100% determinístico (posições 7 a 20)
     if (!fornecedorCnpj) {
-      if (chaveAcesso && chaveAcesso.length >= 44) {
+      if (chaveAcesso && chaveAcesso.length === 44) {
         const cnpjRaw = chaveAcesso.substring(6, 20);
         fornecedorCnpj = `${cnpjRaw.substring(0,2)}.${cnpjRaw.substring(2,5)}.${cnpjRaw.substring(5,8)}/${cnpjRaw.substring(8,12)}-${cnpjRaw.substring(12,14)}`;
       } else if (cnpjMatches.length > 0) {
@@ -199,6 +207,7 @@ export class PdfParser {
       }
     }
 
+    // Identificação do Destinatário: qualquer CNPJ do documento que não seja o do fornecedor/emitente
     if (!destinatarioCnpj) {
       const cnpjEmitenteClean = fornecedorCnpj.replace(/\D/g, '');
       for (const cnpjCad of cnpjMatches) {
@@ -220,7 +229,37 @@ export class PdfParser {
     }
 
     if (!destinatarioNome) {
-      destinatarioNome = 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH';
+      // 1) Se identificou o CNPJ do destinatário, busca o nome da empresa nas linhas adjacentes
+      if (destinatarioCnpj) {
+        const linhasDoc = text.split(/[\r\n]+/);
+        const idxLinhaCnpj = linhasDoc.findIndex(l => l.includes(destinatarioCnpj));
+        if (idxLinhaCnpj !== -1) {
+          for (let k = idxLinhaCnpj - 1; k >= Math.max(0, idxLinhaCnpj - 8); k--) {
+            const linhaCand = linhasDoc[k].trim();
+            if (
+              linhaCand.length >= 5 &&
+              !/^\d{5}-?\d{3}$/.test(linhaCand) &&
+              !/^\d+$/.test(linhaCand) &&
+              !/^\d{2}\/\d{2}\/\d{4}/.test(linhaCand) &&
+              !/^\d{2}:\d{2}(?::\d{2})?$/.test(linhaCand) &&
+              !/^(?:NOME|RAZ[ÃA]O|DESTINAT[ÁA]RIO|ENDERE[ÇC]O|CNPJ|MUNIC[ÍI]PIO|DATA|HORA|BAIRRO|CEP|INSCRI|UF|FONE|PROTOCOLO)/i.test(linhaCand)
+            ) {
+              destinatarioNome = this.formatarNomeEmpresa(linhaCand);
+              break;
+            }
+          }
+        }
+      }
+
+      // 2) Busca por menção de órgãos conhecidos no documento (ex: recebedor na DANFE)
+      if (!destinatarioNome) {
+        const matchRecebedor = text.match(/IDENTIFICA[ÇC][ÃA]O\s*(?:E\s*ASSINATURA)?\s*DO\s*RECEBEDOR\s*\(([^)]+)\)/i);
+        if (matchRecebedor && matchRecebedor[1]) {
+          destinatarioNome = this.formatarNomeEmpresa(matchRecebedor[1].trim());
+        } else {
+          destinatarioNome = 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH';
+        }
+      }
     }
 
     // 5. VALORES E RETENÇÕES DESTAQUE NA NFS-E
@@ -231,14 +270,14 @@ export class PdfParser {
       /VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O\s*:?\s*R?\$?\s*([\d\.,]+)/i,
       /VALOR\s+TOTAL\s+DO\s+SERVIÇO\s*:?\s*R?\$?\s*([\d\.,]+)/i,
       /VALOR\s*TOTAL\s*DA\s*NFS-e\s*:?\s*R?\$?\s*([\d\.,]+)/i,
-      /VALOR\s*TOTAL\s*DA\s*NOTA\s*:?\s*R?\$?\s*([\d\.,]+)/i,
-      /VALOR\s+L[ÍI]QUIDO[^\d]*([\d\.,]+)/i,
-      /VALOR\s+TOTAL[^\d]*R?\$?\s*([\d\.,]+)/i
+      /VALOR\s*TOTAL\s*DA\s*NOTA\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      /VALOR\s+L[ÍI]QUIDO[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      /VALOR\s+TOTAL[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ] : [
-      /VALOR\s*TOTAL\s*DA\s*NOTA[^\d]*([\d\.,]+)/i,
-      /VALOR\s*TOTAL\s*DOS\s*PRODUTOS[^\d]*([\d\.,]+)/i,
-      /VALOR\s+L[ÍI]QUIDO[^\d]*([\d\.,]+)/i,
-      /VALOR\s+TOTAL[^\d]*R?\$?\s*([\d\.,]+)/i
+      /VALOR\s*TOTAL\s*DA\s*NOTA\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      /VALOR\s*TOTAL\s*DOS\s*PRODUTOS\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      /VALOR\s+L[ÍI]QUIDO[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      /VALOR\s+TOTAL[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ];
 
     for (const pv of padroesValorNota) {
@@ -249,6 +288,19 @@ export class PdfParser {
         if (!isNaN(vNum) && vNum > 0) {
           valorTotal = vNum;
           break;
+        }
+      }
+    }
+
+    // Fallback de valor total para DANFEs com quebras de linha entre o rótulo e o valor
+    if (!valorTotal) {
+      const rDanfeTotal = /VALOR\s*TOTAL\s*DA\s*NOTA[^\n]*\n(?:[^\n]*\n){1,35}?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i;
+      const mTot = text.match(rDanfeTotal);
+      if (mTot && mTot[1]) {
+        const vClean = mTot[1].replace(/\./g, '').replace(',', '.');
+        const vNum = parseFloat(vClean);
+        if (!isNaN(vNum) && vNum > 0) {
+          valorTotal = vNum;
         }
       }
     }
@@ -413,33 +465,50 @@ export class PdfParser {
       // 1) Busca detalhada por linha na seção de produtos (suporta tabelas compactadas/coladas)
       const linhasSecao = secaoProdutos.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
       let descrCandidata = '';
-      for (const linha of linhasSecao) {
-        if (/^(?:DADOS|C[ÓO]DIGO|DESCRI|VALOR|UNIT|TOTAL|DESC|B\.C[ÁA]LC|ICMS|AL[ÍI]Q|IPI)/i.test(linha)) {
+      for (let i = 0; i < linhasSecao.length; i++) {
+        const linha = linhasSecao[i];
+        if (/^(?:DADOS|C[ÓO]DIGO|DESCRI|VALOR|UNIT|TOTAL|DESC|B\.C[ÁA]LC|ICMS|AL[ÍI]Q|IPI|CSOSN)/i.test(linha)) {
           continue;
         }
 
         // Procura linha que comece com NCM válido de 8 dígitos colado ou com espaços
-        // Exemplo: "901839291/406108NO190,000017,50003.325,000..." ou "9018.39.29"
-        const matchColadoLinha = linha.match(/^(\d{8})(?:(\d|\d\/\d{2}|\d{3}))?(\d{4})?([A-Za-z]{2,4})?([\d\.,]+)/);
+        const matchColadoLinha = linha.match(/^(\d{8})(?:(\d{3,4}|\d\/\d{2}|\d{1,2}))?([A-Za-z]{2,4})?([\d\.,]+)/);
         if (matchColadoLinha) {
           const candidato = matchColadoLinha[1];
           if (this.ehNcmValido(candidato)) {
             const rawCst = matchColadoLinha[2] || '01';
             const cstLimpo = rawCst.replace(/\D/g, '').substring(0, 2) || '01';
-            if (!ncmsEncontrados.some(x => x.ncm === candidato)) {
-              ncmsEncontrados.push({
-                ncm: candidato,
-                cst: cstLimpo,
-                descricao: descrCandidata || undefined
-              });
+
+            // Descrição pode estar na linha seguinte (muito comum em DANFEs) ou na anterior / descrCandidata
+            let descrItem = '';
+            if (i + 1 < linhasSecao.length) {
+              const prox = linhasSecao[i + 1];
+              if (!/^\d{8}/.test(prox) && !prox.startsWith('Codigo CEST') && !prox.startsWith('Total') && !prox.startsWith('CSOSN') && !/^\d+$/.test(prox)) {
+                descrItem = prox;
+              }
             }
+            if (!descrItem) {
+              descrItem = descrCandidata;
+            }
+            if (!descrItem && i - 1 >= 0) {
+              const ant = linhasSecao[i - 1];
+              if (!/^\d{8}/.test(ant) && !ant.startsWith('Codigo CEST') && !ant.startsWith('Total') && !ant.startsWith('CSOSN') && !/^\d+$/.test(ant)) {
+                descrItem = ant;
+              }
+            }
+
+            ncmsEncontrados.push({
+              ncm: candidato,
+              cst: cstLimpo,
+              descricao: descrItem || undefined
+            });
             descrCandidata = '';
             continue;
           }
         }
 
         // Se não for linha de NCM, mas for texto de descrição válido (ignora Lote, Reg. ANVISA, etc.)
-        if (!linha.startsWith('Reg.') && !linha.startsWith('Lote:') && !linha.startsWith('Validade:') && !/^\d{2}\/\d{2}\/\d{4}$/.test(linha)) {
+        if (!linha.startsWith('Reg.') && !linha.startsWith('Lote:') && !linha.startsWith('Validade:') && !/^\d{2}\/\d{2}\/\d{4}$/.test(linha) && !linha.startsWith('Codigo CEST') && !/^\d+$/.test(linha)) {
           if (!descrCandidata) {
             descrCandidata = linha;
           }
