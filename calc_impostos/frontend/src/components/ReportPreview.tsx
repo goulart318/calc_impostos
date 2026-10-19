@@ -337,8 +337,8 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
           manualAliqCofins: item.preset === 'MANUAL' ? item.aliqCofins : undefined,
           manualAliqInss: item.preset === 'MANUAL' ? item.aliqInss : undefined,
           manualAliqIss: item.preset === 'MANUAL' ? item.aliqIss : undefined,
-          manualCodigoDarf: item.preset === 'MANUAL' ? item.codigoReceitaDarf : undefined,
-          manualNaturezaReinf: item.preset === 'MANUAL' ? item.naturezaRendimentoReinf : undefined,
+          manualCodigoDarf: item.codigoReceitaDarf ? item.codigoReceitaDarf.trim() : undefined,
+          manualNaturezaReinf: item.naturezaRendimentoReinf ? item.naturezaRendimentoReinf.trim() : undefined,
         }))
       };
 
@@ -910,31 +910,95 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                 </div>
               </div>
 
-              {/* Linha 3: Códigos de Retenção Manuais se Preset MANUAL */}
-              {item.preset === 'MANUAL' && (
-                <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0369a1', display: 'block' }}>CÓDIGO RECEITA DARF:</label>
+              {/* Linha 3: Códigos de Retenção e Classificação Fiscal (DARF e EFD-REINF) sempre editáveis */}
+              <div style={{ 
+                marginTop: '12px', 
+                padding: '10px 14px',
+                borderRadius: '6px',
+                background: '#ffffff',
+                border: '1px solid #bae6fd',
+                display: 'grid', 
+                gridTemplateColumns: '1fr 1fr', 
+                gap: '14px' 
+              }}>
+                <div>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                    🏷️ CÓDIGO DA RECEITA DARF (RFB):
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     <input
                       type="text"
                       className="form-input"
                       value={item.codigoReceitaDarf}
-                      onChange={(e) => handleAtualizarCampo(index, 'codigoReceitaDarf', e.target.value)}
-                      style={{ padding: '4px 8px', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                      onChange={(e) => {
+                        handleAtualizarCampo(index, 'codigoReceitaDarf', e.target.value.toUpperCase());
+                        if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
+                      }}
+                      placeholder="Ex: 6147, 6190, 8767, ISENTO"
+                      style={{ padding: '6px 10px', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', fontWeight: 700, width: '130px' }}
                     />
+                    <select
+                      className="form-select"
+                      value={['6147', '6190', '6175', '8767', 'ISENTO'].includes(item.codigoReceitaDarf) ? item.codigoReceitaDarf : 'OUTRO'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val !== 'OUTRO') {
+                          handleAtualizarCampo(index, 'codigoReceitaDarf', val);
+                          if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
+                        }
+                      }}
+                      style={{ fontSize: '0.8rem', padding: '4px 6px', flex: 1, borderColor: '#cbd5e1' }}
+                    >
+                      <option value="6147">6147 — Mercadorias / Bens / Obras (5,85%)</option>
+                      <option value="6190">6190 — Prestação de Serviços em Geral (9,45%)</option>
+                      <option value="6175">6175 — Transporte de Passageiros / Cargas (7,05%)</option>
+                      <option value="8767">8767 — Medicamentos / Monofásicos PIS/COFINS (2,20%)</option>
+                      <option value="ISENTO">ISENTO — Dispensa / Imune de Retenção Federal (0%)</option>
+                      <option value="OUTRO">Outro Código (digitar ao lado)</option>
+                    </select>
                   </div>
-                  <div>
-                    <label style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0369a1', display: 'block' }}>NATUREZA REINF (SÉRIE R-4000):</label>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                    📌 NATUREZA DE RENDIMENTO (EFD-REINF R-4020):
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     <input
                       type="text"
                       className="form-input"
                       value={item.naturezaRendimentoReinf}
-                      onChange={(e) => handleAtualizarCampo(index, 'naturezaRendimentoReinf', e.target.value)}
-                      style={{ padding: '4px 8px', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                      onChange={(e) => {
+                        handleAtualizarCampo(index, 'naturezaRendimentoReinf', e.target.value.toUpperCase());
+                        if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
+                      }}
+                      placeholder="Ex: 17009, 17022, 17099, 17033"
+                      style={{ padding: '6px 10px', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', fontWeight: 700, width: '130px' }}
                     />
+                    <select
+                      className="form-select"
+                      value={['17009', '17022', '17099', '17033', '17023', '17002', 'ISENTO'].includes(item.naturezaRendimentoReinf) ? item.naturezaRendimentoReinf : 'OUTRO'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val !== 'OUTRO') {
+                          handleAtualizarCampo(index, 'naturezaRendimentoReinf', val);
+                          if (item.preset !== 'MANUAL') handleAtualizarCampo(index, 'preset', 'MANUAL');
+                        }
+                      }}
+                      style={{ fontSize: '0.8rem', padding: '4px 6px', flex: 1, borderColor: '#cbd5e1' }}
+                    >
+                      <option value="17009">17009 — Bens / Mercadorias para Consumo ou Revenda</option>
+                      <option value="17022">17022 — Medicamentos / Produtos com Alíquota Zero PIS/COFINS</option>
+                      <option value="17099">17099 — Demais Serviços sujeitos à retenção de tributos</option>
+                      <option value="17033">17033 — Locação / Cessão de mão de obra (dedicação exclusiva)</option>
+                      <option value="17023">17023 — Serviços de transporte de passageiros</option>
+                      <option value="17002">17002 — Energia Elétrica</option>
+                      <option value="ISENTO">ISENTO — Rendimento não sujeito a retenção</option>
+                      <option value="OUTRO">Outra Natureza (digitar ao lado)</option>
+                    </select>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           ))
         )}
