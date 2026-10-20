@@ -146,6 +146,12 @@ export interface ResultadoConsolidado {
     tipoApuracao: 'CONFERE_11_PORCENTO' | 'DIVERGENCIA_BASE_OU_ALIQUOTA' | 'ISENTO_OU_NAO_DESTACADO';
     mensagemAlerta?: string;
   };
+
+  // Cruzamento e Histórico de Análises Anteriores
+  jaAnalisadaAntes?: boolean;
+  idRegistroHistorico?: number;
+  dataAnaliseAnterior?: string;
+  mensagemCruzamento?: string;
 }
 
 export class TaxEngine {

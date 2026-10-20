@@ -97,6 +97,12 @@ export interface ResultadoConsolidado {
     tipoApuracao: 'CONFERE_11_PORCENTO' | 'DIVERGENCIA_BASE_OU_ALIQUOTA' | 'ISENTO_OU_NAO_DESTACADO';
     mensagemAlerta?: string;
   };
+
+  // Cruzamento e Histórico de Análises Anteriores
+  jaAnalisadaAntes?: boolean;
+  idRegistroHistorico?: number;
+  dataAnaliseAnterior?: string;
+  mensagemCruzamento?: string;
 }
 
 export const gerarNomeArquivoPdf = (numeroNota?: string, fornecedorNome?: string): string => {
@@ -800,6 +806,43 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
       {/* Documento Visual Idêntico ao Modelo do SEI */}
       <div className="report-document">
         
+        {/* Banner Informativo de Cruzamento / Nota já analisada antes */}
+        {currentData.jaAnalisadaAntes && (
+          <div style={{
+            marginBottom: '16px',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            background: '#f0fdf4',
+            border: '1px solid #86efac',
+            color: '#166534',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle2 size={18} color="#16a34a" />
+              <span>
+                <strong>Cruzamento Automático do Histórico:</strong> {currentData.mensagemCruzamento || `Nota fiscal analisada anteriormente em ${currentData.dataAnaliseAnterior || 'data anterior'}.`}
+              </span>
+            </div>
+            {currentData.numeroProcesso && (
+              <span style={{
+                background: '#dcfce7',
+                color: '#15803d',
+                fontWeight: 700,
+                padding: '3px 10px',
+                borderRadius: '6px',
+                border: '1px solid #86efac',
+                whiteSpace: 'nowrap'
+              }}>
+                Processo SEI: {currentData.numeroProcesso}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Cabeçalho */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>

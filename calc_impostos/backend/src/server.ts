@@ -9,6 +9,7 @@ import { PdfParser } from './services/pdfParser';
 import { XmlParser } from './services/xmlParser';
 import { CnpjService } from './services/cnpjService';
 import { PdfReportGenerator } from './services/pdfReportGenerator';
+import { HistoryService } from './services/historyService';
 
 dotenv.config();
 
@@ -37,6 +38,67 @@ const uploadSingleFile = (req: Request, res: Response, next: any) => {
 // Inicializa o banco de dados
 initDatabase();
 
+/**
+ * Cruza a nota fiscal analisada com o histórico no banco de dados.
+ * Se já foi analisada antes, preenche automaticamente o número do processo SEI e nota de empenho,
+ * além de persistir/atualizar o registro sem gerar duplicidade.
+ */
+async function cruzarComHistoricoEAutoPreencher(
+  resultado: ResultadoConsolidado,
+  processoInformadoReq?: string,
+  empenhoInformadoReq?: string
+): Promise<ResultadoConsolidado> {
+  try {
+    const notaAnterior = await HistoryService.buscarNotaHistorico({
+      chaveAcesso: resultado.chaveAcesso,
+      numeroNota: resultado.numeroNota,
+      fornecedorCnpj: resultado.fornecedorCnpj,
+      tipoDocumento: resultado.tipoDocumento
+    });
+
+    if (notaAnterior) {
+      resultado.jaAnalisadaAntes = true;
+      resultado.idRegistroHistorico = notaAnterior.id;
+      if (notaAnterior.updatedAt || notaAnterior.createdAt) {
+        const dt = new Date(notaAnterior.updatedAt || notaAnterior.createdAt);
+        resultado.dataAnaliseAnterior = dt.toLocaleDateString('pt-BR') + ' às ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      // Se a requisição atual não enviou o número do processo, preenche automaticamente do histórico!
+      const procReq = (processoInformadoReq || '').trim();
+      if (!procReq && !resultado.numeroProcesso && notaAnterior.numeroProcesso) {
+        resultado.numeroProcesso = notaAnterior.numeroProcesso;
+      }
+
+      // Se a requisição atual não enviou a nota de empenho, preenche automaticamente do histórico!
+      const empReq = (empenhoInformadoReq || '').trim();
+      if (!empReq && !resultado.numeroEmpenho && notaAnterior.numeroEmpenho) {
+        resultado.numeroEmpenho = notaAnterior.numeroEmpenho;
+      }
+
+      if (resultado.numeroProcesso) {
+        resultado.mensagemCruzamento = `✓ Nota fiscal já analisada anteriormente (${resultado.dataAnaliseAnterior || 'no histórico'}). Processo SEI (${resultado.numeroProcesso}) preenchido automaticamente.`;
+      } else {
+        resultado.mensagemCruzamento = `✓ Nota fiscal já analisada anteriormente (${resultado.dataAnaliseAnterior || 'no histórico'}).`;
+      }
+    }
+
+    // Persistência automática no banco (UPSERT sem duplicidade)
+    const saveRes = await HistoryService.salvarOuAtualizarNota(resultado);
+    resultado.idRegistroHistorico = saveRes.id;
+    if (saveRes.numeroProcesso && !resultado.numeroProcesso) {
+      resultado.numeroProcesso = saveRes.numeroProcesso;
+    }
+    if (saveRes.numeroEmpenho && !resultado.numeroEmpenho) {
+      resultado.numeroEmpenho = saveRes.numeroEmpenho;
+    }
+  } catch (err: any) {
+    console.warn('Aviso no cruzamento histórico:', err?.message || err);
+  }
+
+  return resultado;
+}
+
 // =========================================================================
 // 1. ENDPOINTS DE PROCESSAMENTO E CÁLCULO FISCAL
 // =========================================================================
@@ -46,6 +108,7 @@ app.post('/api/analisar', async (req: Request, res: Response) => {
   try {
     const params: ParametrosCalculo = req.body;
     const resultado = await TaxEngine.processarNota(params);
+    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
     res.json(resultado);
   } catch (error: any) {
     console.error('Erro na análise:', error);
@@ -119,6 +182,8 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
     resultado.optanteSimei = optanteSimei;
     resultado.dataOpcaoSimples = dataOpcaoSimples;
     resultado.fonteConsultaCnpj = fonteConsultaCnpj;
+
+    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
 
     res.json(resultado);
   } catch (error: any) {
@@ -204,6 +269,8 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
     resultado.optanteSimei = optanteSimei;
     resultado.dataOpcaoSimples = dataOpcaoSimples;
     resultado.fonteConsultaCnpj = fonteConsultaCnpj;
+
+    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
 
     res.json(resultado);
   } catch (error: any) {
@@ -308,6 +375,8 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
         resultado.optanteSimei = optanteSimei;
         resultado.dataOpcaoSimples = dataOpcaoSimples;
         resultado.fonteConsultaCnpj = fonteConsultaCnpj;
+
+        await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
 
         notasResultados.push(resultado);
       } catch (errNota: any) {
@@ -432,6 +501,8 @@ app.post('/api/recalcular', async (req: Request, res: Response) => {
     if (req.body.dataOpcaoSimples !== undefined) resultado.dataOpcaoSimples = req.body.dataOpcaoSimples;
     if (req.body.fonteConsultaCnpj !== undefined) resultado.fonteConsultaCnpj = req.body.fonteConsultaCnpj;
 
+    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
+
     res.json(resultado);
   } catch (error: any) {
     console.error('Erro ao recalcular nota fiscal:', error);
@@ -448,6 +519,13 @@ app.post('/api/gerar-pdf', async (req: Request, res: Response) => {
     const resultado: ResultadoConsolidado = req.body;
     const pdfBuffer = await PdfReportGenerator.gerarRelatorio(resultado);
     const nomeArquivo = PdfReportGenerator.gerarNomeArquivo(resultado.numeroNota, resultado.fornecedorNome);
+
+    // Salva ou atualiza automaticamente no histórico sem gerar duplicatas
+    try {
+      await HistoryService.salvarOuAtualizarNota(resultado);
+    } catch (eSave) {
+      console.warn('Erro ao auto-salvar nota ao gerar PDF:', eSave);
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
@@ -495,36 +573,25 @@ app.get('/api/notas', async (req: Request, res: Response) => {
 });
 
 // =========================================================================
-// 3. PERSISTÊNCIA E BUSCA AVANÇADA NO POSTGRESQL
+// 3. PERSISTÊNCIA E BUSCA AVANÇADA NO POSTGRESQL (COM UPSERT / SEM DUPLICIDADE)
 // =========================================================================
 
-// Salvar / Atualizar Análise de Nota no PostgreSQL
+// Salvar / Atualizar Análise de Nota no PostgreSQL (Sem duplicidade)
 app.post('/api/notas/salvar', async (req: Request, res: Response) => {
   try {
     const r: ResultadoConsolidado = req.body;
+    const saveRes = await HistoryService.salvarOuAtualizarNota(r);
 
-    const query = `
-      INSERT INTO notas_analisadas (
-        tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
-        destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto,
-        valor_liquido, total_retido, dados_json, numero_processo, numero_empenho
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      RETURNING id;
-    `;
-
-    const values = [
-      r.tipoDocumento, r.numeroNota || 'S/N', r.chaveAcesso || null,
-      r.fornecedorCnpj, r.fornecedorNome,
-      r.destinatarioCnpj || null, r.destinatarioNome || null,
-      r.optanteSimples, r.totalBruto, r.valorLiquido, r.totalRetidoGeral,
-      JSON.stringify(r),
-      r.numeroProcesso || null, r.numeroEmpenho || null
-    ];
-
-    const result = await pool.query(query, values);
-    const notaId = result.rows[0].id;
-
-    res.json({ success: true, notaId, message: 'Análise gravada com sucesso no histórico PostgreSQL!' });
+    res.json({
+      success: true,
+      notaId: saveRes.id,
+      acao: saveRes.acao,
+      numeroProcesso: saveRes.numeroProcesso,
+      numeroEmpenho: saveRes.numeroEmpenho,
+      message: saveRes.acao === 'ATUALIZADA' 
+        ? 'Registro existente atualizado no histórico (sem duplicidade).' 
+        : 'Análise gravada com sucesso no histórico PostgreSQL!'
+    });
   } catch (error: any) {
     console.error('Erro ao salvar nota no PostgreSQL:', error);
     res.status(500).json({ error: error.message || 'Erro ao salvar análise no banco de dados.' });
@@ -533,27 +600,16 @@ app.post('/api/notas/salvar', async (req: Request, res: Response) => {
 
 // Alias para compatibilidade
 app.post('/api/salvar-nota', async (req: Request, res: Response) => {
-  // Redireciona internamente para o mesmo handler
   try {
     const r: ResultadoConsolidado = req.body;
-    const query = `
-      INSERT INTO notas_analisadas (
-        tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
-        destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto,
-        valor_liquido, total_retido, dados_json, numero_processo, numero_empenho
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      RETURNING id;
-    `;
-    const values = [
-      r.tipoDocumento, r.numeroNota || 'S/N', r.chaveAcesso || null,
-      r.fornecedorCnpj, r.fornecedorNome,
-      r.destinatarioCnpj || null, r.destinatarioNome || null,
-      r.optanteSimples, r.totalBruto, r.valorLiquido, r.totalRetidoGeral,
-      JSON.stringify(r),
-      r.numeroProcesso || null, r.numeroEmpenho || null
-    ];
-    const result = await pool.query(query, values);
-    res.json({ success: true, notaId: result.rows[0].id });
+    const saveRes = await HistoryService.salvarOuAtualizarNota(r);
+    res.json({
+      success: true,
+      notaId: saveRes.id,
+      acao: saveRes.acao,
+      numeroProcesso: saveRes.numeroProcesso,
+      numeroEmpenho: saveRes.numeroEmpenho
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Erro ao salvar análise no banco de dados.' });
   }

@@ -203,11 +203,25 @@ export default function App() {
       }
 
       const data = await res.json();
-      if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
-      if (numeroEmpenho && !data.numeroEmpenho) data.numeroEmpenho = numeroEmpenho;
+      if (data.numeroProcesso) {
+        setNumeroProcesso(data.numeroProcesso);
+      } else if (numeroProcesso && !data.numeroProcesso) {
+        data.numeroProcesso = numeroProcesso;
+      }
+
+      if (data.numeroEmpenho) {
+        setNumeroEmpenho(data.numeroEmpenho);
+      } else if (numeroEmpenho && !data.numeroEmpenho) {
+        data.numeroEmpenho = numeroEmpenho;
+      }
+
       setResultado(data);
-      setMensagemSucesso(`✓ Retenções calculadas com sucesso para a Nota Fiscal ${data.numeroNota || numeroNota}!`);
-      setTimeout(() => setMensagemSucesso(null), 6000);
+      if (data.jaAnalisadaAntes) {
+        setMensagemSucesso(`✓ Cruzamento do Histórico: Nota já analisada anteriormente (${data.dataAnaliseAnterior || 'no histórico'}). Processo SEI (${data.numeroProcesso || 'SEI'}) preenchido automaticamente!`);
+      } else {
+        setMensagemSucesso(`✓ Retenções calculadas com sucesso para a Nota Fiscal ${data.numeroNota || numeroNota}!`);
+      }
+      setTimeout(() => setMensagemSucesso(null), 8000);
 
       // Scroll suave até o relatório
       setTimeout(() => {
@@ -289,8 +303,17 @@ export default function App() {
       } catch {
         throw new Error('O servidor respondeu de forma incompleta. Aguarde alguns segundos (o servidor pode estar acordando) e tente novamente.');
       }
-      if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
-      if (numeroEmpenho && !data.numeroEmpenho) data.numeroEmpenho = numeroEmpenho;
+      if (data.numeroProcesso) {
+        setNumeroProcesso(data.numeroProcesso);
+      } else if (numeroProcesso && !data.numeroProcesso) {
+        data.numeroProcesso = numeroProcesso;
+      }
+
+      if (data.numeroEmpenho) {
+        setNumeroEmpenho(data.numeroEmpenho);
+      } else if (numeroEmpenho && !data.numeroEmpenho) {
+        data.numeroEmpenho = numeroEmpenho;
+      }
       setResultado(data);
 
       setNumeroNota(data.numeroNota || '');
@@ -343,8 +366,12 @@ export default function App() {
         condicaoEspecial: it.codigoReceitaDarf || undefined
       })));
 
-      setMensagemSucesso(`✓ Nota Fiscal ${data.numeroNota || 'processada'} carregada e analisada com sucesso!`);
-      setTimeout(() => setMensagemSucesso(null), 6000);
+      if (data.jaAnalisadaAntes) {
+        setMensagemSucesso(`✓ Cruzamento do Histórico: Nota já analisada anteriormente (${data.dataAnaliseAnterior || 'no histórico'}). Processo SEI (${data.numeroProcesso || 'SEI'}) preenchido automaticamente!`);
+      } else {
+        setMensagemSucesso(`✓ Nota Fiscal ${data.numeroNota || 'processada'} carregada e analisada com sucesso!`);
+      }
+      setTimeout(() => setMensagemSucesso(null), 8000);
 
       // Rola suavemente até o resumo/relatório
       setTimeout(() => {
