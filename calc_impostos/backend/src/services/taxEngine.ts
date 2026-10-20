@@ -929,6 +929,98 @@ export class TaxEngine {
       };
     }
 
+    // Aglutinação inteligente de itens por classificação tributária:
+    // Se itens da nota fiscal correspondem ao mesmo Código de Receita DARF e mesma Natureza de Rendimento REINF,
+    // aglutina tudo em um único valor/item consolidado por grupo tributário, conforme diretriz de processos de pagamento.
+    let itensFinais: ItemCalculado[] = itensCalculados;
+
+    if (itensCalculados.length > 1) {
+      const gruposMap = new Map<string, ItemCalculado[]>();
+
+      for (const item of itensCalculados) {
+        const chaveGrupo = `${item.codigoReceitaDarf}__${item.naturezaRendimentoReinf}__${item.aliqIr}__${item.aliqCsll}__${item.aliqCofins}__${item.aliqPis}__${item.aliqInss}__${item.aliqIss}`;
+        if (!gruposMap.has(chaveGrupo)) {
+          gruposMap.set(chaveGrupo, []);
+        }
+        gruposMap.get(chaveGrupo)!.push(item);
+      }
+
+      itensFinais = Array.from(gruposMap.entries()).map(([_, itensDoGrupo], idxGrupo) => {
+        if (itensDoGrupo.length === 1) {
+          return {
+            ...itensDoGrupo[0],
+            numeroItem: idxGrupo + 1
+          };
+        }
+
+        const modelo = itensDoGrupo[0];
+        const somaValorBruto = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorBruto, 0).toFixed(2));
+        const somaValorIr = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorIr, 0).toFixed(2));
+        const somaValorCsll = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorCsll, 0).toFixed(2));
+        const somaValorCofins = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorCofins, 0).toFixed(2));
+        const somaValorPis = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorPis, 0).toFixed(2));
+        const somaValorFederalTotal = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorFederalTotal, 0).toFixed(2));
+        const somaValorInss = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorInss, 0).toFixed(2));
+        const somaBaseCalculoInss = Number(itensDoGrupo.reduce((acc, it) => acc + it.baseCalculoInss, 0).toFixed(2));
+        const somaValorMateriaisInss = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorMateriaisInss, 0).toFixed(2));
+        const somaValorIss = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorIss, 0).toFixed(2));
+        const somaBaseCalculoIss = Number(itensDoGrupo.reduce((acc, it) => acc + it.baseCalculoIss, 0).toFixed(2));
+        const somaValorContaVinculada = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorContaVinculada, 0).toFixed(2));
+        const somaValorTotalRetido = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorTotalRetido, 0).toFixed(2));
+        const somaValorLiquido = Number(itensDoGrupo.reduce((acc, it) => acc + it.valorLiquido, 0).toFixed(2));
+
+        // Descrição representativa consolidada
+        const descricoesUnicas = Array.from(new Set(itensDoGrupo.map(it => it.descricao).filter(Boolean)));
+        let descrConsolidada = '';
+        if (descricoesUnicas.length === 1) {
+          descrConsolidada = `${descricoesUnicas[0]} (${itensDoGrupo.length} itens aglutinados)`;
+        } else if (descricoesUnicas.length <= 2) {
+          descrConsolidada = `${descricoesUnicas.join(' / ')} (${itensDoGrupo.length} itens aglutinados)`;
+        } else {
+          descrConsolidada = `${descricoesUnicas[0]} e outros (${itensDoGrupo.length} itens aglutinados)`;
+        }
+
+        // NCMs representativos
+        const ncmsUnicos = Array.from(new Set(itensDoGrupo.map(it => it.ncm).filter(Boolean)));
+        const ncmConsolidado = ncmsUnicos.length > 0 ? (ncmsUnicos.length === 1 ? ncmsUnicos[0] : `${ncmsUnicos[0]} / Diversos`) : '';
+
+        return {
+          numeroItem: idxGrupo + 1,
+          descricao: descrConsolidada,
+          ncm: ncmConsolidado,
+          cst: modelo.cst,
+          codigoServico: modelo.codigoServico,
+          valorBruto: somaValorBruto,
+          condicaoAplicavel: modelo.condicaoAplicavel,
+          codigoReceitaDarf: modelo.codigoReceitaDarf,
+          naturezaRendimentoReinf: modelo.naturezaRendimentoReinf,
+          fundamentacaoLegal: modelo.fundamentacaoLegal,
+          alertaIncompatibilidade: modelo.alertaIncompatibilidade,
+          aliqIr: modelo.aliqIr,
+          aliqCsll: modelo.aliqCsll,
+          aliqCofins: modelo.aliqCofins,
+          aliqPis: modelo.aliqPis,
+          aliqInss: modelo.aliqInss,
+          aliqIss: modelo.aliqIss,
+          aliqTotalFederal: modelo.aliqTotalFederal,
+          aliqTotalGeral: modelo.aliqTotalGeral,
+          valorIr: somaValorIr,
+          valorCsll: somaValorCsll,
+          valorCofins: somaValorCofins,
+          valorPis: somaValorPis,
+          valorFederalTotal: somaValorFederalTotal,
+          valorInss: somaValorInss,
+          baseCalculoInss: somaBaseCalculoInss,
+          valorMateriaisInss: somaValorMateriaisInss,
+          valorIss: somaValorIss,
+          baseCalculoIss: somaBaseCalculoIss,
+          valorContaVinculada: somaValorContaVinculada,
+          valorTotalRetido: somaValorTotalRetido,
+          valorLiquido: somaValorLiquido
+        };
+      });
+    }
+
     return {
       tipoDocumento: params.tipoDocumento,
       numeroNota: params.numeroNota,
@@ -944,7 +1036,7 @@ export class TaxEngine {
       optanteSimples: params.optanteSimples,
       situacaoCadastral: params.situacaoCadastral || 'ATIVA',
       dataEmissao: params.dataEmissao || new Date().toISOString().split('T')[0],
-      itens: itensCalculados,
+      itens: itensFinais,
       totalBruto: Number(totalBruto.toFixed(2)),
       totalIr: Number(totalIr.toFixed(2)),
       totalCsll: Number(totalCsll.toFixed(2)),

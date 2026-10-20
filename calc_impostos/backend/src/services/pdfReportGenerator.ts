@@ -153,6 +153,12 @@ export class PdfReportGenerator {
         let currentY = simpY + 40;
 
         resultado.itens.forEach((item) => {
+          // Quebra de página segura se o item não couber na folha atual
+          if (currentY + 110 > 750) {
+            doc.addPage();
+            currentY = 40;
+          }
+
           doc.rect(35, currentY, 525, 100).fillAndStroke('#ffffff', borderColor);
 
           // Topo do Item
@@ -162,8 +168,12 @@ export class PdfReportGenerator {
           doc.fillColor(textMuted).fontSize(7.5).font('Helvetica-Bold')
              .text('VALOR BRUTO DO ITEM', 420, currentY + 6, { width: 130, align: 'right' });
 
-          doc.fillColor(primaryColor).fontSize(9.5).font('Helvetica-Bold')
-             .text(resultado.tipoDocumento === 'NFE' ? `NCM: ${item.ncm || 'Geral'} ${item.cst ? `• CST: ${item.cst}` : ''}` : `Cod. Servico: ${item.codigoServico || '6190'}`, 45, currentY + 17);
+          const tituloItem = resultado.tipoDocumento === 'NFE' 
+            ? `NCM: ${item.ncm || 'Geral'}${item.cst ? ` • CST: ${item.cst}` : ''}${item.descricao ? ` • ${item.descricao}` : ''}` 
+            : `Cod. Servico: ${item.codigoServico || '6190'}${item.descricao ? ` • ${item.descricao}` : ''}`;
+
+          doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold')
+             .text(tituloItem, 45, currentY + 17, { width: 370, ellipsis: true });
 
           doc.fillColor(primaryColor).fontSize(10.5).font('Helvetica-Bold')
              .text(formatBRL(item.valorBruto), 420, currentY + 17, { width: 130, align: 'right' });
@@ -171,7 +181,7 @@ export class PdfReportGenerator {
           // Condição Aplicável
           doc.rect(45, currentY + 30, 505, 16).fillAndStroke(lightBg, borderColor);
           doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica-Bold')
-             .text(`Condicao aplicavel: ${item.condicaoAplicavel}`, 52, currentY + 34);
+             .text(`Condicao aplicavel: ${item.condicaoAplicavel}`, 52, currentY + 34, { width: 490, ellipsis: true });
 
           // DESTAQUE DA NATUREZA EFD-REINF R-4020 E CÓDIGO DARF
           const reinfY = currentY + 50;
@@ -199,6 +209,11 @@ export class PdfReportGenerator {
         const temReducaoIss = Boolean(resultado.percentualReducaoIssAplicado && resultado.percentualReducaoIssAplicado > 0);
 
         if (temDeducaoMateriais || temReducaoIss) {
+          if (currentY + 45 > 750) {
+            doc.addPage();
+            currentY = 40;
+          }
+
           doc.rect(35, currentY, 525, 36).fillAndStroke('#fffbeb', '#fde68a');
           doc.fillColor('#92400e').fontSize(8).font('Helvetica-Bold')
              .text('MEMORIA DE DEDUCOES DA BASE DE CALCULO (MATERIAIS E EQUIPAMENTOS):', 45, currentY + 5);
@@ -223,6 +238,11 @@ export class PdfReportGenerator {
         // ==========================================
         // 7. CONSOLIDADO DO LOTE E MEMÓRIA DE CÁLCULO
         // ==========================================
+        if (currentY + 220 > 770) {
+          doc.addPage();
+          currentY = 40;
+        }
+
         doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text('CONSOLIDADO DO LOTE E MEMORIA DE CALCULO DAS RETENCOES', 35, currentY);
         currentY += 16;
 
