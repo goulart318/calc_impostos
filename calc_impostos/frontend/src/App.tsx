@@ -24,6 +24,7 @@ import { Anexo1Tab } from './components/Anexo1Tab';
 import { NcmMatrixTab } from './components/NcmMatrixTab';
 import { DashboardTab } from './components/DashboardTab';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './components/ProcessoConsolidadoModal';
+import { LoteTriagemModal } from './components/LoteTriagemModal';
 import { API_BASE_URL } from './config/api';
 
 export default function App() {
@@ -113,6 +114,8 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [loteProgresso, setLoteProgresso] = useState<string>('');
   const [processoModalData, setProcessoModalData] = useState<ProcessoConsolidadoData | null>(null);
+  const [loteTriagemNotas, setLoteTriagemNotas] = useState<ResultadoConsolidado[] | null>(null);
+  const [loteTriagemAberto, setLoteTriagemAberto] = useState<boolean>(false);
 
   // Resultado do Cálculo (Vazio por padrão)
   const [resultado, setResultado] = useState<ResultadoConsolidado | null>(null);
@@ -388,7 +391,15 @@ export default function App() {
       const data: ProcessoConsolidadoData = await res.json();
       if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
       if (numeroEmpenho && !data.notaEmpenho) data.notaEmpenho = numeroEmpenho;
-      setProcessoModalData(data);
+
+      // Opção A: Inicia a nova rotina de Central de Triagem com Agrupamento por Fornecedor e Paginação
+      if (data.notas && data.notas.length > 0) {
+        setLoteTriagemNotas(data.notas);
+        setLoteTriagemAberto(true);
+      } else {
+        setProcessoModalData(data);
+      }
+
       setMensagemSucesso(`✓ Processamento em lote de ${files.length} documento(s) concluído com sucesso!`);
       setTimeout(() => setMensagemSucesso(null), 7000);
     } catch (err: any) {
@@ -626,6 +637,57 @@ export default function App() {
                     Selecionar Arquivo(s) (PDF ou XML)
                   </label>
                 </div>
+
+                {/* Banner de Lote Ativo em Triagem (Opção A) */}
+                {loteTriagemNotas && loteTriagemNotas.length > 0 && !loteTriagemAberto && (
+                  <div style={{
+                    marginBottom: '16px',
+                    padding: '12px 16px',
+                    background: '#eff6ff',
+                    border: '1px solid #93c5fd',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <div>
+                      <strong style={{ fontSize: '0.85rem', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Layers size={16} /> Central de Lote: {loteTriagemNotas.length} Notas Carregadas
+                      </strong>
+                      <div style={{ fontSize: '0.75rem', color: '#3b82f6', marginTop: '2px' }}>
+                        Clique para retomar a triagem, aglutinação por processo e conferência paginada nota a nota.
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button 
+                        className="btn-primary"
+                        onClick={() => setLoteTriagemAberto(true)}
+                        style={{ fontSize: '0.78rem', padding: '6px 12px' }}
+                      >
+                        Abrir Central
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Deseja descartar as notas deste lote?')) {
+                            setLoteTriagemNotas(null);
+                          }
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid #cbd5e1',
+                          color: '#64748b',
+                          borderRadius: '6px',
+                          padding: '6px 10px',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Banner de Processo Consolidado Ativo (se houver) */}
                 {processoModalData && (
@@ -1327,7 +1389,15 @@ export default function App() {
         {activeTab === 'ncm' && <NcmMatrixTab />}
       </main>
 
-      {/* Modal de Processo de Pagamento Consolidado (Múltiplas Notas) */}
+      {/* Central de Triagem e Análise Paginada de Lote (Opção A) */}
+      {loteTriagemAberto && loteTriagemNotas && (
+        <LoteTriagemModal 
+          notasIniciais={loteTriagemNotas} 
+          onClose={() => setLoteTriagemAberto(false)}
+        />
+      )}
+
+      {/* Modal de Processo de Pagamento Consolidado (Múltiplas Notas / Histórico) */}
       {processoModalData && (
         <ProcessoConsolidadoModal 
           dados={processoModalData} 
