@@ -14,6 +14,8 @@ export interface DadosSicafConsulta {
   fonteConsulta: string;
   mensagem: string;
   codigoAutenticidade?: string;
+  falhaConexao?: boolean;
+  status?: 'HABILITADO' | 'COM_RESTRICAO' | 'NAO_CADASTRADO' | 'INDISPONIVEL';
 }
 
 export class SicafService {
@@ -49,6 +51,7 @@ export class SicafService {
         encontrado: false,
         ativo: false,
         habilitadoLicitar: false,
+        status: 'NAO_CADASTRADO',
         cnpj: cnpjRaw || '',
         consultadoEm: dataIso,
         fonteConsulta: 'SICAF / Compras.gov.br',
@@ -65,7 +68,7 @@ export class SicafService {
     try {
       const url = `https://dadosabertos.compras.gov.br/modulo-fornecedor/1_consultarFornecedor?ativo=true&cnpj=${cnpj}`;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 segundos de timeout
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 segundos de timeout resiliente
 
       const res = await fetch(url, {
         headers: { 'accept': 'application/json' },
@@ -80,10 +83,12 @@ export class SicafService {
         if (Array.isArray(lista) && lista.length > 0) {
           const item = lista[0];
           const hashAuth = this.gerarHashAutenticidade(cnpj, dataIso);
+          const habilitado = Boolean(item.habilitadoLicitar);
           const dados: DadosSicafConsulta = {
             encontrado: true,
             ativo: Boolean(item.ativo),
-            habilitadoLicitar: Boolean(item.habilitadoLicitar),
+            habilitadoLicitar: habilitado,
+            status: habilitado ? 'HABILITADO' : 'COM_RESTRICAO',
             cnpj: item.cnpj || cnpj,
             nomeRazaoSocial: item.nomeRazaoSocialFornecedor,
             nomeMunicipio: item.nomeMunicipio,
@@ -95,9 +100,9 @@ export class SicafService {
             consultadoEm: dataIso,
             fonteConsulta: 'Dados Abertos Compras.gov.br / Sistema SICAF',
             codigoAutenticidade: hashAuth,
-            mensagem: item.habilitadoLicitar
-              ? 'Fornecedor Ativo e Habilitado para Licitar / Contratar no SICAF'
-              : 'Fornecedor Cadastrado no SICAF com Restrição Operacional'
+            mensagem: habilitado
+              ? 'Fornecedor Ativo e Habilitado para Licitar / Contratar no SICAF (Sem Impedimentos)'
+              : 'Fornecedor Cadastrado no SICAF com Restrição Impeditiva Operacional'
           };
 
           this.cacheMemoria.set(cnpj, { dados, expiraEm: agora + this.TTL_CACHE_MS });
@@ -110,25 +115,29 @@ export class SicafService {
         encontrado: false,
         ativo: false,
         habilitadoLicitar: false,
+        status: 'NAO_CADASTRADO',
         cnpj,
         consultadoEm: dataIso,
         fonteConsulta: 'Dados Abertos Compras.gov.br / Sistema SICAF',
         codigoAutenticidade: this.gerarHashAutenticidade(cnpj, dataIso),
-        mensagem: 'Fornecedor não localizado na base ativa do SICAF (Compras.gov.br).'
+        mensagem: 'Fornecedor não localizado na base ativa de credenciamento do SICAF.'
       };
       this.cacheMemoria.set(cnpj, { dados: dadosNaoEncontrado, expiraEm: agora + this.TTL_CACHE_MS });
       return dadosNaoEncontrado;
 
     } catch (err: any) {
-      console.warn(`[SICAF] Falha na consulta do CNPJ ${cnpj}:`, err.message);
+      console.warn(`[SICAF] Falha ou timeout na consulta do CNPJ ${cnpj}:`, err.message);
+      // Não salva no cache para permitir que nova tentativa imediata funcione
       return {
         encontrado: false,
         ativo: false,
         habilitadoLicitar: false,
+        falhaConexao: true,
+        status: 'INDISPONIVEL',
         cnpj,
         consultadoEm: dataIso,
         fonteConsulta: 'Dados Abertos Compras.gov.br / Sistema SICAF',
-        mensagem: 'Serviço de Dados Abertos do Compras.gov.br indisponível no momento.'
+        mensagem: 'Serviço de Dados Abertos do Compras.gov.br indisponível ou tempo de resposta excedido no momento.'
       };
     }
   }

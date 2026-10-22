@@ -706,19 +706,24 @@ export class PdfReportGenerator {
     doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold').text('2. SITUAÇÃO CADASTRAL & HABILITAÇÃO OPERACIONAL NO SICAF', 35, y);
     y += 13;
 
+    const isFalha = Boolean(sicaf?.falhaConexao || sicaf?.status === 'INDISPONIVEL');
     const estaAtivo = sicaf ? sicaf.ativo : true;
     const estaHabilitado = sicaf ? sicaf.habilitadoLicitar : true;
 
-    const statusBg = estaHabilitado ? '#f0fdf4' : '#fef2f2';
-    const statusBorder = estaHabilitado ? '#86efac' : '#fca5a5';
-    const statusText = estaHabilitado ? '#166534' : '#991b1b';
+    const statusBg = isFalha ? '#fffbeb' : (estaHabilitado ? '#f0fdf4' : '#fef2f2');
+    const statusBorder = isFalha ? '#fde68a' : (estaHabilitado ? '#86efac' : '#fca5a5');
+    const statusText = isFalha ? '#92400e' : (estaHabilitado ? '#166534' : '#991b1b');
+
+    let statusTitulo = '✓ FORNECEDOR CADASTRADO E HABILITADO PARA LICITAR / RECEBER PAGAMENTOS NO SICAF';
+    if (isFalha) {
+      statusTitulo = '⚠️ SERVIÇO COMPRAS.GOV.BR TEMPORARIAMENTE INDISPONÍVEL NA CONEXÃO';
+    } else if (!estaHabilitado) {
+      statusTitulo = '⚠️ REGISTRO COM RESTRIÇÃO OU FORNECEDOR NÃO LOCALIZADO NA BASE ATIVA DO SICAF';
+    }
 
     doc.rect(35, y, 525, 36).fillAndStroke(statusBg, statusBorder);
     doc.fillColor(statusText).fontSize(9.5).font('Helvetica-Bold')
-       .text(estaHabilitado 
-         ? '✓ FORNECEDOR CADASTRADO E HABILITADO PARA LICITAR / RECEBER PAGAMENTOS NO SICAF' 
-         : '⚠️ REGISTRO COM RESTRIÇÃO OU FORNECEDOR NÃO LOCALIZADO NA BASE ATIVA DO SICAF', 
-         45, y + 7, { width: 505 });
+       .text(statusTitulo, 45, y + 7, { width: 505 });
     doc.fillColor(statusText).fontSize(7.3).font('Helvetica')
        .text(`Condição de Operação: ${sicaf?.mensagem || 'Fornecedor Ativo no Sistema de Compras do Governo Federal.'} • Validação realizada para instrução de processo de despesa.`, 45, y + 21, { width: 505 });
     y += 44;
