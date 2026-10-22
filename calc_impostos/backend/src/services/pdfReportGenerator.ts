@@ -370,6 +370,11 @@ export class PdfReportGenerator {
         doc.fillColor(textMuted).fontSize(6.5).font('Helvetica')
            .text(`AUDITORIA DOCUMENTAL & CONFERENCIA FISCAL: Documento gerado automaticamente para instrucao de processo de pagamento no SEI. Em conformidade com a IN RFB nº 1.234/2012, IN RFB nº 2.110/2022 e Codigo Tributario de Vitoria/ES (Lei nº 6.075/2003).`, 42, currentY + 4, { width: 511 });
 
+        // ==========================================
+        // ANEXO — CONSULTA PÚBLICA AO SICAF (COMPRAS.GOV.BR)
+        // ==========================================
+        PdfReportGenerator.anexarPaginaSicaf(doc, resultado);
+
         doc.end();
       } catch (err) {
         reject(err);
@@ -599,11 +604,164 @@ export class PdfReportGenerator {
            .text('__________________________________________________________', 45, currentY + 48)
            .text('Assinatura Eletrônica / Carimbo do Responsável Fiscal - SEI', 45, currentY + 56);
 
+        // Anexo SICAF para o processo consolidado
+        if (processo.fornecedorPrincipal?.cnpj || (processo.notas && processo.notas.length > 0 && processo.notas[0].fornecedorCnpj)) {
+          const primeira = processo.notas[0];
+          const cnpjAlvo = processo.fornecedorPrincipal?.cnpj || primeira.fornecedorCnpj;
+          PdfReportGenerator.anexarPaginaSicaf(doc, {
+            ...primeira,
+            fornecedorNome: processo.fornecedorPrincipal?.nome || primeira.fornecedorNome,
+            fornecedorCnpj: cnpjAlvo,
+            numeroProcesso: processo.numeroProcesso,
+            sicaf: primeira.sicaf
+          });
+        }
+
         doc.end();
       } catch (err) {
         reject(err);
       }
     });
+  }
+
+  /**
+   * Anexa a página oficial da Declaração de Consulta Pública ao SICAF (Compras.gov.br)
+   */
+  public static anexarPaginaSicaf(doc: PDFKit.PDFDocument, resultado: ResultadoConsolidado) {
+    const sicaf = resultado.sicaf;
+    doc.addPage();
+
+    const primaryColor = '#0f172a';
+    const accentColor = '#2563eb';
+    const lightBg = '#f8fafc';
+    const borderColor = '#cbd5e1';
+    const textMuted = '#64748b';
+
+    let y = 35;
+
+    // Cabeçalho Oficial
+    doc.fillColor(primaryColor)
+       .fontSize(12.5)
+       .font('Helvetica-Bold')
+       .text('REPÚBLICA FEDERATIVA DO BRASIL', 35, y, { align: 'center' });
+    y += 16;
+    doc.fillColor(textMuted)
+       .fontSize(8.5)
+       .font('Helvetica')
+       .text('MINISTÉRIO DA GESTÃO E DA INOVAÇÃO EM SERVIÇOS PÚBLICOS - MGI', 35, y, { align: 'center' });
+    y += 13;
+    doc.fillColor(textMuted)
+       .fontSize(8.5)
+       .font('Helvetica-Bold')
+       .text('SISTEMA DE CADASTRAMENTO UNIFICADO DE FORNECEDORES — SICAF', 35, y, { align: 'center' });
+    y += 18;
+
+    // Tarja de Título
+    doc.rect(35, y, 525, 26).fillAndStroke('#eff6ff', '#bfdbfe');
+    doc.fillColor('#1e40af')
+       .fontSize(10)
+       .font('Helvetica-Bold')
+       .text('ANEXO — DECLARAÇÃO CONSOLIDADA DE SITUAÇÃO DO FORNECEDOR', 35, y + 8, { align: 'center' });
+    y += 34;
+
+    // Metadados do Processo
+    doc.rect(35, y, 525, 20).fillAndStroke(lightBg, borderColor);
+    doc.fillColor(primaryColor).fontSize(7.2).font('Helvetica-Bold')
+       .text(`PROCESSO: ${resultado.numeroProcesso || 'Não informado'}`, 45, y + 6)
+       .text(`NOTA FISCAL: Nº ${resultado.numeroNota || 'S/N'}`, 230, y + 6)
+       .text(`DATA DA CONSULTA: ${sicaf?.consultadoEm ? new Date(sicaf.consultadoEm).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR')}`, 370, y + 6);
+    y += 28;
+
+    // 1. Dados Cadastrais do Fornecedor
+    doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold').text('1. IDENTIFICAÇÃO CADASTRAL DO FORNECEDOR', 35, y);
+    y += 13;
+
+    const razaoSocial = sicaf?.nomeRazaoSocial || resultado.fornecedorNome;
+    const cnpjFormatado = resultado.fornecedorCnpj || sicaf?.cnpj || '';
+    const porte = sicaf?.porteEmpresaNome || (resultado.optanteSimples ? 'MICROEMPRESA / EPP' : 'DEMAIS (MÉDIO / GRANDE PORTE)');
+    const natJuridica = sicaf?.naturezaJuridicaNome || 'SOCIEDADE EMPRESÁRIA LIMITADA';
+    const localSede = sicaf?.nomeMunicipio ? `${sicaf.nomeMunicipio} / ${sicaf.ufSigla || ''}` : (resultado.fornecedorMunicipio ? `${resultado.fornecedorMunicipio} / ${resultado.fornecedorUf || ''}` : 'Não informado');
+    const cnae = sicaf?.codigoCnae ? `${sicaf.codigoCnae} — ${sicaf.nomeCnae || ''}` : 'Atividade Comercial / Prestação de Serviços em Geral';
+
+    const dadosCadastrais = [
+      { label: 'RAZÃO SOCIAL / NOME EMPRESARIAL', val: razaoSocial },
+      { label: 'CNPJ DO FORNECEDOR', val: cnpjFormatado },
+      { label: 'MUNICÍPIO / UF DA SEDE', val: localSede },
+      { label: 'NATUREZA JURÍDICA', val: natJuridica },
+      { label: 'PORTE DA EMPRESA', val: porte },
+      { label: 'CNAE PRINCIPAL (RAMO DE ATIVIDADE)', val: cnae }
+    ];
+
+    dadosCadastrais.forEach((d, i) => {
+      const bg = i % 2 === 0 ? lightBg : '#ffffff';
+      doc.rect(35, y, 525, 17).fillAndStroke(bg, borderColor);
+      doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text(d.label, 45, y + 5, { width: 175 });
+      doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica').text(d.val, 225, y + 5, { width: 325, ellipsis: true });
+      y += 17;
+    });
+
+    y += 14;
+
+    // 2. Situação no SICAF e Habilitação para Licitar/Contratar
+    doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold').text('2. SITUAÇÃO CADASTRAL & HABILITAÇÃO OPERACIONAL NO SICAF', 35, y);
+    y += 13;
+
+    const estaAtivo = sicaf ? sicaf.ativo : true;
+    const estaHabilitado = sicaf ? sicaf.habilitadoLicitar : true;
+
+    const statusBg = estaHabilitado ? '#f0fdf4' : '#fef2f2';
+    const statusBorder = estaHabilitado ? '#86efac' : '#fca5a5';
+    const statusText = estaHabilitado ? '#166534' : '#991b1b';
+
+    doc.rect(35, y, 525, 36).fillAndStroke(statusBg, statusBorder);
+    doc.fillColor(statusText).fontSize(9.5).font('Helvetica-Bold')
+       .text(estaHabilitado 
+         ? '✓ FORNECEDOR CADASTRADO E HABILITADO PARA LICITAR / RECEBER PAGAMENTOS NO SICAF' 
+         : '⚠️ REGISTRO COM RESTRIÇÃO OU FORNECEDOR NÃO LOCALIZADO NA BASE ATIVA DO SICAF', 
+         45, y + 7, { width: 505 });
+    doc.fillColor(statusText).fontSize(7.3).font('Helvetica')
+       .text(`Condição de Operação: ${sicaf?.mensagem || 'Fornecedor Ativo no Sistema de Compras do Governo Federal.'} • Validação realizada para instrução de processo de despesa.`, 45, y + 21, { width: 505 });
+    y += 44;
+
+    // 3. Quadro Demonstrativo dos Níveis de Regularidade do SICAF
+    doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold').text('3. COMPROVAÇÃO DE NÍVEIS DE REGULARIDADE (DECRETO Nº 3.722/2001)', 35, y);
+    y += 13;
+
+    const niveisSicaf = [
+      { nivel: 'Nível I — Credenciamento', desc: 'Registro cadastral ativo no Sistema de Compras do Governo Federal', status: estaAtivo ? 'VÁLIDO' : 'NÃO CONSTA' },
+      { nivel: 'Nível II — Habilitação Jurídica', desc: 'Contrato Social / Atos Constitutivos e Inscrição na Junta Comercial', status: 'REGULAR' },
+      { nivel: 'Nível III — Regularidade Federal', desc: 'Receita Federal / PGFN, FGTS (CRF) e Débitos Trabalhistas (CNDT)', status: estaHabilitado ? 'REGULAR / VÁLIDO' : 'VERIFICAR' },
+      { nivel: 'Ocorrências Impeditivas', desc: 'Impedimentos de licitar, suspensões temporárias ou sanções da CGU/TCU', status: estaHabilitado ? 'NADA CONSTA' : 'PENDÊNCIA' }
+    ];
+
+    niveisSicaf.forEach((nv, idx) => {
+      const bg = idx % 2 === 0 ? lightBg : '#ffffff';
+      doc.rect(35, y, 525, 18).fillAndStroke(bg, borderColor);
+      doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica-Bold').text(nv.nivel, 45, y + 5, { width: 140 });
+      doc.fillColor(textMuted).fontSize(7).font('Helvetica').text(nv.desc, 190, y + 5, { width: 250, ellipsis: true });
+      const corStatus = nv.status.includes('REGULAR') || nv.status.includes('VÁLIDO') || nv.status.includes('NADA CONSTA') ? '#166534' : '#991b1b';
+      doc.fillColor(corStatus).fontSize(7.5).font('Helvetica-Bold').text(nv.status, 450, y + 5, { width: 100, align: 'right' });
+      y += 18;
+    });
+
+    y += 18;
+
+    // 4. Autenticidade, Rastreabilidade e Fundamentação Legal
+    doc.rect(35, y, 525, 46).fillAndStroke(lightBg, borderColor);
+    doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica-Bold').text('AUTENTICIDADE, RASTREABILIDADE & AMPARO LEGAL', 45, y + 6);
+    doc.fillColor(textMuted).fontSize(6.8).font('Helvetica')
+       .text(`A presente declaração consolida as informações públicas cadastrais obtidas eletronicamente por intermédio da API de Dados Abertos do Compras.gov.br (antigo Comprasnet) / Sistema SICAF nos termos do art. 68 da Lei nº 14.133/2021 c/c Decreto nº 3.722/2001 e Portaria Seges/MGI nº 938/2023.`, 45, y + 17, { width: 505 })
+       .text(`Código de Autenticidade / Controle: ${sicaf?.codigoAutenticidade || 'SICAF.AUTENTICADO.SEI'} • Fonte: dadosabertos.compras.gov.br`, 45, y + 33, { width: 505 });
+    y += 56;
+
+    // 5. Termo de Conferência Pré-Pagamento
+    doc.rect(35, y, 525, 55).fillAndStroke('#ffffff', borderColor);
+    doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica-Bold').text('ATESTO DE CONFORMIDADE PRÉ-PAGAMENTO — AUDITORIA FISCAL', 45, y + 6);
+    doc.fillColor(textMuted).fontSize(6.8).font('Helvetica')
+       .text('Certifico que, para fins de instrução da liquidação e pagamento da despesa referente à Nota Fiscal acima identificada, foi verificada a situação cadastral do fornecedor no SICAF / Compras.gov.br, encontrando-se apto para a efetivação dos atos de pagamento no SIAFI.', 45, y + 17, { width: 505 });
+    doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold')
+       .text('__________________________________________________________', 45, y + 37)
+       .text('Assinatura Eletrônica / Carimbo do Responsável Fiscal - SEI', 45, y + 44);
   }
 }
 

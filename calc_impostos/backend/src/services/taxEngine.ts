@@ -1,5 +1,6 @@
 import { pool } from '../config/db';
 import { SupplierMemoryService } from './supplierMemoryService';
+import { DadosSicafConsulta } from './sicafService';
 
 export interface ItemAnaliseInput {
   numeroItem: number;
@@ -92,6 +93,7 @@ export interface ParametrosCalculo {
   valorInssDestacado?: number; // Valor preenchido ou lido diretamente da NFS-e
   valorContaVinculada?: number; // Retenção para Conta Vinculada de Mão de Obra (IN 5/2017 SEGES/ME)
   optanteCprb?: boolean;
+  sicaf?: DadosSicafConsulta;
 }
 
 export interface ResultadoConsolidado {
@@ -154,6 +156,9 @@ export interface ResultadoConsolidado {
   idRegistroHistorico?: number;
   dataAnaliseAnterior?: string;
   mensagemCruzamento?: string;
+
+  // Consulta Pública ao SICAF (Compras.gov.br)
+  sicaf?: DadosSicafConsulta;
 }
 
 export class TaxEngine {
@@ -1091,7 +1096,8 @@ export class TaxEngine {
       alertasCriticaFiscal: itensCalculados
         .filter(it => Boolean(it.alertaIncompatibilidade))
         .map(it => `Item #${it.numeroItem}: ${it.alertaIncompatibilidade}`),
-      auditoriaInss
+      auditoriaInss,
+      sicaf: params.sicaf
     };
   }
 }

@@ -11,6 +11,7 @@ import { CnpjService } from './services/cnpjService';
 import { PdfReportGenerator } from './services/pdfReportGenerator';
 import { HistoryService } from './services/historyService';
 import { SupplierMemoryService } from './services/supplierMemoryService';
+import { SicafService, DadosSicafConsulta } from './services/sicafService';
 
 dotenv.config();
 
@@ -50,6 +51,15 @@ async function cruzarComHistoricoEAutoPreencher(
   empenhoInformadoReq?: string
 ): Promise<ResultadoConsolidado> {
   try {
+    // 1. Consulta concomitante ao SICAF se ainda não preenchida
+    if (!resultado.sicaf && resultado.fornecedorCnpj) {
+      try {
+        resultado.sicaf = await SicafService.consultarSicaf(resultado.fornecedorCnpj);
+      } catch (errSicaf: any) {
+        console.warn('Aviso na consulta ao SICAF:', errSicaf?.message || errSicaf);
+      }
+    }
+
     const notaAnterior = await HistoryService.buscarNotaHistorico({
       chaveAcesso: resultado.chaveAcesso,
       numeroNota: resultado.numeroNota,
@@ -134,22 +144,40 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
 
     let fornecedorMunicipio = undefined;
     let fornecedorUf = undefined;
+    let sicafConsulta: DadosSicafConsulta | undefined = undefined;
 
     if (notaExtraida.fornecedorCnpj) {
       try {
-        const cnpjInfo = await CnpjService.consultarCnpj(notaExtraida.fornecedorCnpj);
-        optanteSimples = cnpjInfo.optanteSimples;
-        optanteSimei = cnpjInfo.optanteSimei;
-        dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
-        fonteConsultaCnpj = cnpjInfo.fonteConsulta;
-        situacaoCadastral = cnpjInfo.situacaoCadastral;
-        fornecedorMunicipio = cnpjInfo.municipio;
-        fornecedorUf = cnpjInfo.uf;
-        if (cnpjInfo.razaoSocial && (!notaExtraida.fornecedorNome || notaExtraida.fornecedorNome === 'Fornecedor Desconhecido')) {
-          notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
+        // Consulta CNPJ (Receita/Simples) e SICAF (Compras.gov.br) de forma CONCOMITANTE
+        const [cnpjInfo, sicafInfo] = await Promise.all([
+          CnpjService.consultarCnpj(notaExtraida.fornecedorCnpj).catch(e => {
+            console.warn('Aviso na consulta ao CNPJ:', e?.message || e);
+            return null;
+          }),
+          SicafService.consultarSicaf(notaExtraida.fornecedorCnpj).catch(e => {
+            console.warn('Aviso na consulta ao SICAF:', e?.message || e);
+            return null;
+          })
+        ]);
+
+        if (cnpjInfo) {
+          optanteSimples = cnpjInfo.optanteSimples;
+          optanteSimei = cnpjInfo.optanteSimei;
+          dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
+          fonteConsultaCnpj = cnpjInfo.fonteConsulta;
+          situacaoCadastral = cnpjInfo.situacaoCadastral;
+          fornecedorMunicipio = cnpjInfo.municipio;
+          fornecedorUf = cnpjInfo.uf;
+          if (cnpjInfo.razaoSocial && (!notaExtraida.fornecedorNome || notaExtraida.fornecedorNome === 'Fornecedor Desconhecido')) {
+            notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
+          }
+        }
+
+        if (sicafInfo) {
+          sicafConsulta = sicafInfo;
         }
       } catch (e) {
-        console.warn('Não foi possível verificar Simples Nacional via API:', e);
+        console.warn('Não foi possível verificar Simples Nacional/SICAF via API:', e);
       }
     }
 
@@ -176,7 +204,8 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
       valorInssDestacado: parseFloat(String(req.body.valorInssDestacado)) || notaExtraida.destaqueInss || 0,
       valorMateriaisInss: parseFloat(String(req.body.valorMateriaisInss)) || (notaExtraida.percentualReducaoIssNfse ? Number((notaExtraida.valorTotal * (notaExtraida.percentualReducaoIssNfse / 100)).toFixed(2)) : 0),
       valorContaVinculada: parseFloat(String(req.body.valorContaVinculada)) || 0,
-      retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : Boolean(req.body.retencaoInss)
+      retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : Boolean(req.body.retencaoInss),
+      sicaf: sicafConsulta
     };
 
     const resultado = await TaxEngine.processarNota(params);
@@ -209,22 +238,40 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
     let situacaoCadastral = 'ATIVA';
     let fornecedorMunicipio = undefined;
     let fornecedorUf = undefined;
+    let sicafConsultaPdf: DadosSicafConsulta | undefined = undefined;
 
     if (notaExtraida.fornecedorCnpj) {
       try {
-        const cnpjInfo = await CnpjService.consultarCnpj(notaExtraida.fornecedorCnpj);
-        optanteSimples = cnpjInfo.optanteSimples;
-        optanteSimei = cnpjInfo.optanteSimei;
-        dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
-        fonteConsultaCnpj = cnpjInfo.fonteConsulta;
-        situacaoCadastral = cnpjInfo.situacaoCadastral;
-        fornecedorMunicipio = cnpjInfo.municipio;
-        fornecedorUf = cnpjInfo.uf;
-        if (cnpjInfo.razaoSocial) {
-          notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
+        // Consulta CNPJ (Receita/Simples) e SICAF (Compras.gov.br) de forma CONCOMITANTE
+        const [cnpjInfo, sicafInfo] = await Promise.all([
+          CnpjService.consultarCnpj(notaExtraida.fornecedorCnpj).catch(e => {
+            console.warn('Aviso na consulta ao CNPJ do PDF:', e?.message || e);
+            return null;
+          }),
+          SicafService.consultarSicaf(notaExtraida.fornecedorCnpj).catch(e => {
+            console.warn('Aviso na consulta ao SICAF do PDF:', e?.message || e);
+            return null;
+          })
+        ]);
+
+        if (cnpjInfo) {
+          optanteSimples = cnpjInfo.optanteSimples;
+          optanteSimei = cnpjInfo.optanteSimei;
+          dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
+          fonteConsultaCnpj = cnpjInfo.fonteConsulta;
+          situacaoCadastral = cnpjInfo.situacaoCadastral;
+          fornecedorMunicipio = cnpjInfo.municipio;
+          fornecedorUf = cnpjInfo.uf;
+          if (cnpjInfo.razaoSocial) {
+            notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
+          }
+        }
+
+        if (sicafInfo) {
+          sicafConsultaPdf = sicafInfo;
         }
       } catch (e) {
-        console.warn('Não foi possível consultar CNPJ do PDF:', e);
+        console.warn('Não foi possível consultar CNPJ/SICAF do PDF:', e);
       }
     }
 
@@ -263,7 +310,8 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
       valorInssDestacado: parseFloat(String(req.body.valorInssDestacado)) || notaExtraida.destaqueInss || 0,
       valorMateriaisInss: parseFloat(String(req.body.valorMateriaisInss)) || (notaExtraida.percentualReducaoIssNfse ? Number((notaExtraida.valorTotal * (notaExtraida.percentualReducaoIssNfse / 100)).toFixed(2)) : 0),
       valorContaVinculada: parseFloat(String(req.body.valorContaVinculada)) || 0,
-      retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : Boolean(req.body.retencaoInss)
+      retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : Boolean(req.body.retencaoInss),
+      sicaf: sicafConsultaPdf
     };
 
     const resultado = await TaxEngine.processarNota(params);
@@ -291,6 +339,7 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
     const notasResultados: ResultadoConsolidado[] = [];
     const errosLote: Array<{ arquivo: string; erro: string }> = [];
     const cnpjCache = new Map<string, any>();
+    const sicafCache = new Map<string, DadosSicafConsulta>();
 
     for (const file of files) {
       try {
@@ -311,9 +360,12 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
 
         let fornecedorMunicipio = undefined;
         let fornecedorUf = undefined;
+        let sicafInfoLote: DadosSicafConsulta | undefined = undefined;
 
         if (notaExtraida.fornecedorCnpj) {
           const cnpjLimpo = notaExtraida.fornecedorCnpj.replace(/\D/g, '');
+          
+          // Consulta concorrente ou recuperação do cache para o CNPJ
           if (cnpjCache.has(cnpjLimpo)) {
             const cached = cnpjCache.get(cnpjLimpo);
             optanteSimples = cached.optanteSimples;
@@ -344,6 +396,18 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
               console.warn(`Não foi possível consultar CNPJ ${cnpjLimpo}:`, e);
             }
           }
+
+          // Consulta concomitante ao SICAF no lote (com cache dedup)
+          if (sicafCache.has(cnpjLimpo)) {
+            sicafInfoLote = sicafCache.get(cnpjLimpo);
+          } else {
+            try {
+              sicafInfoLote = await SicafService.consultarSicaf(cnpjLimpo);
+              sicafCache.set(cnpjLimpo, sicafInfoLote);
+            } catch (eSicaf) {
+              console.warn(`Aviso ao consultar SICAF para ${cnpjLimpo} no lote:`, eSicaf);
+            }
+          }
         }
 
         const params: ParametrosCalculo = {
@@ -369,7 +433,8 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
           valorInssDestacado: notaExtraida.destaqueInss || 0,
           valorMateriaisInss: notaExtraida.percentualReducaoIssNfse ? Number((notaExtraida.valorTotal * (notaExtraida.percentualReducaoIssNfse / 100)).toFixed(2)) : 0,
           valorContaVinculada: 0,
-          retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : false
+          retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : false,
+          sicaf: sicafInfoLote
         };
 
         const resultado = await TaxEngine.processarNota(params);
@@ -485,6 +550,17 @@ app.get('/api/consultar-cnpj/:cnpj', async (req: Request, res: Response) => {
   }
 });
 
+// Consulta pública oficial ao SICAF / Compras.gov.br
+app.get('/api/sicaf/consultar/:cnpj', async (req: Request, res: Response) => {
+  try {
+    const cnpj = String(req.params.cnpj);
+    const info = await SicafService.consultarSicaf(cnpj);
+    res.json(info);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Erro ao consultar SICAF.' });
+  }
+});
+
 // Endpoint de Recálculo Reativo de Retenções (Edição de Itens e Parâmetros)
 app.post('/api/recalcular', async (req: Request, res: Response) => {
   try {
@@ -518,6 +594,16 @@ app.post('/api/recalcular', async (req: Request, res: Response) => {
 app.post('/api/gerar-pdf', async (req: Request, res: Response) => {
   try {
     const resultado: ResultadoConsolidado = req.body;
+
+    // Garante que o SICAF esteja preenchido antes de gerar o relatório com anexo
+    if (!resultado.sicaf && resultado.fornecedorCnpj) {
+      try {
+        resultado.sicaf = await SicafService.consultarSicaf(resultado.fornecedorCnpj);
+      } catch (eSicaf) {
+        console.warn('Aviso ao consultar SICAF antes de gerar PDF:', eSicaf);
+      }
+    }
+
     const pdfBuffer = await PdfReportGenerator.gerarRelatorio(resultado);
     const nomeArquivo = PdfReportGenerator.gerarNomeArquivo(resultado.numeroNota, resultado.fornecedorNome);
 

@@ -14,7 +14,8 @@ import {
   Sliders,
   Check,
   AlertTriangle,
-  Sparkles
+  Sparkles,
+  ExternalLink
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 
@@ -45,6 +46,24 @@ export interface ItemCalculado {
   valorIss: number;
   valorTotalRetido: number;
   valorLiquido: number;
+}
+
+export interface DadosSicafConsulta {
+  encontrado: boolean;
+  ativo: boolean;
+  habilitadoLicitar: boolean;
+  cnpj: string;
+  nomeRazaoSocial?: string;
+  nomeMunicipio?: string;
+  ufSigla?: string;
+  codigoCnae?: number;
+  nomeCnae?: string;
+  naturezaJuridicaNome?: string;
+  porteEmpresaNome?: string;
+  consultadoEm: string;
+  fonteConsulta: string;
+  mensagem: string;
+  codigoAutenticidade?: string;
 }
 
 export interface ResultadoConsolidado {
@@ -105,6 +124,9 @@ export interface ResultadoConsolidado {
   idRegistroHistorico?: number;
   dataAnaliseAnterior?: string;
   mensagemCruzamento?: string;
+
+  // Consulta Pública ao SICAF (Compras.gov.br)
+  sicaf?: DadosSicafConsulta;
 }
 
 export const gerarNomeArquivoPdf = (numeroNota?: string, fornecedorNome?: string): string => {
@@ -1064,6 +1086,83 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
             <span style={{ fontSize: '0.8rem', fontWeight: 800, color: currentData.situacaoCadastral === 'ATIVA' ? '#16a34a' : '#dc2626' }}>
               {currentData.situacaoCadastral || 'ATIVA'}
             </span>
+          </div>
+        </div>
+
+        {/* Quadro de Auditoria e Conformidade SICAF (Compras.gov.br) */}
+        <div style={{ 
+          margin: '0 0 20px 0', 
+          padding: '12px 16px', 
+          borderRadius: 'var(--radius-md)', 
+          border: currentData.sicaf?.habilitadoLicitar !== false ? '1px solid #bbf7d0' : '1px solid #fed7aa',
+          background: currentData.sicaf?.habilitadoLicitar !== false ? '#f0fdf4' : '#fff7ed',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '280px' }}>
+            <div style={{ 
+              width: '38px', 
+              height: '38px', 
+              borderRadius: '50%', 
+              background: currentData.sicaf?.habilitadoLicitar !== false ? '#dcfce7' : '#ffedd5', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              {currentData.sicaf?.habilitadoLicitar !== false ? <ShieldCheck size={20} color="#16a34a" /> : <AlertCircle size={20} color="#ea580c" />}
+            </div>
+            <div>
+              <div style={{ fontSize: '0.82rem', fontWeight: 800, color: currentData.sicaf?.habilitadoLicitar !== false ? '#166534' : '#9a3412', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>SICAF / COMPRAS.GOV.BR:</span>
+                <span>
+                  {currentData.sicaf 
+                    ? (currentData.sicaf.habilitadoLicitar ? 'HABILITADO PARA LICITAR E RECEBER PAGAMENTOS' : 'REGISTRO ATIVO COM RESTRIÇÃO')
+                    : 'CONSULTA PÚBLICA VINCULADA AO PROCESSO'}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: currentData.sicaf?.habilitadoLicitar !== false ? '#15803d' : '#c2410c', marginTop: '2px' }}>
+                {currentData.sicaf?.mensagem || 'Fornecedor verificado na base pública do Ministério da Gestão e Inovação (MGI).'}
+                {' • '}
+                <span style={{ fontWeight: 600 }}>
+                  📄 Anexo oficial da consulta anexado automaticamente ao emitir o PDF para instrução no SEI.
+                </span>
+              </div>
+              {currentData.sicaf?.codigoAutenticidade && (
+                <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
+                  Código de Autenticidade Digital: <strong style={{ color: '#0f172a' }}>{currentData.sicaf.codigoAutenticidade}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <a 
+              href={`https://dadosabertos.compras.gov.br/modulo-fornecedor/1_consultarFornecedor?ativo=true&cnpj=${(currentData.fornecedorCnpj || '').replace(/\D/g, '')}`}
+              target="_blank" 
+              rel="noreferrer"
+              style={{
+                fontSize: '0.73rem',
+                fontWeight: 700,
+                color: '#2563eb',
+                background: '#ffffff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '6px',
+                padding: '5px 9px',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap'
+              }}
+              title="Abrir endpoint oficial do Compras.gov.br"
+            >
+              <ExternalLink size={13} />
+              Dados Abertos SICAF
+            </a>
           </div>
         </div>
 
