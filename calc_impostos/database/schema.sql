@@ -63,6 +63,31 @@ CREATE INDEX IF NOT EXISTS idx_notas_numero_nota ON notas_analisadas(numero_nota
 CREATE INDEX IF NOT EXISTS idx_notas_numero_processo ON notas_analisadas(numero_processo);
 CREATE INDEX IF NOT EXISTS idx_notas_numero_empenho ON notas_analisadas(numero_empenho);
 
+-- Tabela de Memória Tributária de Fornecedores (Aprendizado Ativo de Regras por CNPJ e NCM/Serviço)
+CREATE TABLE IF NOT EXISTS memoria_tributaria_fornecedores (
+  id SERIAL PRIMARY KEY,
+  fornecedor_cnpj VARCHAR(20) NOT NULL,
+  fornecedor_nome VARCHAR(255),
+  ncm_padrao VARCHAR(10),
+  descricao_padrao VARCHAR(255),
+  codigo_receita_darf VARCHAR(10) NOT NULL,
+  natureza_reinf VARCHAR(10) NOT NULL,
+  aliq_ir NUMERIC(5,2) DEFAULT 0,
+  aliq_csll NUMERIC(5,2) DEFAULT 0,
+  aliq_cofins NUMERIC(5,2) DEFAULT 0,
+  aliq_pis NUMERIC(5,2) DEFAULT 0,
+  aliq_inss NUMERIC(5,2) DEFAULT 0,
+  aliq_iss NUMERIC(5,2) DEFAULT 0,
+  condicao_aplicavel TEXT,
+  fundamentacao TEXT,
+  observacoes TEXT,
+  total_aplicacoes INT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_memoria_fornecedor_cnpj ON memoria_tributaria_fornecedores(fornecedor_cnpj);
+CREATE INDEX IF NOT EXISTS idx_memoria_ncm_padrao ON memoria_tributaria_fornecedores(ncm_padrao);
 
 -- Regras Iniciais para Medicamentos, Equipamentos, Combustíveis, Livros e Autopeças
 INSERT INTO ncm_regras (ncm_prefixo, descricao, descricao_categoria, codigo_receita, natureza_reinf, aliq_ir, aliq_csll, aliq_cofins, aliq_pis, condicao_aplicavel, fundamentacao_legal) VALUES

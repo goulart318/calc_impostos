@@ -10,6 +10,7 @@ import { XmlParser } from './services/xmlParser';
 import { CnpjService } from './services/cnpjService';
 import { PdfReportGenerator } from './services/pdfReportGenerator';
 import { HistoryService } from './services/historyService';
+import { SupplierMemoryService } from './services/supplierMemoryService';
 
 dotenv.config();
 
@@ -659,6 +660,51 @@ app.get('/api/tabelas/ncm', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.warn('Erro ao consultar ncm_regras no PostgreSQL:', error.message);
     res.json([]);
+  }
+});
+
+// =========================================================================
+// MEMÓRIA TRIBUTÁRIA DE FORNECEDORES (APRENDIZADO ATIVO DE REGRAS)
+// =========================================================================
+
+// Salvar / atualizar regra na memória tributária do fornecedor
+app.post('/api/fornecedores/memoria', async (req: Request, res: Response) => {
+  try {
+    const memoria = await SupplierMemoryService.salvarOuAtualizarMemoria(req.body);
+    res.json({ success: true, memoria });
+  } catch (error: any) {
+    console.error('Erro ao salvar memória do fornecedor:', error);
+    res.status(500).json({ error: error.message || 'Erro ao salvar memória tributária do fornecedor.' });
+  }
+});
+
+// Listar regras memorizadas para um CNPJ
+app.get('/api/fornecedores/memoria/:cnpj', async (req: Request, res: Response) => {
+  try {
+    const memorias = await SupplierMemoryService.listarPorCnpj(String(req.params.cnpj));
+    res.json(memorias);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Erro ao consultar memória do fornecedor.' });
+  }
+});
+
+// Listar todas as regras memorizadas
+app.get('/api/fornecedores/memorias', async (req: Request, res: Response) => {
+  try {
+    const todas = await SupplierMemoryService.listarTodas();
+    res.json(todas);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Erro ao listar memórias de fornecedores.' });
+  }
+});
+
+// Excluir regra memorizada
+app.delete('/api/fornecedores/memoria/:id', async (req: Request, res: Response) => {
+  try {
+    const sucesso = await SupplierMemoryService.excluir(Number(req.params.id));
+    res.json({ success: sucesso });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Erro ao excluir memória do fornecedor.' });
   }
 });
 

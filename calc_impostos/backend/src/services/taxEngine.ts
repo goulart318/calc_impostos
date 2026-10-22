@@ -1,4 +1,5 @@
 import { pool } from '../config/db';
+import { SupplierMemoryService } from './supplierMemoryService';
 
 export interface ItemAnaliseInput {
   numeroItem: number;
@@ -33,6 +34,7 @@ export interface ItemCalculado {
   naturezaRendimentoReinf: string;
   fundamentacaoLegal: string;
   alertaIncompatibilidade?: string;
+  sugestaoMemoria?: boolean;
   
   // Alíquotas (%)
   aliqIr: number;
@@ -561,6 +563,7 @@ export class TaxEngine {
         fundamentacao: string;
       };
 
+      let memoriaAplicada = false;
       if (ehServico) {
         regraTributaria = await this.identificarRegraServico(itemInput.codigoServico || params.codigoServicoPadrao || '6190');
         
@@ -583,6 +586,25 @@ export class TaxEngine {
         }
       } else {
         regraTributaria = await this.identificarRegraNCM(itemInput.ncm, itemInput.condicaoEspecial, itemInput.cst);
+      }
+
+      // Aprendizado Ativo: Se o item não tem override manual, verifica se há regra na Memória Tributária deste fornecedor
+      if (itemInput.manualCodigoDarf === undefined && params.fornecedorCnpj) {
+        const memoriaFornecedor = await SupplierMemoryService.buscarMemoria(params.fornecedorCnpj, itemInput.ncm);
+        if (memoriaFornecedor) {
+          regraTributaria = {
+            codigoReceita: memoriaFornecedor.codigoReceitaDarf,
+            naturezaReinf: memoriaFornecedor.naturezaReinf,
+            condicao: `💡 ${memoriaFornecedor.condicaoAplicavel || 'Regra Memorizada do Fornecedor'} (${memoriaFornecedor.codigoReceitaDarf})`,
+            aliqIr: memoriaFornecedor.aliqIr,
+            aliqCsll: memoriaFornecedor.aliqCsll,
+            aliqCofins: memoriaFornecedor.aliqCofins,
+            aliqPis: memoriaFornecedor.aliqPis,
+            fundamentacao: memoriaFornecedor.fundamentacao || 'Memória Tributária: Aprendizado contínuo por histórico do fornecedor'
+          };
+          memoriaAplicada = true;
+          fundSet.add(regraTributaria.fundamentacao);
+        }
       }
 
       let aliqIr = regraTributaria.aliqIr;
@@ -858,6 +880,7 @@ export class TaxEngine {
         naturezaRendimentoReinf: natReinfFinal,
         fundamentacaoLegal: fundamentacaoItem,
         alertaIncompatibilidade: alertaIncompatibilidadeItem,
+        sugestaoMemoria: memoriaAplicada,
         aliqIr,
         aliqCsll,
         aliqCofins,

@@ -13,7 +13,8 @@ import {
   RotateCcw,
   Sliders,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 
@@ -29,6 +30,7 @@ export interface ItemCalculado {
   naturezaRendimentoReinf: string;
   fundamentacaoLegal: string;
   alertaIncompatibilidade?: string;
+  sugestaoMemoria?: boolean;
   aliqIr: number;
   aliqCsll: number;
   aliqCofins: number;
@@ -153,6 +155,8 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
   const [baixandoPdf, setBaixandoPdf] = useState(false);
+  const [memorizando, setMemorizando] = useState(false);
+  const [memorizadoSucesso, setMemorizadoSucesso] = useState(false);
 
   const itemParaEditavel = (item: ItemCalculado, idx: number): ItemEditavel => {
     let preset = 'AUTO';
@@ -612,11 +616,59 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
     }
   };
 
+  const handleMemorizarFornecedor = async () => {
+    if (!currentData.fornecedorCnpj) {
+      alert('Fornecedor não possui CNPJ identificado para memorização.');
+      return;
+    }
+    const primeiroItem = currentData.itens[0];
+    if (!primeiroItem) {
+      alert('Nenhum item disponível para memorização.');
+      return;
+    }
+
+    try {
+      setMemorizando(true);
+      const payloadMemoria = {
+        fornecedorCnpj: currentData.fornecedorCnpj,
+        fornecedorNome: currentData.fornecedorNome,
+        ncmPadrao: primeiroItem.ncm || undefined,
+        descricaoPadrao: primeiroItem.descricao || undefined,
+        codigoReceitaDarf: primeiroItem.codigoReceitaDarf,
+        naturezaReinf: primeiroItem.naturezaRendimentoReinf,
+        aliqIr: primeiroItem.aliqIr,
+        aliqCsll: primeiroItem.aliqCsll,
+        aliqCofins: primeiroItem.aliqCofins,
+        aliqPis: primeiroItem.aliqPis,
+        aliqInss: primeiroItem.aliqInss,
+        aliqIss: primeiroItem.aliqIss,
+        condicaoAplicavel: primeiroItem.condicaoAplicavel,
+        fundamentacao: primeiroItem.fundamentacaoLegal,
+        observacoes: `Memorizado pelo auditor via análise da NF #${currentData.numeroNota || 'S/N'}`
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/fornecedores/memoria`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadMemoria)
+      });
+
+      if (!res.ok) throw new Error('Falha ao salvar regra na memória');
+
+      setMemorizadoSucesso(true);
+      setTimeout(() => setMemorizadoSucesso(false), 4000);
+    } catch (err: any) {
+      alert('Erro ao memorizar regra do fornecedor: ' + err.message);
+    } finally {
+      setMemorizando(false);
+    }
+  };
+
   return (
     <div>
       {/* Barra de Ações Rápidas */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             className={`btn ${modoEdicao ? 'btn-primary' : 'btn-outline'}`}
             onClick={() => setModoEdicao(!modoEdicao)}
@@ -625,6 +677,27 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
           >
             {modoEdicao ? <Check size={16} /> : <Edit3 size={16} />}
             {modoEdicao ? 'Concluir Edição de Itens' : 'Editar Itens / Ajuste Manual'}
+          </button>
+
+          <button
+            className="btn btn-outline"
+            onClick={handleMemorizarFornecedor}
+            disabled={memorizando}
+            type="button"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.82rem',
+              borderColor: memorizadoSucesso ? '#16a34a' : '#d97706',
+              color: memorizadoSucesso ? '#16a34a' : '#b45309',
+              background: memorizadoSucesso ? '#f0fdf4' : '#fffbeb',
+              fontWeight: 600
+            }}
+            title="Salva esta classificação tributária na Memória Inteligente deste fornecedor para aplicação automática em notas futuras"
+          >
+            <Sparkles size={15} color={memorizadoSucesso ? '#16a34a' : '#d97706'} />
+            {memorizadoSucesso ? 'Regra Memorizada!' : memorizando ? 'Memorizando...' : 'Memorizar Padrão do Fornecedor'}
           </button>
 
           {modificado && (
@@ -1004,10 +1077,28 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
                   <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--primary)' }}>
                     {currentData.tipoDocumento === 'NFE' ? 'CRITÉRIO NCM & CST' : 'CÓDIGO SERVIÇO'}
                   </span>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>
-                    {currentData.tipoDocumento === 'NFE' 
-                      ? `NCM ${item.ncm || 'Geral'} ${item.cst ? `• CST: ${item.cst}` : ''}` 
-                      : `Cód. ${item.codigoServico || '6190'}`}
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span>
+                      {currentData.tipoDocumento === 'NFE' 
+                        ? `NCM ${item.ncm || 'Geral'} ${item.cst ? `• CST: ${item.cst}` : ''}` 
+                        : `Cód. ${item.codigoServico || '6190'}`}
+                    </span>
+                    {item.sugestaoMemoria && (
+                      <span style={{
+                        background: '#ecfdf5',
+                        color: '#065f46',
+                        border: '1px solid #a7f3d0',
+                        borderRadius: '4px',
+                        padding: '1px 6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <Sparkles size={12} color="#059669" /> Memória Tributária Aplicada
+                      </span>
+                    )}
                   </div>
                   {item.descricao && (
                     <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '2px' }}>
