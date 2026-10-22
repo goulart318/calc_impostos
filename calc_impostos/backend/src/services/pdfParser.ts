@@ -324,13 +324,18 @@ export class PdfParser {
       /VALOR\s+L[ÍI]QUIDO[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       /VALOR\s+TOTAL[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ] : [
-      /(?:V\.?\s*TOTAL\s*(?:DA\s*NOTA|DOS\s*PRODUTOS|PRODUTOS)|VALOR\s*TOTAL\s*(?:DA\s*NOTA|DOS\s*PRODUTOS|PRODUTOS))\s*[:\.]?\s*[\r\n]*\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
-      /VALOR\s*TOTAL\s*DA\s*NOTA\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
-      /VALOR\s*TOTAL\s*DOS\s*PRODUTOS\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
-      /V\.?\s*TOTAL\s*DA\s*NOTA\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      // 1. PRIORIDADE MÁXIMA: "V. TOTAL DA NOTA" ou "VALOR TOTAL DA NOTA" (DANFE oficial)
+      /(?:V\.?\s*TOTAL\s*DA\s*NOTA|VALOR\s*TOTAL\s*DA\s*NOTA)\s*[:\.]?\s*[\r\n]*\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      // 2. Canhoto de recebimento do DANFE: "EMISSÃO: 07/10/2026 VALOR TOTAL: R$ 435,00 DESTINATÁRIO"
+      /VALOR\s*TOTAL\s*:?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*(?:DESTINAT[ÁA]RIO|EMISS[ÃA]O|$)/i,
+      // 3. Fatura / Duplicata
+      /FATURA\s*\/\s*DUPLICATA[\s\S]*?Valor\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      // 4. Valor Líquido
       /VALOR\s+L[ÍI]QUIDO[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
-      /VALOR\s+TOTAL[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
-      /FATURA\s*\/\s*DUPLICATA[\s\S]*?Valor\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
+      // 5. Genérico "VALOR TOTAL" (sem casar "DOS PRODUTOS")
+      /VALOR\s*TOTAL(?!\s*DOS?\s*PRODUTOS)[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      // 6. ÚLTIMO RECURSO (somente se não constar V. TOTAL DA NOTA): V. TOTAL DOS PRODUTOS
+      /(?:V\.?\s*TOTAL\s*DOS\s*PRODUTOS|VALOR\s*TOTAL\s*DOS\s*PRODUTOS)\s*[:\.]?\s*[\r\n]*\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ];
 
     for (const pv of padroesValorNota) {
@@ -347,10 +352,37 @@ export class PdfParser {
 
     // Fallback de valor total para DANFEs com quebras de linha entre o rótulo e o valor
     if (!valorTotal) {
-      const rDanfeTotal = /(?:VALOR|V\.?)\s*TOTAL\s*(?:DA\s*NOTA|DOS\s*PRODUTOS|PRODUTOS)?[^\n]*\n(?:[^\n]*\n){1,35}?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i;
-      const mTot = text.match(rDanfeTotal);
-      if (mTot && mTot[1]) {
-        const vClean = mTot[1].replace(/\./g, '').replace(',', '.');
+      // 1. Tenta Valor Total da Nota
+      const rDanfeTotalNota = /(?:VALOR|V\.?)\s*TOTAL\s*DA\s*NOTA[^\n]*\n(?:[^\n]*\n){0,35}?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i;
+      const mTotNota = text.match(rDanfeTotalNota);
+      if (mTotNota && mTotNota[1]) {
+        const vClean = mTotNota[1].replace(/\./g, '').replace(',', '.');
+        const vNum = parseFloat(vClean);
+        if (!isNaN(vNum) && vNum > 0) {
+          valorTotal = vNum;
+        }
+      }
+    }
+
+    if (!valorTotal) {
+      // 2. Tenta genérico sem produtos
+      const rDanfeTotalGen = /VALOR\s*TOTAL(?!\s*DOS?\s*PRODUTOS)[^\n]*\n(?:[^\n]*\n){0,35}?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i;
+      const mTotGen = text.match(rDanfeTotalGen);
+      if (mTotGen && mTotGen[1]) {
+        const vClean = mTotGen[1].replace(/\./g, '').replace(',', '.');
+        const vNum = parseFloat(vClean);
+        if (!isNaN(vNum) && vNum > 0) {
+          valorTotal = vNum;
+        }
+      }
+    }
+
+    if (!valorTotal) {
+      // 3. Contingência: Valor dos Produtos apenas se nada mais foi detectado
+      const rDanfeTotalProd = /(?:VALOR|V\.?)\s*TOTAL\s*DOS\s*PRODUTOS[^\n]*\n(?:[^\n]*\n){0,35}?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i;
+      const mTotProd = text.match(rDanfeTotalProd);
+      if (mTotProd && mTotProd[1]) {
+        const vClean = mTotProd[1].replace(/\./g, '').replace(',', '.');
         const vNum = parseFloat(vClean);
         if (!isNaN(vNum) && vNum > 0) {
           valorTotal = vNum;

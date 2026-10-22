@@ -91,6 +91,12 @@ export class XmlParser {
       }
 
       const vProd = parseFloat(String(prod.vProd || 0));
+      const vDesc = parseFloat(String(prod.vDesc || 0));
+      const vFrete = parseFloat(String(prod.vFrete || 0));
+      const vSeg = parseFloat(String(prod.vSeg || 0));
+      const vOutro = parseFloat(String(prod.vOutro || 0));
+      // Valor líquido do item na NF-e (produtos - desconto + frete + seguro + outras despesas)
+      const vItemLiquido = Math.max(0, vProd - vDesc + vFrete + vSeg + vOutro);
       valorTotal += vProd;
 
       itens.push({
@@ -98,12 +104,33 @@ export class XmlParser {
         descricao: String(prod.xProd || 'Item de Mercadoria'),
         ncm: String(prod.NCM || '').replace(/\D/g, ''),
         cst,
-        valorBruto: vProd
+        valorBruto: vItemLiquido > 0 ? Number(vItemLiquido.toFixed(2)) : vProd
       });
     });
 
-    const vNF = parseFloat(String(infNFe.total?.ICMSTot?.vNF || valorTotal));
+    const vNF = parseFloat(String(infNFe.total?.ICMSTot?.vNF || 0));
+    const valorTotalNota = vNF > 0 ? vNF : valorTotal;
 
+    // Assegura que a base de cálculo seja sempre o VALOR TOTAL DA NOTA e não o valor dos produtos
+    if (valorTotalNota > 0 && itens.length > 0) {
+      const somaAtualItens = itens.reduce((acc, it) => acc + it.valorBruto, 0);
+      if (Math.abs(somaAtualItens - valorTotalNota) > 0.01) {
+        if (itens.length === 1) {
+          itens[0].valorBruto = valorTotalNota;
+        } else if (somaAtualItens > 0) {
+          const fator = valorTotalNota / somaAtualItens;
+          let somaAjustada = 0;
+          itens.forEach((it, idx) => {
+            if (idx === itens.length - 1) {
+              it.valorBruto = Number((valorTotalNota - somaAjustada).toFixed(2));
+            } else {
+              it.valorBruto = Number((it.valorBruto * fator).toFixed(2));
+              somaAjustada += it.valorBruto;
+            }
+          });
+        }
+      }
+    }
     return {
       tipoDocumento: 'NFE',
       numeroNota,
@@ -113,7 +140,7 @@ export class XmlParser {
       destinatarioNome,
       destinatarioCnpj,
       dataEmissao,
-      valorTotal: vNF > 0 ? vNF : valorTotal,
+      valorTotal: valorTotalNota,
       itens
     };
   }
