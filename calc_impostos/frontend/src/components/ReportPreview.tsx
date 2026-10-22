@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Download, 
   Database, 
-  CheckCircle2, 
-  ShieldCheck, 
-  AlertCircle, 
-  Building2,
+  CheckCircle2,
+  ShieldCheck,
   Edit3,
   RefreshCw,
   Plus,
@@ -14,8 +12,7 @@ import {
   Sliders,
   Check,
   AlertTriangle,
-  Sparkles,
-  ExternalLink
+  Sparkles
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 
@@ -207,26 +204,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
   const [baixandoPdf, setBaixandoPdf] = useState(false);
   const [memorizando, setMemorizando] = useState(false);
   const [memorizadoSucesso, setMemorizadoSucesso] = useState(false);
-  const [consultandoSicaf, setConsultandoSicaf] = useState(false);
 
-  const reconsultarSicaf = async () => {
-    if (!currentData.fornecedorCnpj) return;
-    setConsultandoSicaf(true);
-    try {
-      const cnpjLimpo = currentData.fornecedorCnpj.replace(/\D/g, '');
-      const res = await fetch(`${API_BASE_URL}/api/sicaf/consultar/${cnpjLimpo}`);
-      if (res.ok) {
-        const dados = await res.json();
-        const atualizado = { ...currentData, sicaf: dados };
-        setCurrentData(atualizado);
-        if (onUpdateData) onUpdateData(atualizado);
-      }
-    } catch (err) {
-      console.warn('Erro ao reconsultar SICAF:', err);
-    } finally {
-      setConsultandoSicaf(false);
-    }
-  };
 
   const itemParaEditavel = (item: ItemCalculado, idx: number): ItemEditavel => {
     let preset = 'AUTO';
@@ -1118,198 +1096,6 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
             </div>
           </div>
         </div>
-
-        {/* Quadro de Auditoria do Simples Nacional / Receita Federal */}
-        <div style={{ 
-          margin: '0 0 20px 0', 
-          padding: '12px 16px', 
-          borderRadius: 'var(--radius-md)', 
-          border: currentData.optanteSimples ? '1px solid #fde68a' : '1px solid #bfdbfe',
-          background: currentData.optanteSimples ? '#fffbeb' : '#eff6ff',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ 
-              width: '38px', 
-              height: '38px', 
-              borderRadius: '50%', 
-              background: currentData.optanteSimples ? '#fef3c7' : '#dbeafe', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center' 
-            }}>
-              {currentData.optanteSimples ? <AlertCircle size={20} color="#d97706" /> : <Building2 size={20} color="#2563eb" />}
-            </div>
-            <div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: currentData.optanteSimples ? '#92400e' : '#1e40af' }}>
-                {currentData.optanteSimples ? 'EMPRESA OPTANTE PELO SIMPLES NACIONAL' : 'EMPRESA NÃO OPTANTE PELO SIMPLES NACIONAL'}
-              </div>
-              <div style={{ fontSize: '0.75rem', color: currentData.optanteSimples ? '#b45309' : '#1d4ed8' }}>
-                {currentData.optanteSimples 
-                  ? 'Aplicação do Art. 4º, Inciso XI da IN RFB nº 1.234/2012 (Dispensa de Retenção de Tributos Federais).' 
-                  : 'Sujeito à Retenção Ampla de IR, CSLL, COFINS e PIS/PASEP conforme a IN RFB nº 1.234/2012.'}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, display: 'block', color: 'var(--text-muted)' }}>SITUAÇÃO CADASTRAL</span>
-            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: currentData.situacaoCadastral === 'ATIVA' ? '#16a34a' : '#dc2626' }}>
-              {currentData.situacaoCadastral || 'ATIVA'}
-            </span>
-          </div>
-        </div>
-
-        {/* Quadro de Auditoria e Conformidade SICAF (Compras.gov.br) */}
-        {(() => {
-          const s = currentData.sicaf;
-          const isFalha = Boolean(s?.falhaConexao || s?.status === 'INDISPONIVEL');
-          const estaHabilitado = s?.habilitadoLicitar === true;
-          const isComRestricao = Boolean(s && s.encontrado && !estaHabilitado && !isFalha);
-          const isNaoLocalizado = Boolean(s && !s.encontrado && !isFalha);
-
-          let cardBorder = '#bbf7d0';
-          let cardBg = '#f0fdf4';
-          let iconBg = '#dcfce7';
-          let iconColor = '#16a34a';
-          let titleColor = '#166534';
-          let subtitleColor = '#15803d';
-          let titleText = 'SICAF / COMPRAS.GOV.BR: HABILITADO PARA LICITAR E RECEBER PAGAMENTOS';
-          let descText = s?.mensagem || 'Fornecedor Ativo no Sistema de Compras do Governo Federal (Nada Consta em Impedimentos).';
-
-          if (isFalha) {
-            cardBorder = '#fde68a';
-            cardBg = '#fffbeb';
-            iconBg = '#fef3c7';
-            iconColor = '#d97706';
-            titleColor = '#92400e';
-            subtitleColor = '#b45309';
-            titleText = 'SICAF: SERVIÇO PÚBLICO TEMPORARIAMENTE INDISPONÍVEL OU TEMPO ESGOTADO';
-            descText = 'O portal Compras.gov.br demorou para responder. A análise de impostos foi processada normalmente sem bloqueio.';
-          } else if (isComRestricao) {
-            cardBorder = '#fca5a5';
-            cardBg = '#fef2f2';
-            iconBg = '#fee2e2';
-            iconColor = '#dc2626';
-            titleColor = '#991b1b';
-            subtitleColor = '#b91c1c';
-            titleText = 'SICAF / COMPRAS.GOV.BR: FORNECEDOR COM RESTRIÇÃO OU SANÇÃO IMPEDITIVA';
-            descText = s?.mensagem || 'Fornecedor cadastrado no SICAF com registro de ocorrência impeditiva ativa.';
-          } else if (isNaoLocalizado) {
-            cardBorder = '#cbd5e1';
-            cardBg = '#f8fafc';
-            iconBg = '#e2e8f0';
-            iconColor = '#64748b';
-            titleColor = '#334155';
-            subtitleColor = '#475569';
-            titleText = 'SICAF: FORNECEDOR NÃO LOCALIZADO NA BASE ATIVA';
-            descText = 'Fornecedor não possui cadastro ativo de fornecedor no sistema SICAF Federal.';
-          }
-
-          return (
-            <div style={{ 
-              margin: '0 0 20px 0', 
-              padding: '12px 16px', 
-              borderRadius: 'var(--radius-md)', 
-              border: `1px solid ${cardBorder}`,
-              background: cardBg,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '12px',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '280px' }}>
-                <div style={{ 
-                  width: '38px', 
-                  height: '38px', 
-                  borderRadius: '50%', 
-                  background: iconBg, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  {estaHabilitado ? (
-                    <ShieldCheck size={20} color={iconColor} />
-                  ) : (
-                    <AlertCircle size={20} color={iconColor} />
-                  )}
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: titleColor, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>{titleText}</span>
-                  </div>
-                  <div style={{ fontSize: '0.74rem', color: subtitleColor, marginTop: '2px' }}>
-                    {descText}
-                    {' • '}
-                    <span style={{ fontWeight: 600 }}>
-                      📄 Declaração oficial anexada automaticamente ao emitir o PDF para o SEI.
-                    </span>
-                  </div>
-                  {s?.codigoAutenticidade && (
-                    <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
-                      Código de Autenticidade Digital: <strong style={{ color: '#0f172a' }}>{s.codigoAutenticidade}</strong>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={reconsultarSicaf}
-                  disabled={consultandoSicaf}
-                  style={{
-                    fontSize: '0.73rem',
-                    fontWeight: 700,
-                    color: '#0f172a',
-                    background: '#ffffff',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '6px',
-                    padding: '5px 9px',
-                    cursor: consultandoSicaf ? 'wait' : 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Atualizar consulta do SICAF agora"
-                >
-                  <RefreshCw size={12} className={consultandoSicaf ? 'animate-spin' : ''} />
-                  {consultandoSicaf ? 'Consultando...' : 'Atualizar SICAF'}
-                </button>
-
-                <a 
-                  href={`https://dadosabertos.compras.gov.br/modulo-fornecedor/1_consultarFornecedor?ativo=true&cnpj=${(currentData.fornecedorCnpj || '').replace(/\D/g, '')}`}
-                  target="_blank" 
-                  rel="noreferrer"
-                  style={{
-                    fontSize: '0.73rem',
-                    fontWeight: 700,
-                    color: '#2563eb',
-                    background: '#ffffff',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: '6px',
-                    padding: '5px 9px',
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Abrir endpoint oficial do Compras.gov.br"
-                >
-                  <ExternalLink size={13} />
-                  Dados Abertos SICAF
-                </a>
-              </div>
-            </div>
-          );
-        })()}
 
         {/* LISTA DE ITENS: MODO VISUALIZAÇÃO vs MODO EDIÇÃO */}
         {!modoEdicao ? (

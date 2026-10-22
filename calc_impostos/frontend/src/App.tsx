@@ -18,7 +18,8 @@ import {
   CheckCircle2,
   BarChart3
 } from 'lucide-react';
-import { ReportPreview, type ResultadoConsolidado } from './components/ReportPreview';
+import { ReportPreview, type ResultadoConsolidado, type DadosSicafConsulta } from './components/ReportPreview';
+import { SicafCard } from './components/SicafCard';
 import { HistoricoSearch } from './components/HistoricoSearch';
 import { Anexo1Tab } from './components/Anexo1Tab';
 import { NcmMatrixTab } from './components/NcmMatrixTab';
@@ -42,6 +43,29 @@ export default function App() {
   const [optanteSimples, setOptanteSimples] = useState(false);
   const [situacaoCadastral, setSituacaoCadastral] = useState('ATIVA');
   const [consultandoCnpj, setConsultandoCnpj] = useState(false);
+  const [sicafData, setSicafData] = useState<DadosSicafConsulta | null>(null);
+  const [consultandoSicaf, setConsultandoSicaf] = useState(false);
+
+  const reconsultarSicaf = async (cnpjAlvo?: string) => {
+    const raw = cnpjAlvo || fornecedorCnpj;
+    const cnpjLimpo = (raw || '').replace(/\D/g, '');
+    if (!cnpjLimpo) return;
+    setConsultandoSicaf(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/sicaf/consultar/${cnpjLimpo}`);
+      if (res.ok) {
+        const dados: DadosSicafConsulta = await res.json();
+        setSicafData(dados);
+        if (resultado) {
+          setResultado(prev => prev ? { ...prev, sicaf: dados } : null);
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao consultar SICAF:', err);
+    } finally {
+      setConsultandoSicaf(false);
+    }
+  };
 
   // Formata o número do processo no padrão SEI: xxxxx.yyyyyy/aaaa-dd
   const formatarProcessoSei = (val: string) => {
@@ -149,6 +173,7 @@ export default function App() {
     setOptanteCprb(false);
     setItens([]);
     setResultado(null);
+    setSicafData(null);
   };
 
   const [calculando, setCalculando] = useState(false);
@@ -222,6 +247,11 @@ export default function App() {
       }
 
       setResultado(data);
+      if (data.sicaf) {
+        setSicafData(data.sicaf);
+      } else if (data.fornecedorCnpj) {
+        reconsultarSicaf(data.fornecedorCnpj);
+      }
       if (data.jaAnalisadaAntes) {
         setMensagemSucesso(`✓ Cruzamento do Histórico: Nota já analisada anteriormente (${data.dataAnaliseAnterior || 'no histórico'}). Processo SEI (${data.numeroProcesso || 'SEI'}) preenchido automaticamente!`);
       } else {
@@ -255,6 +285,8 @@ export default function App() {
         if (data.municipio || data.uf) {
           setFornecedorCidadeUf(`${data.municipio || ''}${data.uf ? `/${data.uf}` : ''}`.trim());
         }
+        const cnpjNum = fornecedorCnpj.replace(/\D/g, '');
+        if (cnpjNum.length === 14) reconsultarSicaf(cnpjNum);
       }
     } catch (e) {
       alert('Não foi possível consultar o CNPJ.');
@@ -448,6 +480,7 @@ export default function App() {
     setDestinatarioNome(nota.destinatarioNome || '');
     setOptanteSimples(nota.optanteSimples || false);
     setSituacaoCadastral(nota.situacaoCadastral || 'ATIVA');
+    if (nota.sicaf) setSicafData(nota.sicaf);
 
     if (nota.tipoDocumento === 'NFSE') {
       setPercentualReducaoIss(nota.percentualReducaoIssAplicado || 0);
@@ -1360,6 +1393,16 @@ export default function App() {
                           ? 'Bloqueado — CNPJ da Nota Pertence a Outro Estabelecimento' 
                           : 'Calcular Retenções e Gerar Relatório'}
                     </button>
+                  )}
+
+                  {/* Relatório e Certidão de Regularidade SICAF / SIAFI */}
+                  {(fornecedorCnpj || sicafData || resultado?.sicaf) && (
+                    <SicafCard 
+                      sicaf={sicafData || resultado?.sicaf} 
+                      cnpj={fornecedorCnpj || resultado?.fornecedorCnpj}
+                      onRefresh={() => reconsultarSicaf()}
+                      loading={consultandoSicaf}
+                    />
                   )}
                 </div>
               </div>
