@@ -507,9 +507,9 @@ export class PdfParser {
           : text.substring(idxInicioProd);
       }
 
-      // 1) Busca primária estruturada: NCM de 8 dígitos seguido de CST (2 a 3 dígitos), CFOP (5xxx ou 6xxx) e Unidade (2 a 4 letras)
+      // 1) Busca primária estruturada: NCM de 8 dígitos seguido de CST (2 a 3 dígitos ou 1/00), CFOP (1/2/5/6/7xxx) e Unidade (2 a 4 letras)
       // Esse é o padrão exato de DANFEs nacionais (evita falsos positivos com registros ANVISA de 11 dígitos ou códigos internos)
-      const regexItemEstruturado = /(\d{8})\s*(\d{2,3})\s*(5\d{3}|6\d{3})\s*([A-Za-z]{2,4})/g;
+      const regexItemEstruturado = /(\d{8})\s*([0-9]\/[0-9]{2}|\d{2,3})\s*([12567]\d{3})\s*([A-Za-z]{2,4})?/g;
       let matchEstruturado;
       while ((matchEstruturado = regexItemEstruturado.exec(secaoProdutos)) !== null) {
         const candidatoNcm = matchEstruturado[1];
@@ -528,40 +528,60 @@ export class PdfParser {
             }
           }
 
-          // 2. Se não encontrou na mesma linha, busca nas linhas imediatamente anteriores (ex: tabela SILIMED)
+          // 2. Se não encontrou na mesma linha, busca nas linhas imediatamente anteriores (ex: tabela SILIMED / Advanced)
           if (!descrItem) {
-            const inicioJanela = Math.max(0, idxItem - 400);
+            const inicioJanela = Math.max(0, idxItem - 500);
             const trechoAnt = secaoProdutos.substring(inicioJanela, idxItem);
             const linhasAnt = trechoAnt.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
 
             for (let li = linhasAnt.length - 1; li >= 0; li--) {
               const l = linhasAnt[li];
+              const up = l.toUpperCase();
               if (
-                !l.startsWith('DADOS') && 
-                !l.startsWith('CÓDIGO') && 
-                !l.startsWith('COD.') &&
-                !l.startsWith('DESCRI') && 
-                !l.startsWith('Reg.') &&
-                !l.startsWith('SERIE') &&
-                !l.startsWith('LOTE') &&
-                !l.startsWith('DT.') &&
-                !l.startsWith('AL.') &&
-                !l.startsWith('ENTO') &&
-                !l.startsWith('ORROG') &&
-                !l.startsWith('ONV') &&
-                !l.includes('Nº de serie') &&
-                !l.includes('Lote:') &&
-                !l.includes('Fab:') &&
-                !l.includes('Val:') &&
-                !l.includes('...') &&
+                !up.startsWith('DADOS') && 
+                !up.startsWith('CÓDIGO') && 
+                !up.startsWith('COD.') &&
+                !up.startsWith('DESCRI') && 
+                !up.startsWith('PRODUTO') &&
+                !up.startsWith('VALOR') &&
+                !up.startsWith('UNIT') &&
+                !up.startsWith('TOTAL') &&
+                !up.startsWith('DESC') &&
+                !up.startsWith('B.CÁLC') &&
+                !up.startsWith('B.CALC') &&
+                !up.startsWith('ICMS') &&
+                !up.startsWith('IPI') &&
+                !up.startsWith('ALÍQ') &&
+                !up.startsWith('ALIQ') &&
+                !up.startsWith('REG.') &&
+                !up.startsWith('SERIE') &&
+                !up.startsWith('LOTE') &&
+                !up.startsWith('DT.') &&
+                !up.startsWith('AL.') &&
+                !up.startsWith('ENTO') &&
+                !up.startsWith('ORROG') &&
+                !up.startsWith('ONV') &&
+                !up.includes('Nº DE SERIE') &&
+                !up.includes('LOTE:') &&
+                !up.includes('LOTE DO') &&
+                !up.includes('FAB:') &&
+                !up.includes('VAL:') &&
+                !up.includes('VALIDADE') &&
+                !up.includes('QUANT:') &&
+                !up.includes('QUANT.') &&
+                !up.includes('PFCP') &&
+                !up.includes('VFCP') &&
+                !up.includes('PICMS') &&
+                !up.includes('VICMS') &&
+                !up.includes('...') &&
                 !/^\d+$/.test(l) &&
-                !l.includes('NCM') &&
-                !l.includes('CST') &&
-                !l.includes('CFOP') &&
+                !up.includes('NCM') &&
+                !up.includes('CST') &&
+                !up.includes('CFOP') &&
                 l.length > 3
               ) {
-                const limpa = l.replace(/^[\d\-_]{5,20}\s*/, '').trim();
-                if (limpa.length > 3) {
+                const limpa = l.replace(/^[\d\-_]{4,25}\s*/, '').trim();
+                if (limpa.length >= 3) {
                   descrItem = limpa;
                   break;
                 }
@@ -569,7 +589,7 @@ export class PdfParser {
             }
           }
 
-          const cstLimpo = candidatoCst.length >= 2 ? candidatoCst.substring(candidatoCst.length - 2) : candidatoCst;
+          const cstLimpo = candidatoCst.includes('/') ? candidatoCst.split('/')[1] : (candidatoCst.length >= 2 ? candidatoCst.substring(candidatoCst.length - 2) : candidatoCst);
           ncmsEncontrados.push({
             ncm: candidatoNcm,
             cst: cstLimpo,
@@ -637,6 +657,19 @@ export class PdfParser {
         let matchFmt;
         while ((matchFmt = regexFormatado.exec(secaoProdutos)) !== null) {
           const limpo = matchFmt[1].replace(/\D/g, '');
+          if (this.ehNcmValido(limpo)) {
+            if (!ncmsEncontrados.some(x => x.ncm === limpo)) {
+              ncmsEncontrados.push({ ncm: limpo, cst: '01' });
+            }
+          }
+        }
+      }
+
+      if (ncmsEncontrados.length === 0) {
+        const regexOitoDigitos = /\b(\d{8})\b/g;
+        let matchOito;
+        while ((matchOito = regexOitoDigitos.exec(secaoProdutos)) !== null) {
+          const limpo = matchOito[1];
           if (this.ehNcmValido(limpo)) {
             if (!ncmsEncontrados.some(x => x.ncm === limpo)) {
               ncmsEncontrados.push({ ncm: limpo, cst: '01' });
@@ -713,7 +746,7 @@ export class PdfParser {
       itens.push({
         numeroItem: 1,
         descricao: ehServico ? 'Prestação de Serviço' : 'Item de Material / Consumo',
-        ncm: ehServico ? undefined : '90181990',
+        ncm: ehServico ? undefined : '',
         cst: '01',
         codigoServico: ehServico ? '6190' : undefined,
         valorBruto: valorTotal

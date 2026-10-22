@@ -203,6 +203,19 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+
+        // Gravação automática no banco de dados ao baixar o PDF individual
+        try {
+          await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notaComProcesso)
+          });
+          setMsgSucesso(`✓ NF ${notaComProcesso.numeroNota || ''} baixada e salva automaticamente no banco de dados!`);
+          setTimeout(() => setMsgSucesso(null), 5000);
+        } catch (saveErr) {
+          console.warn('Gravação automática após download falhou:', saveErr);
+        }
       } catch (err: any) {
         alert('Erro ao baixar PDF: ' + err.message);
       } finally {
@@ -328,6 +341,21 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+
+        // Gravação automática de todas as notas do grupo consolidado no banco de dados
+        try {
+          for (const n of notasAtualizadas) {
+            await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(n)
+            });
+          }
+          setMsgSucesso(`✓ Relatório consolidado baixado e as ${notasAtualizadas.length} notas salvas no banco de dados!`);
+          setTimeout(() => setMsgSucesso(null), 5000);
+        } catch (saveErr) {
+          console.warn('Gravação automática do grupo consolidado falhou:', saveErr);
+        }
       } catch (err: any) {
         alert('Erro ao gerar relatório consolidado: ' + err.message);
       } finally {
@@ -1173,7 +1201,7 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
               {/* Área do Relatório de Conferência e Ajustes da Nota Ativa */}
               <div style={{ flex: 1, padding: '20px 24px' }}>
                 <ReportPreview 
-                  key={notaAtiva.chaveAcesso || notaAtiva.numeroNota || indiceNotaAtiva}
+                  key={`nota-conferencia-${indiceNotaAtiva}`}
                   data={notaAtiva} 
                   onUpdateData={(notaRecalculada) => handleAtualizarNota(indiceNotaAtiva, notaRecalculada)}
                 />

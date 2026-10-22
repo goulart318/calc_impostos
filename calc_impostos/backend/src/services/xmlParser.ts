@@ -96,7 +96,7 @@ export class XmlParser {
       itens.push({
         numeroItem: idx + 1,
         descricao: String(prod.xProd || 'Item de Mercadoria'),
-        ncm: String(prod.NCM || '90181990').replace(/\D/g, ''),
+        ncm: String(prod.NCM || '').replace(/\D/g, ''),
         cst,
         valorBruto: vProd
       });

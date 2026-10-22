@@ -864,7 +864,24 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
           <div style={{ display: 'grid', gridTemplateColumns: '130px 180px 140px 1fr', gap: '16px', alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>NÚMERO DA NOTA</div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>{currentData.numeroNota || '---'}</div>
+              {modoEdicao ? (
+                <input
+                  type="text"
+                  className="form-input"
+                  value={currentData.numeroNota || ''}
+                  onChange={(e) => {
+                    const novoNumero = e.target.value;
+                    const atualizado = { ...currentData, numeroNota: novoNumero };
+                    setCurrentData(atualizado);
+                    setModificado(true);
+                    if (onUpdateData) onUpdateData(atualizado);
+                  }}
+                  placeholder="Ex: 88618"
+                  style={{ fontSize: '0.85rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', fontWeight: 700, width: '100%', marginTop: '2px' }}
+                />
+              ) : (
+                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>{currentData.numeroNota || '---'}</div>
+              )}
             </div>
 
             <div>
