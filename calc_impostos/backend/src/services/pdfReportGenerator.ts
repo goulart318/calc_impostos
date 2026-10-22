@@ -3,22 +3,42 @@ import { ResultadoConsolidado } from './taxEngine';
 
 export class PdfReportGenerator {
   /**
-   * Gera o nome padronizado do arquivo PDF incluindo o número da nota e a Razão Social do fornecedor
+   * Gera o nome padronizado do arquivo PDF: "número do processo" + "Relatório Retenção" + "Nome Fornecedor".pdf
+   * Ex: "23525.025209_2026-18_Relatorio_Retencao_ST_JUDE_MEDICAL_BRASIL_LTDA.pdf"
    */
-  public static gerarNomeArquivo(numeroNota?: string, fornecedorNome?: string): string {
-    const nota = (numeroNota || 'Fiscal').trim();
+  public static gerarNomeArquivo(numeroNota?: string, fornecedorNome?: string, numeroProcesso?: string): string {
     const razaoSocial = (fornecedorNome || '')
       .trim()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-zA-Z0-9\s_-]/g, '')
       .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
       .toUpperCase();
 
-    if (razaoSocial) {
-      return `Relatorio_Retencao_Nota_${nota}_${razaoSocial}.pdf`;
+    const processoLimpo = (numeroProcesso || '')
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\//g, '_')
+      .replace(/[^a-zA-Z0-9._-]/g, '')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
+
+    const nota = (numeroNota || '').trim();
+
+    if (processoLimpo) {
+      if (razaoSocial) {
+        return `${processoLimpo}_Relatorio_Retencao_${razaoSocial}.pdf`;
+      }
+      return `${processoLimpo}_Relatorio_Retencao.pdf`;
     }
-    return `Relatorio_Retencao_Nota_${nota}.pdf`;
+
+    if (razaoSocial) {
+      return `Relatorio_Retencao_Nota_${nota || 'S_N'}_${razaoSocial}.pdf`;
+    }
+    return `Relatorio_Retencao_Nota_${nota || 'S_N'}.pdf`;
   }
 
   /**
@@ -27,7 +47,7 @@ export class PdfReportGenerator {
   public static gerarRelatorio(resultado: ResultadoConsolidado): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       try {
-        const nomeArquivo = PdfReportGenerator.gerarNomeArquivo(resultado.numeroNota, resultado.fornecedorNome);
+        const nomeArquivo = PdfReportGenerator.gerarNomeArquivo(resultado.numeroNota, resultado.fornecedorNome, resultado.numeroProcesso);
         const doc = new PDFDocument({
           size: 'A4',
           margins: { top: 30, bottom: 30, left: 35, right: 35 },

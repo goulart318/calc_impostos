@@ -133,14 +133,20 @@ export default function App() {
     setNumeroEmpenho('');
     setFornecedorCnpj('');
     setFornecedorNome('');
+    setFornecedorCidadeUf('');
     setOptanteSimples(false);
+    setSituacaoCadastral('ATIVA');
     setDestinatarioCnpj('');
     setDestinatarioNome('');
     setPercentualReducaoIss(0);
     setRetencaoIss(true);
+    setAliquotaIssPersonalizada(5.0);
+    setHabilitarAliquotaPersonalizadaIss(false);
     setValorInssDestacado(0);
+    setValorMateriaisInss(0);
     setValorContaVinculada(0);
     setRetencaoInss(false);
+    setOptanteCprb(false);
     setItens([]);
     setResultado(null);
   };
@@ -272,8 +278,6 @@ export default function App() {
       const formData = new FormData();
       formData.append('arquivo', file);
       formData.append('file', file);
-      if (numeroProcesso) formData.append('numeroProcesso', numeroProcesso);
-      if (numeroEmpenho) formData.append('numeroEmpenho', numeroEmpenho);
 
       const endpoint = isXml ? `${API_BASE_URL}/api/upload-xml` : `${API_BASE_URL}/api/upload-pdf`;
       const res = await fetch(endpoint, {
@@ -303,17 +307,8 @@ export default function App() {
       } catch {
         throw new Error('O servidor respondeu de forma incompleta. Aguarde alguns segundos (o servidor pode estar acordando) e tente novamente.');
       }
-      if (data.numeroProcesso) {
-        setNumeroProcesso(data.numeroProcesso);
-      } else if (numeroProcesso && !data.numeroProcesso) {
-        data.numeroProcesso = numeroProcesso;
-      }
-
-      if (data.numeroEmpenho) {
-        setNumeroEmpenho(data.numeroEmpenho);
-      } else if (numeroEmpenho && !data.numeroEmpenho) {
-        data.numeroEmpenho = numeroEmpenho;
-      }
+      setNumeroProcesso(data.numeroProcesso || '');
+      setNumeroEmpenho(data.numeroEmpenho || '');
       setResultado(data);
 
       setNumeroNota(data.numeroNota || '');
@@ -1375,6 +1370,11 @@ export default function App() {
                   <div>
                     <ReportPreview 
                       data={resultado} 
+                      onClearAfterDownload={() => {
+                        limparFormulario();
+                        setMensagemSucesso('✓ Relatório PDF baixado e salvo no histórico! Tela limpa para a próxima análise.');
+                        setTimeout(() => setMensagemSucesso(null), 6000);
+                      }}
                       onUpdateData={(novoResultado) => {
                         setResultado(novoResultado);
                         if (novoResultado.numeroProcesso !== undefined) setNumeroProcesso(novoResultado.numeroProcesso);

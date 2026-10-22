@@ -605,7 +605,7 @@ app.post('/api/gerar-pdf', async (req: Request, res: Response) => {
     }
 
     const pdfBuffer = await PdfReportGenerator.gerarRelatorio(resultado);
-    const nomeArquivo = PdfReportGenerator.gerarNomeArquivo(resultado.numeroNota, resultado.fornecedorNome);
+    const nomeArquivo = PdfReportGenerator.gerarNomeArquivo(resultado.numeroNota, resultado.fornecedorNome, resultado.numeroProcesso);
 
     // Salva ou atualiza automaticamente no histórico sem gerar duplicatas
     try {

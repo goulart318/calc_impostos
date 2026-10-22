@@ -209,7 +209,11 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = gerarNomeArquivoPdf(dataFull.numeroNota || numeroNota, dataFull.fornecedorNome || fornecedorNome);
+        a.download = gerarNomeArquivoPdf(
+          dataFull.numeroNota || numeroNota,
+          dataFull.fornecedorNome || fornecedorNome,
+          dataFull.numeroProcesso
+        );
         document.body.appendChild(a);
         a.click();
         a.remove();

@@ -131,20 +131,45 @@ export interface ResultadoConsolidado {
   sicaf?: DadosSicafConsulta;
 }
 
-export const gerarNomeArquivoPdf = (numeroNota?: string, fornecedorNome?: string): string => {
-  const nota = (numeroNota || 'Fiscal').trim();
+export const gerarNomeArquivoPdf = (
+  numeroNota?: string, 
+  fornecedorNome?: string,
+  numeroProcesso?: string
+): string => {
   const razaoSocial = (fornecedorNome || '')
     .trim()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9\s_-]/g, '')
     .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
     .toUpperCase();
 
-  if (razaoSocial) {
-    return `Relatorio_Retencao_Nota_${nota}_${razaoSocial}.pdf`;
+  const processoLimpo = (numeroProcesso || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\//g, '_')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+
+  const nota = (numeroNota || '').trim();
+
+  // "número do processo" + "Relatório Retenção" + "Nome Fornecedor".pdf
+  // Ex: "23525.025209_2026-18_Relatorio_Retencao_ST_JUDE_MEDICAL_BRASIL_LTDA.pdf"
+  if (processoLimpo) {
+    if (razaoSocial) {
+      return `${processoLimpo}_Relatorio_Retencao_${razaoSocial}.pdf`;
+    }
+    return `${processoLimpo}_Relatorio_Retencao.pdf`;
   }
-  return `Relatorio_Retencao_Nota_${nota}.pdf`;
+
+  if (razaoSocial) {
+    return `Relatorio_Retencao_Nota_${nota || 'S_N'}_${razaoSocial}.pdf`;
+  }
+  return `Relatorio_Retencao_Nota_${nota || 'S_N'}.pdf`;
 };
 
 interface ItemEditavel {
@@ -168,9 +193,10 @@ interface ItemEditavel {
 interface Props {
   data: ResultadoConsolidado;
   onUpdateData?: (newData: ResultadoConsolidado) => void;
+  onClearAfterDownload?: () => void;
 }
 
-export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
+export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfterDownload }) => {
   const [currentData, setCurrentData] = useState<ResultadoConsolidado>(data);
   const [dadosOriginais, setDadosOriginais] = useState<ResultadoConsolidado>(data);
   const [modoEdicao, setModoEdicao] = useState(false);
@@ -596,7 +622,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = gerarNomeArquivoPdf(currentData.numeroNota, currentData.fornecedorNome);
+      a.download = gerarNomeArquivoPdf(currentData.numeroNota, currentData.fornecedorNome, proc);
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -617,6 +643,13 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         console.warn('Gravação automática após download falhou:', errSave);
       } finally {
         setSalvando(false);
+      }
+
+      // Limpa os campos e o resultado da análise individual na tela após o download
+      if (onClearAfterDownload) {
+        setTimeout(() => {
+          onClearAfterDownload();
+        }, 700);
       }
     } catch (err: any) {
       alert('Erro ao baixar PDF: ' + err.message);
@@ -752,6 +785,25 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {onClearAfterDownload && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={onClearAfterDownload}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.85rem',
+                color: '#64748b'
+              }}
+              title="Limpa a tela e os campos da nota para iniciar uma nova análise"
+            >
+              <RotateCcw size={15} />
+              Limpar / Nova Análise
+            </button>
+          )}
+
           <button 
             className="btn btn-outline" 
             onClick={handleSalvarPostgres}
