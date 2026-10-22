@@ -290,7 +290,7 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
       numeroNota: notaExtraida.numeroNota,
       chaveAcesso: notaExtraida.chaveAcesso,
       numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
-      numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
+      numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : notaExtraida.numeroEmpenho,
       fornecedorNome: notaExtraida.fornecedorNome,
       fornecedorCnpj: notaExtraida.fornecedorCnpj,
       fornecedorMunicipio: req.body.fornecedorMunicipio || fornecedorMunicipio,

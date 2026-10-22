@@ -265,11 +265,16 @@ export class PdfParser {
     }
 
     if (!fornecedorNome) {
-      const recebemosMatch = text.match(/RECEBEMOS DE\s+([A-Z0-9\s\.\-&]{4,60})\s+OS PRODUTOS/i);
-      if (recebemosMatch && recebemosMatch[1]) {
-        fornecedorNome = recebemosMatch[1].trim();
+      const matchEmitente = text.match(/IDENTIFICA[ÇC][ÃA]O\s*DO\s*EMITENTE\s*[\r\n]+\s*([^\r\n]{4,80})/i);
+      if (matchEmitente && matchEmitente[1] && !matchEmitente[1].toUpperCase().includes('DANFE')) {
+        fornecedorNome = matchEmitente[1].trim();
       } else {
-        fornecedorNome = 'Prestador / Fornecedor Identificado no Documento';
+        const recebemosMatch = text.match(/RECEBEMOS DE\s+([A-Z0-9\s\.\-&]{4,60})\s+OS PRODUTOS/i);
+        if (recebemosMatch && recebemosMatch[1]) {
+          fornecedorNome = recebemosMatch[1].trim();
+        } else {
+          fornecedorNome = 'Prestador / Fornecedor Identificado no Documento';
+        }
       }
     }
 
@@ -319,10 +324,13 @@ export class PdfParser {
       /VALOR\s+L[ÍI]QUIDO[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       /VALOR\s+TOTAL[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ] : [
+      /(?:V\.?\s*TOTAL\s*(?:DA\s*NOTA|DOS\s*PRODUTOS|PRODUTOS)|VALOR\s*TOTAL\s*(?:DA\s*NOTA|DOS\s*PRODUTOS|PRODUTOS))\s*[:\.]?\s*[\r\n]*\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       /VALOR\s*TOTAL\s*DA\s*NOTA\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       /VALOR\s*TOTAL\s*DOS\s*PRODUTOS\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      /V\.?\s*TOTAL\s*DA\s*NOTA\s*[:\.]?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       /VALOR\s+L[ÍI]QUIDO[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
-      /VALOR\s+TOTAL[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
+      /VALOR\s+TOTAL[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      /FATURA\s*\/\s*DUPLICATA[\s\S]*?Valor\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ];
 
     for (const pv of padroesValorNota) {
@@ -339,7 +347,7 @@ export class PdfParser {
 
     // Fallback de valor total para DANFEs com quebras de linha entre o rótulo e o valor
     if (!valorTotal) {
-      const rDanfeTotal = /VALOR\s*TOTAL\s*DA\s*NOTA[^\n]*\n(?:[^\n]*\n){1,35}?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i;
+      const rDanfeTotal = /(?:VALOR|V\.?)\s*TOTAL\s*(?:DA\s*NOTA|DOS\s*PRODUTOS|PRODUTOS)?[^\n]*\n(?:[^\n]*\n){1,35}?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i;
       const mTot = text.match(rDanfeTotal);
       if (mTot && mTot[1]) {
         const vClean = mTot[1].replace(/\./g, '').replace(',', '.');
@@ -498,13 +506,28 @@ export class PdfParser {
       const ncmsEncontrados: { ncm: string; cst: string; descricao?: string }[] = [];
 
       let secaoProdutos = text;
-      const idxInicioProd = text.search(/DADOS\s+DO(?:S)?\s+PRODUTO(?:S)?/i);
-      const idxFimProd = text.search(/(?:DADOS\s+ADICIONAIS|C[ÁA]LCULO\s+DO\s+ISSQN|INFORMA[ÇC][ÕO]ES\s+COMPLEMENTARES)/i);
+      const regexHeaderProd = /DADOS\s+DO(?:S)?\s+PRODUTO(?:S)?/gi;
+      const indicesHeaders: number[] = [];
+      let mHeader;
+      while ((mHeader = regexHeaderProd.exec(text)) !== null) {
+        indicesHeaders.push(mHeader.index);
+      }
 
-      if (idxInicioProd !== -1) {
-        secaoProdutos = idxFimProd !== -1 && idxFimProd > idxInicioProd 
-          ? text.substring(idxInicioProd, idxFimProd) 
-          : text.substring(idxInicioProd);
+      if (indicesHeaders.length > 0) {
+        const blocos: string[] = [];
+        for (let i = 0; i < indicesHeaders.length; i++) {
+          const start = indicesHeaders[i];
+          const proximoHeader = i + 1 < indicesHeaders.length ? indicesHeaders[i + 1] : text.length;
+          const sub = text.substring(start, proximoHeader);
+          // O bloco de produtos termina no início de Dados Adicionais, Cálculo do ISSQN ou Informações Complementares
+          const idxFim = sub.search(/(?:DADOS\s+ADICIONAIS|C[ÁA]LCULO\s+DO\s+ISSQN|INFORMA[ÇC][ÕO]ES\s+COMPLEMENTARES)/i);
+          if (idxFim !== -1) {
+            blocos.push(sub.substring(0, idxFim));
+          } else {
+            blocos.push(sub);
+          }
+        }
+        secaoProdutos = blocos.join('\n\n--- PAGINA ---\n\n');
       }
 
       // 1) Busca primária estruturada: NCM de 8 dígitos seguido de CST (2 a 3 dígitos ou 1/00), CFOP (1/2/5/6/7xxx) e Unidade (2 a 4 letras)
@@ -569,6 +592,8 @@ export class PdfParser {
                 !up.includes('VALIDADE') &&
                 !up.includes('QUANT:') &&
                 !up.includes('QUANT.') &&
+                !up.startsWith('L./') &&
+                !up.includes('L./Q.') &&
                 !up.includes('PFCP') &&
                 !up.includes('VFCP') &&
                 !up.includes('PICMS') &&
@@ -753,15 +778,31 @@ export class PdfParser {
       });
     }
 
+    // Extração da data de emissão
+    let dataEmissao = new Date().toISOString().split('T')[0];
+    const matchData = text.match(/DATA\s*DA\s*EMISS[ÃA]O\s*[\r\n]+\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
+                      text.match(/EMISS[ÃA]O\s*[:\.]?\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+    if (matchData && matchData[1] && matchData[2] && matchData[3]) {
+      dataEmissao = `${matchData[3]}-${matchData[2]}-${matchData[1]}`;
+    }
+
+    // Extração da Nota de Empenho (NE) se informada nas Informações Complementares ou Pedido
+    let numeroEmpenho: string | undefined = undefined;
+    const matchEmpenho = text.match(/(?:(?:NOTA\s*DE\s*)?EMPENHO|NE|PEDIDO)[:\s]*([0-9]{4}NE[0-9]{4,6})/i);
+    if (matchEmpenho && matchEmpenho[1]) {
+      numeroEmpenho = matchEmpenho[1].toUpperCase();
+    }
+
     return {
       tipoDocumento: ehServico ? 'NFSE' : 'NFE',
       numeroNota: numeroNota || '1',
       chaveAcesso,
+      numeroEmpenho,
       fornecedorNome,
       fornecedorCnpj,
       destinatarioNome,
       destinatarioCnpj,
-      dataEmissao: new Date().toISOString().split('T')[0],
+      dataEmissao,
       valorTotal,
       itens,
       destaqueIr,

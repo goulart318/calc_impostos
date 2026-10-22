@@ -5,6 +5,7 @@ export interface NotaFiscalExtraida {
   tipoDocumento: 'NFE' | 'NFSE';
   numeroNota: string;
   chaveAcesso?: string;
+  numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
   destinatarioNome?: string;
