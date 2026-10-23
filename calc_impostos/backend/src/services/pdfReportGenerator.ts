@@ -129,18 +129,22 @@ export class PdfReportGenerator {
         // Divisor interno
         doc.moveTo(45, boxY + 39).lineTo(550, boxY + 39).strokeColor('#e2e8f0').stroke();
 
-        // Linha 3 (inferior): Processo SEI, Nota de Empenho e Data de Emissão
+        // Linha 3 (inferior): Processo SEI, Documento Hábil, Nota de Empenho e Data de Emissão
         doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('PROCESSO SEI Nº', 45, boxY + 43);
         doc.fillColor(resultado.numeroProcesso ? '#0f172a' : '#64748b').fontSize(8.5).font('Helvetica-Bold')
-           .text(resultado.numeroProcesso || 'Não informado', 45, boxY + 53);
+           .text(resultado.numeroProcesso || 'Não informado', 45, boxY + 53, { width: 135, ellipsis: true });
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NOTA DE EMPENHO', 280, boxY + 43);
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('DOC. HÁBIL / LIQUIDAÇÃO', 185, boxY + 43);
+        doc.fillColor(resultado.documentoHabil ? '#0f172a' : '#64748b').fontSize(8.5).font('Helvetica-Bold')
+           .text(resultado.documentoHabil || 'Não informado', 185, boxY + 53, { width: 125, ellipsis: true });
+
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NOTA DE EMPENHO', 320, boxY + 43);
         doc.fillColor(resultado.numeroEmpenho ? '#0f172a' : '#64748b').fontSize(8.5).font('Helvetica-Bold')
-           .text(resultado.numeroEmpenho || 'Não informada', 280, boxY + 53);
+           .text(resultado.numeroEmpenho || 'Não informada', 320, boxY + 53, { width: 120, ellipsis: true });
 
         doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('DATA EMISSÃO', 450, boxY + 43);
         doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold')
-           .text(resultado.dataEmissao || '---', 450, boxY + 53);
+           .text(resultado.dataEmissao || '---', 450, boxY + 53, { width: 95, ellipsis: true });
 
         // ==========================================
         // 4. QUADRO DE ENQUADRAMENTO TRIBUTÁRIO (SIMPLES NACIONAL / REGIME TRIBUTÁRIO)

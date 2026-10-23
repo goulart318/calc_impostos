@@ -10,6 +10,7 @@ interface NotaSalvaResumo {
   numero_nota: string;
   chave_acesso?: string;
   numero_processo?: string;
+  documento_habil?: string;
   numero_empenho?: string;
   fornecedor_cnpj: string;
   fornecedor_nome: string;
@@ -237,6 +238,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
       'ID',
       'Data da Análise',
       'Processo SEI',
+      'Documento Hábil - Liquidação',
       'Nota de Empenho',
       'Tipo Documento',
       'Número da Nota',
@@ -283,6 +285,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
         n.id,
         escapeCsv(new Date(n.created_at).toLocaleDateString('pt-BR') + ' ' + new Date(n.created_at).toLocaleTimeString('pt-BR')),
         escapeCsv(n.numero_processo || dj.numeroProcesso || 'Não informado'),
+        escapeCsv(n.documento_habil || dj.documentoHabil || 'Não informado'),
         escapeCsv(n.numero_empenho || dj.numeroEmpenho || 'Não informada'),
         escapeCsv(n.tipo_documento),
         escapeCsv(n.numero_nota),
@@ -328,7 +331,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
               type="text"
               className="form-input"
               style={{ paddingLeft: '40px', fontSize: '0.95rem' }}
-              placeholder="Digite o CNPJ do Fornecedor, Nº da Nota, Chave de Acesso, Processo SEI ou Empenho..."
+              placeholder="Digite o CNPJ do Fornecedor, Nº da Nota, Chave de Acesso, Processo SEI, Doc. Hábil ou Empenho..."
               value={termo}
               onChange={(e) => setTermo(e.target.value)}
             />
@@ -473,6 +476,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
                   const isSelected = selectedIds.has(n.id);
                   const dj = n.dados_json || {};
                   const procExibir = n.numero_processo || dj.numeroProcesso;
+                  const docHabilExibir = n.documento_habil || dj.documentoHabil;
                   const empExibir = n.numero_empenho || dj.numeroEmpenho;
 
                   return (
@@ -512,6 +516,11 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
                         {procExibir && (
                           <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
                             <span style={{ color: '#64748b', fontWeight: 500 }}>SEI:</span> {procExibir}
+                          </div>
+                        )}
+                        {docHabilExibir && (
+                          <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
+                            <span style={{ color: '#64748b', fontWeight: 500 }}>DH:</span> {docHabilExibir}
                           </div>
                         )}
                         {empExibir && (

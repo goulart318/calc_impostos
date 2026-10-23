@@ -48,7 +48,8 @@ initDatabase();
 async function cruzarComHistoricoEAutoPreencher(
   resultado: ResultadoConsolidado,
   processoInformadoReq?: string,
-  empenhoInformadoReq?: string
+  empenhoInformadoReq?: string,
+  docHabilInformadoReq?: string
 ): Promise<ResultadoConsolidado> {
   try {
     // 1. Consulta concomitante ao SICAF se ainda não preenchida
@@ -81,6 +82,12 @@ async function cruzarComHistoricoEAutoPreencher(
         resultado.numeroProcesso = notaAnterior.numeroProcesso;
       }
 
+      // Se a requisição atual não enviou o documento hábil, preenche automaticamente do histórico!
+      const docHabReq = (docHabilInformadoReq || '').trim();
+      if (!docHabReq && !resultado.documentoHabil && notaAnterior.documentoHabil) {
+        resultado.documentoHabil = notaAnterior.documentoHabil;
+      }
+
       // Se a requisição atual não enviou a nota de empenho, preenche automaticamente do histórico!
       const empReq = (empenhoInformadoReq || '').trim();
       if (!empReq && !resultado.numeroEmpenho && notaAnterior.numeroEmpenho) {
@@ -99,6 +106,9 @@ async function cruzarComHistoricoEAutoPreencher(
     resultado.idRegistroHistorico = saveRes.id;
     if (saveRes.numeroProcesso && !resultado.numeroProcesso) {
       resultado.numeroProcesso = saveRes.numeroProcesso;
+    }
+    if (saveRes.documentoHabil && !resultado.documentoHabil) {
+      resultado.documentoHabil = saveRes.documentoHabil;
     }
     if (saveRes.numeroEmpenho && !resultado.numeroEmpenho) {
       resultado.numeroEmpenho = saveRes.numeroEmpenho;
@@ -119,7 +129,7 @@ app.post('/api/analisar', async (req: Request, res: Response) => {
   try {
     const params: ParametrosCalculo = req.body;
     const resultado = await TaxEngine.processarNota(params);
-    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
+    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
     res.json(resultado);
   } catch (error: any) {
     console.error('Erro na análise:', error);
@@ -186,6 +196,7 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
       numeroNota: notaExtraida.numeroNota,
       chaveAcesso: notaExtraida.chaveAcesso,
       numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
+      documentoHabil: req.body.documentoHabil ? String(req.body.documentoHabil).trim() : undefined,
       numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
       fornecedorNome: notaExtraida.fornecedorNome,
       fornecedorCnpj: notaExtraida.fornecedorCnpj,
@@ -213,7 +224,7 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
     resultado.dataOpcaoSimples = dataOpcaoSimples;
     resultado.fonteConsultaCnpj = fonteConsultaCnpj;
 
-    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
+    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
 
     res.json(resultado);
   } catch (error: any) {
@@ -290,6 +301,7 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
       numeroNota: notaExtraida.numeroNota,
       chaveAcesso: notaExtraida.chaveAcesso,
       numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
+      documentoHabil: req.body.documentoHabil ? String(req.body.documentoHabil).trim() : undefined,
       numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : notaExtraida.numeroEmpenho,
       fornecedorNome: notaExtraida.fornecedorNome,
       fornecedorCnpj: notaExtraida.fornecedorCnpj,
@@ -319,7 +331,7 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
     resultado.dataOpcaoSimples = dataOpcaoSimples;
     resultado.fonteConsultaCnpj = fonteConsultaCnpj;
 
-    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
+    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
 
     res.json(resultado);
   } catch (error: any) {
@@ -415,6 +427,7 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
           numeroNota: notaExtraida.numeroNota,
           chaveAcesso: notaExtraida.chaveAcesso,
           numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
+          documentoHabil: req.body.documentoHabil ? String(req.body.documentoHabil).trim() : undefined,
           numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
           fornecedorNome: notaExtraida.fornecedorNome,
           fornecedorCnpj: notaExtraida.fornecedorCnpj,
@@ -442,7 +455,7 @@ app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) =
         resultado.dataOpcaoSimples = dataOpcaoSimples;
         resultado.fonteConsultaCnpj = fonteConsultaCnpj;
 
-        await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho);
+        await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
 
         notasResultados.push(resultado);
       } catch (errNota: any) {
@@ -650,7 +663,7 @@ app.post('/api/processo/gerar-pdf-consolidado', async (req: Request, res: Respon
 app.get('/api/notas', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 100;'
+      'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 100;'
     );
     res.json(result.rows);
   } catch (error: any) {
@@ -674,6 +687,7 @@ app.post('/api/notas/salvar', async (req: Request, res: Response) => {
       notaId: saveRes.id,
       acao: saveRes.acao,
       numeroProcesso: saveRes.numeroProcesso,
+      documentoHabil: saveRes.documentoHabil,
       numeroEmpenho: saveRes.numeroEmpenho,
       message: saveRes.acao === 'ATUALIZADA' 
         ? 'Registro existente atualizado no histórico (sem duplicidade).' 
@@ -695,6 +709,7 @@ app.post('/api/salvar-nota', async (req: Request, res: Response) => {
       notaId: saveRes.id,
       acao: saveRes.acao,
       numeroProcesso: saveRes.numeroProcesso,
+      documentoHabil: saveRes.documentoHabil,
       numeroEmpenho: saveRes.numeroEmpenho
     });
   } catch (error: any) {
@@ -702,22 +717,23 @@ app.post('/api/salvar-nota', async (req: Request, res: Response) => {
   }
 });
 
-// Pesquisar notas salvos por CNPJ, Chave de Acesso, Número da Nota, Processo ou Empenho
+// Pesquisar notas salvos por CNPJ, Chave de Acesso, Número da Nota, Processo, Documento Hábil ou Empenho
 app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
   try {
     const q = String(req.query.q || '').trim();
-    let queryText = 'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 50;';
+    let queryText = 'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 50;';
     let queryParams: any[] = [];
 
     if (q) {
       queryText = `
-        SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at
+        SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at
         FROM notas_analisadas
         WHERE fornecedor_cnpj ILIKE $1 
            OR chave_acesso ILIKE $1 
            OR numero_nota ILIKE $1 
            OR fornecedor_nome ILIKE $1
            OR numero_processo ILIKE $1
+           OR documento_habil ILIKE $1
            OR numero_empenho ILIKE $1
         ORDER BY created_at DESC 
         LIMIT 50;

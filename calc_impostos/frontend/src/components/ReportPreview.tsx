@@ -70,6 +70,7 @@ export interface ResultadoConsolidado {
   numeroNota: string;
   chaveAcesso?: string;
   numeroProcesso?: string;
+  documentoHabil?: string;
   numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
@@ -1008,7 +1009,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
 
         {/* Informações da Nota, Processo SEI e Fornecedor */}
         <div className="report-header-box">
-          <div style={{ display: 'grid', gridTemplateColumns: '130px 180px 140px 1fr', gap: '16px', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '110px 160px 170px 130px 1fr', gap: '14px', alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>NÚMERO DA NOTA</div>
               {modoEdicao ? (
@@ -1051,6 +1052,30 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
               ) : (
                 <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.numeroProcesso ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                   {currentData.numeroProcesso || 'Não informado'}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>DOC. HÁBIL - LIQUIDAÇÃO</div>
+              {modoEdicao ? (
+                <input
+                  type="text"
+                  className="form-input"
+                  value={currentData.documentoHabil || ''}
+                  onChange={(e) => {
+                    const novoDoc = e.target.value;
+                    const atualizado = { ...currentData, documentoHabil: novoDoc };
+                    setCurrentData(atualizado);
+                    setModificado(true);
+                    if (onUpdateData) onUpdateData(atualizado);
+                  }}
+                  placeholder="Ex: 2026NS000123"
+                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px' }}
+                />
+              ) : (
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.documentoHabil ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {currentData.documentoHabil || 'Não informado'}
                 </div>
               )}
             </div>

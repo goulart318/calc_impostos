@@ -13,6 +13,7 @@ import { API_BASE_URL } from '../config/api';
 
 export interface ProcessoConsolidadoData {
   numeroProcesso?: string;
+  documentoHabil?: string;
   notaEmpenho?: string;
   observacoes?: string;
   temMultiplosFornecedores: boolean;
@@ -50,6 +51,7 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
   podeSalvarNoBanco = true 
 }) => {
   const [numeroProcesso, setNumeroProcesso] = useState(dados.numeroProcesso || '');
+  const [documentoHabil, setDocumentoHabil] = useState(dados.documentoHabil || '');
   const [notaEmpenho, setNotaEmpenho] = useState(dados.notaEmpenho || '');
   const [observacoes, setObservacoes] = useState(dados.observacoes || '');
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -80,6 +82,7 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
       const payload = {
         ...dados,
         numeroProcesso: numeroProcesso.trim() || undefined,
+        documentoHabil: documentoHabil.trim() || undefined,
         notaEmpenho: notaEmpenho.trim() || undefined,
         observacoes: observacoes.trim() || undefined
       };
@@ -116,10 +119,16 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
       setSalvando(true);
       let salvas = 0;
       for (const nota of dados.notas) {
+        const notaComProcesso = {
+          ...nota,
+          numeroProcesso: numeroProcesso.trim() || nota.numeroProcesso,
+          documentoHabil: documentoHabil.trim() || nota.documentoHabil,
+          numeroEmpenho: notaEmpenho.trim() || nota.numeroEmpenho
+        };
         const res = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(nota)
+          body: JSON.stringify(notaComProcesso)
         });
         if (res.ok) salvas++;
       }
@@ -228,7 +237,7 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
               <div>
                 <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
                   <span>NÚMERO DO PROCESSO SEI:</span>
-                  <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Padrão: xxxxx.yyyyyy/aaaa-dd</span>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Padrão SEI</span>
                 </label>
                 <input 
                   type="text"
@@ -236,6 +245,21 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
                   placeholder="Ex: 23068.012345/2026-99"
                   value={numeroProcesso}
                   onChange={(e) => setNumeroProcesso(formatarProcessoSei(e.target.value))}
+                  style={{ width: '100%', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                  <span>DOC. HÁBIL - LIQUIDAÇÃO:</span>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Chave Integração</span>
+                </label>
+                <input 
+                  type="text"
+                  className="form-input"
+                  placeholder="Ex: 2026NS000123 / Chave"
+                  value={documentoHabil}
+                  onChange={(e) => setDocumentoHabil(e.target.value)}
                   style={{ width: '100%', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
                 />
               </div>

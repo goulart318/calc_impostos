@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS notas_analisadas (
   dados_json JSONB NOT NULL,
   numero_processo VARCHAR(60),
   numero_empenho VARCHAR(50),
+  documento_habil VARCHAR(60),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -55,13 +56,15 @@ CREATE TABLE IF NOT EXISTS notas_analisadas (
 -- Garante compatibilidade caso a tabela já tenha sido criada anteriormente
 ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS numero_processo VARCHAR(60);
 ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS numero_empenho VARCHAR(50);
+ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS documento_habil VARCHAR(60);
 
--- Índices para busca ultrarrápida por CNPJ, Chave de Acesso, Número da Nota, Processo e Empenho
+-- Índices para busca ultrarrápida por CNPJ, Chave de Acesso, Número da Nota, Processo, Empenho e Documento Hábil
 CREATE INDEX IF NOT EXISTS idx_notas_fornecedor_cnpj ON notas_analisadas(fornecedor_cnpj);
 CREATE INDEX IF NOT EXISTS idx_notas_chave_acesso ON notas_analisadas(chave_acesso);
 CREATE INDEX IF NOT EXISTS idx_notas_numero_nota ON notas_analisadas(numero_nota);
 CREATE INDEX IF NOT EXISTS idx_notas_numero_processo ON notas_analisadas(numero_processo);
 CREATE INDEX IF NOT EXISTS idx_notas_numero_empenho ON notas_analisadas(numero_empenho);
+CREATE INDEX IF NOT EXISTS idx_notas_documento_habil ON notas_analisadas(documento_habil);
 
 -- Tabela de Memória Tributária de Fornecedores (Aprendizado Ativo de Regras por CNPJ e NCM/Serviço)
 CREATE TABLE IF NOT EXISTS memoria_tributaria_fornecedores (

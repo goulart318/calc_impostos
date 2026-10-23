@@ -16,6 +16,7 @@ export interface NotaHistoricoRegistro {
   totalRetido: number;
   numeroProcesso?: string;
   numeroEmpenho?: string;
+  documentoHabil?: string;
   dadosJson?: any;
   createdAt: Date | string;
   updatedAt?: Date | string;
@@ -138,6 +139,7 @@ export class HistoryService {
     acao: 'CRIADA' | 'ATUALIZADA';
     numeroProcesso?: string;
     numeroEmpenho?: string;
+    documentoHabil?: string;
   }> {
     const notaExistente = await this.buscarNotaHistorico({
       chaveAcesso: resultado.chaveAcesso,
@@ -149,10 +151,12 @@ export class HistoryService {
     // Mescla dados de processo: se a requisição atual não trouxe, preserva o do histórico anterior
     const processoFinal = (resultado.numeroProcesso || '').trim() || (notaExistente?.numeroProcesso || '').trim() || null;
     const empenhoFinal = (resultado.numeroEmpenho || '').trim() || (notaExistente?.numeroEmpenho || '').trim() || null;
+    const docHabilFinal = (resultado.documentoHabil || '').trim() || (notaExistente?.documentoHabil || '').trim() || null;
 
     // Atualiza o próprio objeto resultado com os dados mesclados
     if (processoFinal) resultado.numeroProcesso = processoFinal;
     if (empenhoFinal) resultado.numeroEmpenho = empenhoFinal;
+    if (docHabilFinal) resultado.documentoHabil = docHabilFinal;
 
     const payloadJson = JSON.stringify(resultado);
     let idFinal = notaExistente ? notaExistente.id : this.proximoIdMemoria++;
@@ -177,8 +181,9 @@ export class HistoryService {
             dados_json = $12,
             numero_processo = COALESCE($13, numero_processo),
             numero_empenho = COALESCE($14, numero_empenho),
+            documento_habil = COALESCE($15, documento_habil),
             updated_at = CURRENT_TIMESTAMP
-           WHERE id = $15;`,
+           WHERE id = $16;`,
           [
             resultado.tipoDocumento,
             resultado.numeroNota || 'S/N',
@@ -194,6 +199,7 @@ export class HistoryService {
             payloadJson,
             processoFinal,
             empenhoFinal,
+            docHabilFinal,
             notaExistente.id
           ]
         );
@@ -205,9 +211,9 @@ export class HistoryService {
           `INSERT INTO notas_analisadas (
             tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
             destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto,
-            valor_liquido, total_retido, dados_json, numero_processo, numero_empenho,
+            valor_liquido, total_retido, dados_json, numero_processo, numero_empenho, documento_habil,
             created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           RETURNING id;`,
           [
             resultado.tipoDocumento,
@@ -223,7 +229,8 @@ export class HistoryService {
             resultado.totalRetidoGeral,
             payloadJson,
             processoFinal,
-            empenhoFinal
+            empenhoFinal,
+            docHabilFinal
           ]
         );
         idFinal = insertRes.rows[0].id;
@@ -249,6 +256,7 @@ export class HistoryService {
       totalRetido: resultado.totalRetidoGeral,
       numeroProcesso: processoFinal || undefined,
       numeroEmpenho: empenhoFinal || undefined,
+      documentoHabil: docHabilFinal || undefined,
       dadosJson: resultado,
       createdAt: notaExistente?.createdAt || new Date(),
       updatedAt: new Date()
@@ -263,7 +271,8 @@ export class HistoryService {
       id: idFinal,
       acao: acaoFinal,
       numeroProcesso: processoFinal || undefined,
-      numeroEmpenho: empenhoFinal || undefined
+      numeroEmpenho: empenhoFinal || undefined,
+      documentoHabil: docHabilFinal || undefined
     };
   }
 
@@ -283,6 +292,7 @@ export class HistoryService {
       totalRetido: parseFloat(r.total_retido) || 0,
       numeroProcesso: r.numero_processo || undefined,
       numeroEmpenho: r.numero_empenho || undefined,
+      documentoHabil: r.documento_habil || undefined,
       dadosJson: r.dados_json,
       createdAt: r.created_at,
       updatedAt: r.updated_at

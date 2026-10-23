@@ -43,8 +43,9 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
   const [promptTitulo, setPromptTitulo] = useState('Informe o Número do Processo');
   const [promptSubtitulo, setPromptSubtitulo] = useState('Obrigatório para emissão do relatório oficial');
   const [promptValorProcesso, setPromptValorProcesso] = useState('');
+  const [promptValorDocumentoHabil, setPromptValorDocumentoHabil] = useState('');
   const [promptValorEmpenho, setPromptValorEmpenho] = useState('');
-  const [promptOnConfirmCallback, setPromptOnConfirmCallback] = useState<((proc: string, emp: string) => void) | null>(null);
+  const [promptOnConfirmCallback, setPromptOnConfirmCallback] = useState<((proc: string, emp: string, docHab?: string) => void) | null>(null);
 
   // Estados de loading / salvamento
   const [salvandoNota, setSalvandoNota] = useState(false);
@@ -253,15 +254,17 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
 
     const primeira = notasGrupo[0];
     const procAtual = primeira.numeroProcesso || '';
+    const docHabilAtual = primeira.documentoHabil || '';
     const empAtual = primeira.numeroEmpenho || '';
 
-    const executarDownloadConsolidado = async (proc: string, emp?: string) => {
+    const executarDownloadConsolidado = async (proc: string, emp?: string, docHab?: string) => {
       try {
         setBaixandoPdf(true);
-        // Atualiza o processo nas notas do grupo
+        // Atualiza o processo e documento habil nas notas do grupo
         const notasAtualizadas = notasGrupo.map(n => ({
           ...n,
           numeroProcesso: proc.trim() || undefined,
+          documentoHabil: docHab?.trim() || n.documentoHabil,
           numeroEmpenho: emp?.trim() || n.numeroEmpenho
         }));
 
@@ -301,6 +304,7 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
 
         const payload = {
           numeroProcesso: proc.trim() || undefined,
+          documentoHabil: docHab?.trim() || undefined,
           notaEmpenho: emp?.trim() || undefined,
           temMultiplosFornecedores: false,
           fornecedorPrincipal: {
@@ -371,18 +375,19 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
       setPromptTitulo(`Processo Consolidado (${notasGrupo.length} Notas Fiscais)`);
       setPromptSubtitulo('Informe o Número do Processo SEI para gerar o Relatório Consolidado Unificado');
       setPromptValorProcesso('');
+      setPromptValorDocumentoHabil(docHabilAtual);
       setPromptValorEmpenho(empAtual);
-      setPromptOnConfirmCallback(() => (proc: string, emp: string) => {
+      setPromptOnConfirmCallback(() => (proc: string, emp: string, docHab?: string) => {
         if (!proc.trim()) {
           alert('O Número do Processo SEI é obrigatório para gerar o relatório consolidado.');
           return;
         }
         setPromptOpen(false);
-        executarDownloadConsolidado(proc, emp);
+        executarDownloadConsolidado(proc, emp, docHab);
       });
       setPromptOpen(true);
     } else {
-      executarDownloadConsolidado(procAtual, empAtual);
+      executarDownloadConsolidado(procAtual, empAtual, docHabilAtual);
     }
   };
 
@@ -1222,10 +1227,11 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
         titulo={promptTitulo}
         subtitulo={promptSubtitulo}
         valorInicialProcesso={promptValorProcesso}
+        valorInicialDocumentoHabil={promptValorDocumentoHabil}
         valorInicialEmpenho={promptValorEmpenho}
-        onConfirm={(proc, emp) => {
+        onConfirm={(proc, emp, docHab) => {
           if (promptOnConfirmCallback) {
-            promptOnConfirmCallback(proc, emp);
+            promptOnConfirmCallback(proc, emp, docHab);
           } else {
             setPromptOpen(false);
           }

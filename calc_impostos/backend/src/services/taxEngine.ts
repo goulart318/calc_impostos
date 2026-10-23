@@ -68,6 +68,7 @@ export interface ParametrosCalculo {
   numeroNota: string;
   chaveAcesso?: string;
   numeroProcesso?: string;
+  documentoHabil?: string;
   numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
@@ -101,6 +102,7 @@ export interface ResultadoConsolidado {
   numeroNota: string;
   chaveAcesso?: string;
   numeroProcesso?: string;
+  documentoHabil?: string;
   numeroEmpenho?: string;
   fornecedorNome: string;
   fornecedorCnpj: string;
@@ -1060,6 +1062,7 @@ export class TaxEngine {
       numeroNota: params.numeroNota,
       chaveAcesso: params.chaveAcesso,
       numeroProcesso: params.numeroProcesso,
+      documentoHabil: params.documentoHabil,
       numeroEmpenho: params.numeroEmpenho,
       fornecedorNome: params.fornecedorNome,
       fornecedorCnpj: params.fornecedorCnpj,

@@ -6,8 +6,9 @@ interface Props {
   titulo?: string;
   subtitulo?: string;
   valorInicialProcesso?: string;
+  valorInicialDocumentoHabil?: string;
   valorInicialEmpenho?: string;
-  onConfirm: (processo: string, empenho: string) => void;
+  onConfirm: (processo: string, empenho: string, documentoHabil?: string) => void;
   onCancel: () => void;
 }
 
@@ -16,17 +17,20 @@ export const ModalPromptProcesso: React.FC<Props> = ({
   titulo = 'Informe o Número do Processo',
   subtitulo = 'Para constar no cabeçalho e na memória de cálculo do relatório oficial em PDF',
   valorInicialProcesso = '',
+  valorInicialDocumentoHabil = '',
   valorInicialEmpenho = '',
   onConfirm,
   onCancel
 }) => {
   const [processo, setProcesso] = useState(valorInicialProcesso);
+  const [documentoHabil, setDocumentoHabil] = useState(valorInicialDocumentoHabil);
   const [empenho, setEmpenho] = useState(valorInicialEmpenho);
 
   useEffect(() => {
     setProcesso(valorInicialProcesso || '');
+    setDocumentoHabil(valorInicialDocumentoHabil || '');
     setEmpenho(valorInicialEmpenho || '');
-  }, [valorInicialProcesso, valorInicialEmpenho, isOpen]);
+  }, [valorInicialProcesso, valorInicialDocumentoHabil, valorInicialEmpenho, isOpen]);
 
   if (!isOpen) return null;
 
@@ -45,7 +49,7 @@ export const ModalPromptProcesso: React.FC<Props> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onConfirm(processo.trim(), empenho.trim());
+    onConfirm(processo.trim(), empenho.trim(), documentoHabil.trim());
   };
 
   return (
@@ -145,6 +149,27 @@ export const ModalPromptProcesso: React.FC<Props> = ({
             <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginTop: '4px' }}>
               Padrão SEI formatado automaticamente ao digitar.
             </span>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+              Documento Hábil - Liquidação <span style={{ color: '#64748b', fontWeight: 400 }}>(Opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={documentoHabil}
+              onChange={(e) => setDocumentoHabil(e.target.value)}
+              placeholder="Ex: 2026NS000123 / Chave de Integração"
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                fontSize: '0.95rem',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
           </div>
 
           <div style={{ marginBottom: '20px' }}>

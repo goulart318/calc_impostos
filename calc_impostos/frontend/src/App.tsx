@@ -36,6 +36,7 @@ export default function App() {
   const [numeroNota, setNumeroNota] = useState('');
   const [chaveAcesso, setChaveAcesso] = useState('');
   const [numeroProcesso, setNumeroProcesso] = useState('');
+  const [documentoHabil, setDocumentoHabil] = useState('');
   const [numeroEmpenho, setNumeroEmpenho] = useState('');
   const [fornecedorCnpj, setFornecedorCnpj] = useState('');
   const [fornecedorNome, setFornecedorNome] = useState('');
@@ -154,6 +155,7 @@ export default function App() {
     setNumeroNota('');
     setChaveAcesso('');
     setNumeroProcesso('');
+    setDocumentoHabil('');
     setNumeroEmpenho('');
     setFornecedorCnpj('');
     setFornecedorNome('');
@@ -197,6 +199,7 @@ export default function App() {
         numeroNota: numeroNota || 'S/N',
         chaveAcesso,
         numeroProcesso: numeroProcesso || undefined,
+        documentoHabil: documentoHabil || undefined,
         numeroEmpenho: numeroEmpenho || undefined,
         fornecedorNome: fornecedorNome || 'Fornecedor Não Informado',
         fornecedorCnpj: fornecedorCnpj || '',
@@ -238,6 +241,12 @@ export default function App() {
         setNumeroProcesso(data.numeroProcesso);
       } else if (numeroProcesso && !data.numeroProcesso) {
         data.numeroProcesso = numeroProcesso;
+      }
+
+      if (data.documentoHabil) {
+        setDocumentoHabil(data.documentoHabil);
+      } else if (documentoHabil && !data.documentoHabil) {
+        data.documentoHabil = documentoHabil;
       }
 
       if (data.numeroEmpenho) {
@@ -340,6 +349,7 @@ export default function App() {
         throw new Error('O servidor respondeu de forma incompleta. Aguarde alguns segundos (o servidor pode estar acordando) e tente novamente.');
       }
       setNumeroProcesso(data.numeroProcesso || '');
+      setDocumentoHabil(data.documentoHabil || '');
       setNumeroEmpenho(data.numeroEmpenho || '');
       setResultado(data);
 
@@ -430,6 +440,7 @@ export default function App() {
         formData.append('arquivos', f);
       });
       if (numeroProcesso) formData.append('numeroProcesso', numeroProcesso);
+      if (documentoHabil) formData.append('documentoHabil', documentoHabil);
       if (numeroEmpenho) formData.append('numeroEmpenho', numeroEmpenho);
 
       const res = await fetch(`${API_BASE_URL}/api/upload-lote`, {
@@ -470,6 +481,7 @@ export default function App() {
     setNumeroNota(nota.numeroNota || '');
     setChaveAcesso(nota.chaveAcesso || '');
     setNumeroProcesso(nota.numeroProcesso || '');
+    setDocumentoHabil(nota.documentoHabil || '');
     setNumeroEmpenho(nota.numeroEmpenho || '');
     setFornecedorCnpj(nota.fornecedorCnpj || '');
     setFornecedorNome(nota.fornecedorNome || '');
@@ -916,11 +928,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="form-row">
+                  <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px' }}>
                     <div className="form-group">
                       <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span>Nº Processo Administrativo / SEI</span>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Padrão: xxxxx.yyyyyy/aaaa-dd</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Padrão SEI</span>
                       </label>
                       <input 
                         type="text" 
@@ -934,6 +946,27 @@ export default function App() {
                           }
                         }} 
                         placeholder="Ex: 23068.012345/2026-99"
+                        style={{ fontFamily: 'var(--font-mono)' }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Documento Hábil - Liquidação</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Chave Integração</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        value={documentoHabil} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDocumentoHabil(val);
+                          if (resultado) {
+                            setResultado(prev => prev ? { ...prev, documentoHabil: val } : null);
+                          }
+                        }} 
+                        placeholder="Ex: 2026NS000123 / Chave"
                         style={{ fontFamily: 'var(--font-mono)' }}
                       />
                     </div>
@@ -1421,6 +1454,7 @@ export default function App() {
                       onUpdateData={(novoResultado) => {
                         setResultado(novoResultado);
                         if (novoResultado.numeroProcesso !== undefined) setNumeroProcesso(novoResultado.numeroProcesso);
+                        if (novoResultado.documentoHabil !== undefined) setDocumentoHabil(novoResultado.documentoHabil);
                         if (novoResultado.numeroEmpenho !== undefined) setNumeroEmpenho(novoResultado.numeroEmpenho);
                         if (novoResultado.itens && novoResultado.itens.length > 0) {
                           setItens(novoResultado.itens.map(it => ({
