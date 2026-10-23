@@ -71,6 +71,8 @@ CREATE INDEX IF NOT EXISTS idx_notas_documento_habil ON notas_analisadas(documen
 -- =========================================================================
 CREATE TABLE IF NOT EXISTS retencoes_calc_impostos (
   id SERIAL PRIMARY KEY,
+  instituicao_id INTEGER NULL,
+  uasg VARCHAR(6) NULL,
   numero_processo VARCHAR(60) NOT NULL,
   documento_habil VARCHAR(60) NOT NULL,
   numero_empenho VARCHAR(60),
@@ -95,6 +97,7 @@ CREATE TABLE IF NOT EXISTS retencoes_calc_impostos (
   CONSTRAINT uq_retencoes_proc_dh_nota UNIQUE (numero_processo, documento_habil, numero_nota)
 );
 
+CREATE INDEX IF NOT EXISTS idx_retencoes_instituicao ON retencoes_calc_impostos(instituicao_id, uasg);
 CREATE INDEX IF NOT EXISTS idx_retencoes_proc_dh ON retencoes_calc_impostos(numero_processo, documento_habil);
 CREATE INDEX IF NOT EXISTS idx_retencoes_cnpj ON retencoes_calc_impostos(fornecedor_cnpj);
 CREATE INDEX IF NOT EXISTS idx_retencoes_dh ON retencoes_calc_impostos(documento_habil);

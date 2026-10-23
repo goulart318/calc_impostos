@@ -780,6 +780,16 @@ app.get('/api/integracao/rauf/consultar', async (req: Request, res: Response) =>
   }
 });
 
+// Listar instituições cadastradas no Rauf SaaS (Supabase) para seleção de tenant
+app.get('/api/integracao/rauf/instituicoes', async (req: Request, res: Response) => {
+  try {
+    const instituicoes = await RaufIntegrationService.listarInstituicoesRauf();
+    res.json(instituicoes);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao listar instituições do Rauf_App' });
+  }
+});
+
 // Endpoint para listagem de NCMs e Regras Tributárias
 app.get('/api/tabelas/ncm', async (req: Request, res: Response) => {
   try {

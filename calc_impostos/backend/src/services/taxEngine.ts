@@ -76,6 +76,9 @@ export interface ParametrosCalculo {
   fornecedorUf?: string;
   destinatarioNome?: string;
   destinatarioCnpj?: string;
+  instituicaoId?: number;
+  uasg?: string;
+  siglaOrgao?: string;
   optanteSimples: boolean;
   situacaoCadastral?: string;
   dataEmissao?: string;
@@ -110,6 +113,9 @@ export interface ResultadoConsolidado {
   fornecedorUf?: string;
   destinatarioNome?: string;
   destinatarioCnpj?: string;
+  instituicaoId?: number;
+  uasg?: string;
+  siglaOrgao?: string;
   optanteSimples: boolean;
   optanteSimei?: boolean;
   dataOpcaoSimples?: string;
@@ -1070,6 +1076,9 @@ export class TaxEngine {
       fornecedorUf: params.fornecedorUf,
       destinatarioNome: params.destinatarioNome,
       destinatarioCnpj: params.destinatarioCnpj,
+      instituicaoId: params.instituicaoId,
+      uasg: params.uasg,
+      siglaOrgao: params.siglaOrgao,
       optanteSimples: params.optanteSimples,
       situacaoCadastral: params.situacaoCadastral || 'ATIVA',
       dataEmissao: params.dataEmissao || new Date().toISOString().split('T')[0],

@@ -33,8 +33,52 @@ export class RaufIntegrationService {
   }
 
   /**
+   * Lista as instituições cadastradas no banco de dados do Rauf SaaS (Supabase)
+   * para permitir a seleção e sincronização da identidade do órgão/UG.
+   */
+  public static async listarInstituicoesRauf(): Promise<Array<{
+    id: number;
+    nome: string;
+    cnpj: string;
+    uasg: string;
+    sigla: string;
+  }>> {
+    try {
+      const activePool = this.getPool();
+      const res = await activePool.query(
+        `SELECT id, nome, cnpj, uasg, sigla 
+         FROM instituicoes 
+         ORDER BY nome ASC;`
+      );
+      if (res.rows && res.rows.length > 0) {
+        return res.rows.map(r => ({
+          id: r.id,
+          nome: r.nome || '',
+          cnpj: r.cnpj || '',
+          uasg: r.uasg || '',
+          sigla: r.sigla || ''
+        }));
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [RaufIntegrationService] Aviso ao consultar instituicoes do Rauf:', err.message || err);
+    }
+
+    // Fallback padrão se estiver desconectado
+    return [
+      {
+        id: 1,
+        nome: 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH',
+        cnpj: '15.126.437/0006-58',
+        uasg: '155007',
+        sigla: 'HUCAM-UFES'
+      }
+    ];
+  }
+
+  /**
    * Insere ou atualiza o registro de retenções na tabela 'retencoes_calc_impostos'.
    * Chave composta: (numero_processo, documento_habil, numero_nota).
+   * Registra instituicao_id e uasg para isolamento multi-tenant no Rauf SaaS.
    */
   public static async inserirOuAtualizarRetencao(r: ResultadoConsolidado): Promise<{
     sucesso: boolean;
@@ -81,6 +125,8 @@ export class RaufIntegrationService {
 
     const query = `
       INSERT INTO retencoes_calc_impostos (
+        instituicao_id,
+        uasg,
         numero_processo,
         documento_habil,
         numero_empenho,
@@ -102,9 +148,11 @@ export class RaufIntegrationService {
         origem_sistema,
         updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'PENDENTE', 'calc_impostos', CURRENT_TIMESTAMP
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 'PENDENTE', 'calc_impostos', CURRENT_TIMESTAMP
       )
       ON CONFLICT (numero_processo, documento_habil, numero_nota) DO UPDATE SET
+        instituicao_id = COALESCE(EXCLUDED.instituicao_id, retencoes_calc_impostos.instituicao_id),
+        uasg = COALESCE(EXCLUDED.uasg, retencoes_calc_impostos.uasg),
         numero_empenho = COALESCE(EXCLUDED.numero_empenho, retencoes_calc_impostos.numero_empenho),
         chave_acesso = COALESCE(EXCLUDED.chave_acesso, retencoes_calc_impostos.chave_acesso),
         fornecedor_cnpj = EXCLUDED.fornecedor_cnpj,
@@ -120,10 +168,12 @@ export class RaufIntegrationService {
         valor_iss = EXCLUDED.valor_iss,
         detalhamento_json = EXCLUDED.detalhamento_json,
         updated_at = CURRENT_TIMESTAMP
-      RETURNING id, numero_processo, documento_habil, status_conciliacao;
+      RETURNING id, instituicao_id, uasg, numero_processo, documento_habil, status_conciliacao;
     `;
 
     const values = [
+      r.instituicaoId ? Number(r.instituicaoId) : null,
+      (r.uasg || '').trim() || null,
       proc,
       docHab,
       (r.numeroEmpenho || '').trim() || null,
@@ -151,7 +201,7 @@ export class RaufIntegrationService {
       return {
         sucesso: true,
         id: inserted?.id,
-        mensagem: `Registro de retenção integrado com sucesso no banco do Rauf_App (ID: ${inserted?.id}, Proc: ${proc}, DH: ${docHab}).`
+        mensagem: `Registro de retenção integrado com sucesso no banco do Rauf_App (ID: ${inserted?.id}, Inst: ${inserted?.instituicao_id || 'N/A'}, UASG: ${inserted?.uasg || 'N/A'}, Proc: ${proc}, DH: ${docHab}).`
       };
     } catch (err: any) {
       console.warn('⚠️ [RaufIntegrationService] Aviso ao inserir no banco do Rauf_App:', err.message || err);

@@ -93,15 +93,17 @@ export class PdfReportGenerator {
            .text(resultado.tipoDocumento === 'NFE' ? 'NF-e: Compra / Mercadoria' : 'NFS-e: Prestacao de Servico', badgeX + 10, badgeY + 6);
 
         // ==========================================
-        // 2. SELO DE CONFIRMAÇÃO DE PERTENCE DO CNPJ
+        // 2. SELO DE CONFIRMAÇÃO DE PERTENCE DO CNPJ E IDENTIDADE DO ÓRGÃO (TOMADOR)
         // ==========================================
         const destY = 62;
         const destCnpjFmt = resultado.destinatarioCnpj || '15.126.437/0006-58';
         const destNomeFmt = resultado.destinatarioNome || 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH';
+        const uasgFmt = resultado.uasg ? ` • UASG: ${resultado.uasg}` : '';
+        const siglaFmt = resultado.siglaOrgao ? ` [${resultado.siglaOrgao}]` : '';
 
         doc.rect(35, destY, 525, 22).fillAndStroke('#ecfdf5', '#a7f3d0');
-        doc.fillColor('#047857').fontSize(8).font('Helvetica-Bold')
-           .text(`[CONFERENCIA DE CNPJ] DESTINADO A: ${destNomeFmt} (${destCnpjFmt})`, 45, destY + 6, { width: 505, ellipsis: true });
+        doc.fillColor('#047857').fontSize(7.5).font('Helvetica-Bold')
+           .text(`[CONFERÊNCIA DE CNPJ / TOMADOR] ${destNomeFmt}${siglaFmt} • CNPJ: ${destCnpjFmt}${uasgFmt}`, 45, destY + 6, { width: 505, ellipsis: true });
 
         // ==========================================
         // 3. QUADRO DE INFORMAÇÕES DA NOTA, PROCESSO SEI E EMPENHO

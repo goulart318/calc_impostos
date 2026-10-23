@@ -1,8 +1,8 @@
-# Relatório de Integração: Calc_Impostos ➔ Rauf_App
+# Relatório de Integração: Calc_Impostos ➔ Rauf_App (Arquitetura Multi-Tenant)
 
 **Data:** 23/10/2026  
-**Status:** Implementado e Homologado  
-**Padrão Arquitetural Adotado:** Opção B — Tabela Dedicada e Isolada (`retencoes_calc_impostos`) no Banco de Dados Supabase / PostgreSQL / SQLite.
+**Status:** Implementado, Homologado e Sincronizado com os Repositórios Git  
+**Padrão Arquitetural Adotado:** Opção B — Tabela Dedicada e Isolada (`retencoes_calc_impostos`) com Suporte Completo a Multi-Tenancy (`instituicao_id` e `uasg`).
 
 ---
 
@@ -20,15 +20,28 @@ A integração foi implementada seguindo a **Opção B**, através de uma **nova
 
 ---
 
-## 2. Modelagem de Dados: Tabela `retencoes_calc_impostos`
+## 2. Adequação à Arquitetura Multi-Tenant do Rauf SaaS
+
+O `Rauf_App` opera em nuvem sob modelo SaaS Multi-Tenant. Cada cliente cadastrado é uma **`Instituicao`** que possui seu identificador único (`id`), código de 6 dígitos da Unidade Gestora (`uasg`), `cnpj`, `nome` e `sigla`.
+
+Para assegurar o isolamento rigoroso entre os dados de diferentes órgãos federais, hospitais ou autarquias:
+* A tabela `retencoes_calc_impostos` foi equipada com as colunas **`instituicao_id`** e **`uasg`**.
+* O `calc_impostos` passou a contar com o módulo **Identidade do Órgão / Unidade Gestora Ativa**, sincronizado diretamente com o cadastro de instituições do Supabase.
+* As rotas de consulta da API do `Rauf_App` aplicam automaticamente o filtro de tenant (`tenant_id: int | None = Depends(get_tenant_id)`), garantindo que usuários comuns visualizem exclusivamente as retenções tributárias pertencentes à sua própria instituição.
+
+---
+
+## 3. Modelagem de Dados: Tabela `retencoes_calc_impostos`
 
 A tabela foi projetada para suportar tanto **PostgreSQL (Supabase)** em produção quanto **SQLite** em ambiente local de desenvolvimento.
 
-### 2.1. Estrutura dos Campos
+### 3.1. Estrutura dos Campos
 
 | Coluna | Tipo SQL | Chave / Restrição | Descrição / Finalidade |
 | :--- | :--- | :--- | :--- |
 | `id` | SERIAL / INTEGER | PRIMARY KEY | Identificador único autoincrementável |
+| `instituicao_id` | INTEGER | NULL, INDEX | Chave de tenant: ID da instituição no Rauf SaaS (`instituicoes.id`) |
+| `uasg` | VARCHAR(6) | NULL, INDEX | Código de 6 dígitos da Unidade Gestora compradora/tomadora |
 | `numero_processo` | VARCHAR(60) | NOT NULL, INDEX | Chave de ligação: Número do processo SEI (ex: `23068.012345/2026-99`) |
 | `documento_habil` | VARCHAR(60) | NOT NULL, INDEX | Chave de ligação: Número da liquidação/NS (ex: `2026NS000123`) |
 | `numero_empenho` | VARCHAR(60) | NULL | Número da Nota de Empenho (ex: `2026NE000456`) |
@@ -45,15 +58,16 @@ A tabela foi projetada para suportar tanto **PostgreSQL (Supabase)** em produç�
 | `valor_pis` | NUMERIC(15, 2) | NOT NULL, DEFAULT 0 | Retenção de PIS/PASEP |
 | `valor_inss` | NUMERIC(15, 2) | NOT NULL, DEFAULT 0 | Retenção Previdenciária (INSS) |
 | `valor_iss` | NUMERIC(15, 2) | NOT NULL, DEFAULT 0 | Retenção Municipal (ISSQN) |
-| `detalhamento_json` | TEXT | NULL | JSON estruturado com DARFs, códigos de receita e alíquotas |
+| `detalhamento_json` | TEXT / JSONB | NULL | JSON estruturado com DARFs, códigos de receita e alíquotas |
 | `status_conciliacao` | VARCHAR(30) | NOT NULL, DEFAULT 'PENDENTE' | Status do fluxo (`PENDENTE`, `CONCILIADO`, `DIVERGENTE`) |
 | `origem_sistema` | VARCHAR(50) | NOT NULL, DEFAULT 'calc_impostos' | Identificador do sistema originador |
 | `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Data e hora de inclusão |
 | `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Data e hora da última sincronização |
 
-### 2.2. Restrições e Índices
+### 3.2. Restrições e Índices
 - **Restrição de Unicidade Composta:** `uq_retencoes_proc_dh_nota UNIQUE (numero_processo, documento_habil, numero_nota)` — garante idempotência, impedindo duplicidade caso o cálculo seja refeito. Se a nota for reprocessada, os valores são atualizados via `UPSERT` (`ON CONFLICT DO UPDATE`).
 - **Índices de Performance:**
+  - `idx_retencoes_instituicao`: Busca e isolamento instantâneo por `instituicao_id` e `uasg`.
   - `idx_retencoes_proc_dh`: Busca combinada por Processo e Documento Hábil.
   - `idx_retencoes_cnpj`: Filtro ágil por fornecedor.
   - `idx_retencoes_dh`: Localização rápida ao consultar a liquidação no Rauf.
@@ -61,50 +75,52 @@ A tabela foi projetada para suportar tanto **PostgreSQL (Supabase)** em produç�
 
 ---
 
-## 3. Modificações Realizadas no Repositório `calc_impostos`
+## 4. Modificações Realizadas no Repositório `calc_impostos`
 
 1. **`database/schema.sql`**:
-   - Inclusão do DDL de criação da tabela `retencoes_calc_impostos`, restrições de unicidade e criação de índices.
+   - Inclusão das colunas `instituicao_id` e `uasg`, criação da tabela `retencoes_calc_impostos`, restrições de unicidade e índices multi-tenant.
 2. **`backend/src/services/raufIntegrationService.ts`**:
-   - Criação do serviço de integração inteligente.
-   - Suporte a conexão primária dedicada através da variável de ambiente `RAUF_DATABASE_URL` (com fallback elegante para a conexão PostgreSQL padrão do sistema).
-   - Método `inserirOuAtualizarRetencao(payload)`: Realiza a gravação via `UPSERT`, convertendo os campos numéricos e gravando o `detalhamento_json`.
-   - Método `consultarRetencaoPorChave(processo, dh, numeroNota)`: Permite checar se uma nota já possui retenção homologada.
-3. **`backend/src/services/historyService.ts`**:
-   - Integrado o gatilho automático no método `salvarOuAtualizarNota()`: Toda vez que uma análise de nota é salva com `numeroProcesso` e `documentoHabil` informados, o serviço dispara de forma assíncrona e transparente a sincronização com o banco do Rauf.
-4. **`backend/src/server.ts`**:
-   - Criados endpoints dedicados para integração:
-     - `POST /api/integracao/rauf/sincronizar`: Envia manualmente ou via script dados de retenção.
-     - `GET /api/integracao/rauf/consultar`: Consulta registros já sincronizados.
+   - Método `listarInstituicoesRauf()`: Consulta diretamente as instituições no Supabase (`SELECT id, nome, cnpj, uasg, sigla FROM instituicoes ORDER BY nome ASC`) com fallback padrão seguro.
+   - Atualização do método `inserirOuAtualizarRetencao()` para gravar `instituicao_id` e `uasg` no `INSERT` e atualizá-los no `UPSERT`.
+   - Suporte à variável `RAUF_DATABASE_URL` no `.env`.
+3. **`backend/src/server.ts`**:
+   - Endpoint `GET /api/integracao/rauf/instituicoes`: disponibiliza a lista de órgãos/instituições do Rauf para o frontend.
+   - Endpoints `/api/integracao/rauf/sincronizar` e `/api/integracao/rauf/consultar`.
+4. **`backend/src/services/pdfReportGenerator.ts`**:
+   - Cabeçalho 100% dinâmico: imprime a Razão Social do Órgão, Sigla, CNPJ e código UASG cadastrados, eliminando valores estáticos.
+5. **`frontend/src/App.tsx`**:
+   - Seletor de Identidade do Órgão / Unidade Gestora com sincronização em 1 clique com o Rauf SaaS.
+   - Campos configuráveis: UASG (6 dígitos), Sigla/UG, CNPJ do Órgão, Cidade e Razão Social.
+   - Badge ativo no cabeçalho: `[🏢 SIGLA: UASG XXXXXX]`.
+   - Propagação automática dos dados do órgão em todas as análises, relatórios e gravações.
 
 ---
 
-## 4. Modificações Realizadas no Repositório `Rauf_App`
+## 5. Modificações Realizadas no Repositório `Rauf_App`
 
 1. **`backend/app/models/retencao_imposto.py`**:
-   - Criado o modelo declarativo ORM SQLAlchemy `RetencaoImposto`.
-   - Totalmente compatível com SQLite (local) e PostgreSQL Supabase (produção).
+   - Modelo declarativo ORM SQLAlchemy `RetencaoImposto` atualizado com `instituicao_id = Column(Integer, ForeignKey("instituicoes.id"), nullable=True, index=True)` e `uasg = Column(String(6), nullable=True, index=True)`.
 2. **`backend/app/routers/retencoes.py`**:
-   - Novo roteador FastAPI (`/retencoes`), com documentação automática no Swagger (`/docs`):
-     - `GET /retencoes/`: Listagem paginada com múltiplos filtros (processo, documento hábil, CNPJ e status de conciliação).
-     - `GET /retencoes/por-processo/{processo}`: Retorna a memória tributária do processo SEI pesquisado.
-     - `GET /retencoes/por-documento-habil/{documento_habil}`: Localiza as retenções pelo documento hábil da liquidação (ex: `2026NS000123`).
-     - `PATCH /retencoes/{id}/status`: Permite aos módulos do Rauf alterar o status da conciliação (`PENDENTE`, `CONCILIADO`, `DIVERGENTE`).
+   - Endpoint `GET /retencoes/instituicoes` para consulta e sincronização de órgãos.
+   - Injeção de dependência `tenant_id: int | None = Depends(get_tenant_id)` em todas as rotas (`/retencoes/`, `/por-processo/`, `/por-documento-habil/`, `/{id}/status`), garantindo isolamento estrito por tenant para usuários regulares.
 3. **`backend/app/main.py`**:
-   - Importado o modelo `RetencaoImposto` para que o SQLAlchemy execute automaticamente o `Base.metadata.create_all()` no startup do servidor.
-   - Incluída a tabela `"retencoes_calc_impostos"` no ciclo de ativação de segurança Row Level Security (RLS) do Supabase.
-   - Registrado o roteador `app.include_router(retencoes.router)`.
+   - Auto-criação da tabela via SQLAlchemy `create_all()`.
+   - Inclusão em `safe_columns` para migração suave de colunas existentes (`instituicao_id`, `uasg`).
+   - Ativação de segurança Row Level Security (RLS) no Supabase.
+   - Registro do roteador `app.include_router(retencoes.router)`.
 
 ---
 
-## 5. Script SQL para Implantação Imediata no Supabase
+## 6. Script SQL para Implantação Imediata no Supabase
 
-Caso deseje criar a tabela imediatamente pelo **SQL Editor do Supabase** antes do próximo deploy do Rauf, execute o script abaixo:
+Caso deseje criar ou atualizar a tabela diretamente no **SQL Editor do Supabase**, execute o script abaixo:
 
 ```sql
--- Criação da tabela isolada de retencoes fiscais
+-- 1. Criação da tabela isolada de retenções com suporte multi-tenant
 CREATE TABLE IF NOT EXISTS retencoes_calc_impostos (
     id SERIAL PRIMARY KEY,
+    instituicao_id INTEGER,
+    uasg VARCHAR(6),
     numero_processo VARCHAR(60) NOT NULL,
     documento_habil VARCHAR(60) NOT NULL,
     numero_empenho VARCHAR(60),
@@ -121,42 +137,45 @@ CREATE TABLE IF NOT EXISTS retencoes_calc_impostos (
     valor_pis NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
     valor_inss NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
     valor_iss NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
-    detalhamento_json TEXT,
+    detalhamento_json JSONB,
     status_conciliacao VARCHAR(30) NOT NULL DEFAULT 'PENDENTE',
     origem_sistema VARCHAR(50) NOT NULL DEFAULT 'calc_impostos',
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_retencoes_proc_dh_nota UNIQUE (numero_processo, documento_habil, numero_nota)
 );
 
--- Índices de busca rápida
+-- 2. Migração segura para bases existentes (adiciona colunas se já existia sem multi-tenancy)
+ALTER TABLE retencoes_calc_impostos ADD COLUMN IF NOT EXISTS instituicao_id INTEGER;
+ALTER TABLE retencoes_calc_impostos ADD COLUMN IF NOT EXISTS uasg VARCHAR(6);
+
+-- 3. Índices de busca rápida e isolamento multi-tenant
+CREATE INDEX IF NOT EXISTS idx_retencoes_instituicao ON retencoes_calc_impostos (instituicao_id, uasg);
 CREATE INDEX IF NOT EXISTS idx_retencoes_proc_dh ON retencoes_calc_impostos (numero_processo, documento_habil);
 CREATE INDEX IF NOT EXISTS idx_retencoes_cnpj ON retencoes_calc_impostos (fornecedor_cnpj);
 CREATE INDEX IF NOT EXISTS idx_retencoes_dh ON retencoes_calc_impostos (documento_habil);
 CREATE INDEX IF NOT EXISTS idx_retencoes_status ON retencoes_calc_impostos (status_conciliacao);
 
--- Segurança e Row Level Security (RLS)
+-- 4. Segurança e Row Level Security (RLS)
 ALTER TABLE retencoes_calc_impostos ENABLE ROW LEVEL SECURITY;
 ```
 
 ---
 
-## 6. Configuração de Conexão no `calc_impostos`
+## 7. Configuração de Conexão no `calc_impostos`
 
-No arquivo `.env` do backend do `calc_impostos` (`calc_impostos/backend/.env`), adicione a variável com a URI do Supabase do Rauf:
+No arquivo `.env` do backend do `calc_impostos` (`calc_impostos/backend/.env`), informe a URI de conexão direta com o banco do Supabase do Rauf:
 
 ```env
 # Conexão direta com o banco de dados do Rauf_App (Supabase)
 RAUF_DATABASE_URL=postgresql://postgres.[REF]:[SENHA]@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require
 ```
 
-> **Resiliência:** Se a variável `RAUF_DATABASE_URL` não for configurada, o `calc_impostos` utiliza sua própria conexão de banco local como contingência, sem travar a aplicação ou interromper a emissão dos relatórios de retenção.
-
 ---
 
-## 7. Conclusão e Próximos Passos
+## 8. Conclusão
 
-A solução implementada entrega integração ponta a ponta:
-- **Segurança:** O banco do `Rauf_App` não sofreu alterações em tabelas já em uso.
-- **Eficiência:** O `calc_impostos` grava os dados via UPSERT com unicidade `(processo, doc_habil, nota)`.
-- **Rastreabilidade:** O Rauf agora conta com endpoints REST (`/retencoes`) e uma tabela com a composição detalhada de cada tributo retido (IR, CSLL, COFINS, PIS, INSS e ISS) para bater com os valores líquidos das Ordens Bancárias e Documentos Hábeis.
+Com esta implementação:
+- **Identidade do Órgão Totalmente Alinhada:** O `calc_impostos` agora espelha a mesma identidade institucional do `Rauf_App` (UASG, Nome, CNPJ e Sigla).
+- **Segurança e Isolamento Multi-Tenant:** Toda retenção gravada fica vinculada ao `instituicao_id` e `uasg`, garantindo que nenhum órgão veja os lançamentos fiscais de outro.
+- **Relatórios Oficiais Fidedignos:** O cabeçalho dos relatórios PDF e dossiês de conformidade pré-pagamento exibem dinamicamente a identificação completa da Unidade Gestora compradora.

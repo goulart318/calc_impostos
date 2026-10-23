@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   UploadCloud, 
   Search, 
@@ -16,7 +16,8 @@ import {
   Sparkles,
   AlertTriangle,
   CheckCircle2,
-  BarChart3
+  BarChart3,
+  RefreshCw
 } from 'lucide-react';
 import { ReportPreview, type ResultadoConsolidado, type DadosSicafConsulta } from './components/ReportPreview';
 import { SicafCard } from './components/SicafCard';
@@ -27,6 +28,15 @@ import { DashboardTab } from './components/DashboardTab';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './components/ProcessoConsolidadoModal';
 import { LoteTriagemModal } from './components/LoteTriagemModal';
 import { API_BASE_URL } from './config/api';
+
+export interface IdentidadeOrgao {
+  id?: number;
+  nome: string;
+  cnpj: string;
+  uasg: string;
+  sigla: string;
+  municipio: string;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'analise' | 'historico' | 'anexo1' | 'ncm'>('analise');
@@ -78,16 +88,68 @@ export default function App() {
     return `${limpo.slice(0, 5)}.${limpo.slice(5, 11)}/${limpo.slice(11, 15)}-${limpo.slice(15)}`;
   };
 
-  // CNPJ e Município do Órgão do Usuário (Configuráveis e Salvos em LocalStorage)
+  // Identidade do Órgão / Unidade Gestora Ativa (Multi-Tenant)
+  const [instituicoesRauf, setInstituicoesRauf] = useState<IdentidadeOrgao[]>([]);
+  const [carregandoInstituicoes, setCarregandoInstituicoes] = useState(false);
+
+  const [orgaoAtivo, setOrgaoAtivo] = useState<IdentidadeOrgao>(() => {
+    try {
+      const salvo = localStorage.getItem('orgao_ativo_configurado');
+      if (salvo) return JSON.parse(salvo);
+    } catch (e) {}
+    return {
+      id: 1,
+      nome: 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH',
+      cnpj: '15.126.437/0006-58',
+      uasg: '155007',
+      sigla: 'HUCAM-UFES',
+      municipio: 'Vitória'
+    };
+  });
+
   const [cnpjMeuEstabelecimento, setCnpjMeuEstabelecimento] = useState<string>(() => {
-    return localStorage.getItem('cnpj_orgao_configurado') || '15.126.437/0006-58';
+    return localStorage.getItem('cnpj_orgao_configurado') || orgaoAtivo.cnpj || '15.126.437/0006-58';
   });
 
   const [municipioMeuOrgao, setMunicipioMeuOrgao] = useState<string>(() => {
-    return localStorage.getItem('municipio_orgao_configurado') || 'Vitória';
+    return localStorage.getItem('municipio_orgao_configurado') || orgaoAtivo.municipio || 'Vitória';
   });
 
   const [localPrestacaoServico, setLocalPrestacaoServico] = useState<string>('Vitória');
+
+  const carregarInstituicoesRauf = async () => {
+    setCarregandoInstituicoes(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/integracao/rauf/instituicoes`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setInstituicoesRauf(data);
+        }
+      }
+    } catch (err) {
+      console.warn('Aviso ao carregar instituições do Rauf:', err);
+    } finally {
+      setCarregandoInstituicoes(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarInstituicoesRauf();
+  }, []);
+
+  const handleSelecionarInstituicao = (inst: Partial<IdentidadeOrgao>) => {
+    const atualizado: IdentidadeOrgao = {
+      ...orgaoAtivo,
+      ...inst
+    };
+    setOrgaoAtivo(atualizado);
+    if (inst.cnpj) setCnpjMeuEstabelecimento(inst.cnpj);
+    if (inst.municipio) setMunicipioMeuOrgao(inst.municipio);
+    localStorage.setItem('orgao_ativo_configurado', JSON.stringify(atualizado));
+    if (inst.cnpj) localStorage.setItem('cnpj_orgao_configurado', inst.cnpj);
+    if (inst.municipio) localStorage.setItem('municipio_orgao_configurado', inst.municipio);
+  };
 
   const handleSalvarCnpjConfigurado = async (val: string) => {
     setCnpjMeuEstabelecimento(val);
@@ -103,6 +165,7 @@ export default function App() {
           if (d.municipio) {
             setMunicipioMeuOrgao(d.municipio);
             localStorage.setItem('municipio_orgao_configurado', d.municipio);
+            handleSelecionarInstituicao({ cnpj: val, municipio: d.municipio, nome: d.razaoSocial || orgaoAtivo.nome });
           }
         }
       } catch (e) {
@@ -114,6 +177,7 @@ export default function App() {
   const handleSalvarMunicipioConfigurado = (cidade: string) => {
     setMunicipioMeuOrgao(cidade);
     localStorage.setItem('municipio_orgao_configurado', cidade);
+    handleSelecionarInstituicao({ municipio: cidade });
   };
 
   // Dados do Destinatário/Tomador da Nota Fiscal Lido do Documento
@@ -205,8 +269,11 @@ export default function App() {
         fornecedorCnpj: fornecedorCnpj || '',
         fornecedorMunicipio: fornecedorCidadeUf ? fornecedorCidadeUf.split('/')[0].trim() : undefined,
         fornecedorUf: fornecedorCidadeUf && fornecedorCidadeUf.includes('/') ? fornecedorCidadeUf.split('/')[1].trim() : undefined,
-        destinatarioNome,
-        destinatarioCnpj,
+        destinatarioNome: destinatarioNome || orgaoAtivo.nome,
+        destinatarioCnpj: destinatarioCnpj || orgaoAtivo.cnpj,
+        instituicaoId: orgaoAtivo.id,
+        uasg: orgaoAtivo.uasg,
+        siglaOrgao: orgaoAtivo.sigla,
         optanteSimples,
         percentualReducaoIss,
         retencaoIss,
@@ -561,6 +628,19 @@ export default function App() {
         </div>
 
         <div className="header-actions">
+          <div 
+            className="header-badge" 
+            style={{ background: 'rgba(37, 99, 235, 0.08)', borderColor: '#93c5fd', color: '#1d4ed8', cursor: 'pointer' }}
+            title={`Órgão Ativo: ${orgaoAtivo.nome} | UASG: ${orgaoAtivo.uasg || '---'} | CNPJ: ${orgaoAtivo.cnpj}`}
+            onClick={() => {
+              const el = document.getElementById('card-configuracao-orgao');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+          >
+            <Building2 size={14} color="#2563eb" />
+            <span>{orgaoAtivo.sigla || 'Órgão'}: UASG {orgaoAtivo.uasg || '---'}</span>
+          </div>
+
           <div className="header-badge">
             <ShieldCheck size={14} color="#10b981" />
             <span>IN RFB nº 1.234/2012 & INSS</span>
@@ -787,39 +867,127 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Card de Configuração do CNPJ do Órgão / Estabelecimento */}
-                <div className="card" style={{ background: '#f8fafc', border: '1px solid #cbd5e1', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                {/* Card de Configuração e Identidade do Órgão / Unidade Gestora (Multi-Tenant) */}
+                <div id="card-configuracao-orgao" className="card" style={{ background: '#f8fafc', border: '1px solid #cbd5e1', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
                     <div>
-                      <strong style={{ fontSize: '0.85rem', color: 'var(--text-main)' }}>🏢 Seu Órgão / Estabelecimento Tomador:</strong>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Usado para conferir destinatário e determinar incidência territorial de ISSQN (LC 116/2003).</div>
+                      <strong style={{ fontSize: '0.88rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Building2 size={16} color="#2563eb" /> Identidade do Órgão / Unidade Gestora (Multi-Tenant):
+                      </strong>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Identifica o tomador, define o <code>instituicao_id</code> no Rauf SaaS e orienta as retenções e conciliações documentais.
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <div>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>CNPJ DO ÓRGÃO:</span>
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          style={{ padding: '4px 8px', fontSize: '0.82rem', width: '165px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
-                          value={cnpjMeuEstabelecimento} 
-                          onChange={(e) => handleSalvarCnpjConfigurado(e.target.value)} 
-                          placeholder="15.126.437/0006-58"
-                        />
-                      </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {instituicoesRauf.length > 0 && (
+                        <select
+                          className="form-input"
+                          style={{ padding: '4px 8px', fontSize: '0.8rem', fontWeight: 600, maxWidth: '280px' }}
+                          value={orgaoAtivo.id || ''}
+                          onChange={(e) => {
+                            const sel = instituicoesRauf.find(i => String(i.id) === e.target.value);
+                            if (sel) {
+                              handleSelecionarInstituicao({
+                                id: sel.id,
+                                nome: sel.nome,
+                                cnpj: sel.cnpj,
+                                uasg: sel.uasg,
+                                sigla: sel.sigla,
+                                municipio: sel.municipio || municipioMeuOrgao
+                              });
+                            }
+                          }}
+                        >
+                          <option value="">-- Selecionar Órgão do Rauf --</option>
+                          {instituicoesRauf.map(i => (
+                            <option key={i.id} value={i.id}>
+                              {i.sigla ? `[${i.sigla}] ` : ''}{i.nome} (UASG: {i.uasg || '---'})
+                            </option>
+                          ))}
+                        </select>
+                      )}
 
-                      <div>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>CIDADE DO ÓRGÃO:</span>
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          style={{ padding: '4px 8px', fontSize: '0.82rem', width: '130px', fontWeight: 700 }}
-                          value={municipioMeuOrgao} 
-                          onChange={(e) => handleSalvarMunicipioConfigurado(e.target.value)} 
-                          placeholder="Vitória"
-                          title="Cidade sede do seu órgão / tomador (obtida via Receita Federal ou ajustável manualmente)"
-                        />
-                      </div>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={carregarInstituicoesRauf}
+                        disabled={carregandoInstituicoes}
+                        style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="Sincronizar lista de órgãos do banco de dados do Rauf_App"
+                      >
+                        <RefreshCw size={12} className={carregandoInstituicoes ? 'spin' : ''} />
+                        {carregandoInstituicoes ? 'Sincronizando...' : 'Sincronizar Rauf'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', paddingTop: '8px', borderTop: '1px solid #e2e8f0' }}>
+                    <div>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>UASG (6 DÍGITOS):</span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
+                        value={orgaoAtivo.uasg || ''} 
+                        onChange={(e) => handleSelecionarInstituicao({ uasg: e.target.value.slice(0, 6) })} 
+                        placeholder="155007"
+                        maxLength={6}
+                      />
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>SIGLA / UG:</span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontWeight: 700 }}
+                        value={orgaoAtivo.sigla || ''} 
+                        onChange={(e) => handleSelecionarInstituicao({ sigla: e.target.value.toUpperCase() })} 
+                        placeholder="HUCAM-UFES"
+                      />
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>CNPJ DO ÓRGÃO:</span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
+                        value={cnpjMeuEstabelecimento} 
+                        onChange={(e) => {
+                          handleSalvarCnpjConfigurado(e.target.value);
+                          handleSelecionarInstituicao({ cnpj: e.target.value });
+                        }} 
+                        placeholder="15.126.437/0006-58"
+                      />
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>CIDADE DO ÓRGÃO:</span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontWeight: 700 }}
+                        value={municipioMeuOrgao} 
+                        onChange={(e) => {
+                          handleSalvarMunicipioConfigurado(e.target.value);
+                          handleSelecionarInstituicao({ municipio: e.target.value });
+                        }} 
+                        placeholder="Vitória"
+                      />
+                    </div>
+
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>NOME OFICIAL DO ÓRGÃO / RAZÃO SOCIAL:</span>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontWeight: 600, width: '100%' }}
+                        value={orgaoAtivo.nome || ''} 
+                        onChange={(e) => handleSelecionarInstituicao({ nome: e.target.value })} 
+                        placeholder="EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH"
+                      />
                     </div>
                   </div>
                 </div>

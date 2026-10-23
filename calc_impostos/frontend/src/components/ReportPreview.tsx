@@ -78,6 +78,9 @@ export interface ResultadoConsolidado {
   fornecedorUf?: string;
   destinatarioNome?: string;
   destinatarioCnpj?: string;
+  instituicaoId?: number;
+  uasg?: string;
+  siglaOrgao?: string;
   optanteSimples: boolean;
   optanteSimei?: boolean;
   dataOpcaoSimples?: string;
@@ -510,6 +513,9 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
         fornecedorUf: currentData.fornecedorUf,
         destinatarioNome: currentData.destinatarioNome,
         destinatarioCnpj: currentData.destinatarioCnpj,
+        instituicaoId: currentData.instituicaoId,
+        uasg: currentData.uasg,
+        siglaOrgao: currentData.siglaOrgao,
         optanteSimples: currentData.optanteSimples,
         optanteSimei: currentData.optanteSimei,
         dataOpcaoSimples: currentData.dataOpcaoSimples,
