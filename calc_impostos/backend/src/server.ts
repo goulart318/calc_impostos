@@ -25,6 +25,8 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 const allowedOrigins = [
+  'https://calc-impostos-frontend.onrender.com',
+  'https://calc-impostos.onrender.com',
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:3000',
@@ -37,18 +39,33 @@ if (process.env.FRONTEND_URL) {
   allowedOrigins.push(process.env.FRONTEND_URL.replace(/\/$/, ''));
 }
 
-app.use(cors({
+const isOriginAllowed = (origin: string): boolean => {
+  if (allowedOrigins.indexOf(origin) !== -1) return true;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.hostname.endsWith('.onrender.com')) return true;
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return true;
+  } catch {
+    return false;
+  }
+  return false;
+};
+
+const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+    // Permite chamadas sem origin (curl, mobile, scripts) ou origens homologadas
+    if (!origin || isOriginAllowed(origin) || process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
-    return callback(new Error('Acesso bloqueado por política de CORS: ' + origin));
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Admin-Token']
-}));
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
