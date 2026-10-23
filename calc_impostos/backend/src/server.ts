@@ -672,6 +672,31 @@ app.post('/api/gerar-pdf', async (req: Request, res: Response) => {
   try {
     const resultado: ResultadoConsolidado = aplicarIdentidadeOrgao(req.body);
 
+    // Se documentoHabil, numeroProcesso ou numeroEmpenho não vieram no body, busca do histórico no banco
+    if ((!resultado.documentoHabil || !resultado.numeroProcesso) && (resultado.chaveAcesso || resultado.numeroNota)) {
+      try {
+        const notaSalva = await HistoryService.buscarNotaHistorico({
+          chaveAcesso: resultado.chaveAcesso,
+          numeroNota: resultado.numeroNota,
+          fornecedorCnpj: resultado.fornecedorCnpj,
+          tipoDocumento: resultado.tipoDocumento
+        });
+        if (notaSalva) {
+          if (!resultado.documentoHabil && notaSalva.documentoHabil) {
+            resultado.documentoHabil = notaSalva.documentoHabil;
+          }
+          if (!resultado.numeroProcesso && notaSalva.numeroProcesso) {
+            resultado.numeroProcesso = notaSalva.numeroProcesso;
+          }
+          if (!resultado.numeroEmpenho && notaSalva.numeroEmpenho) {
+            resultado.numeroEmpenho = notaSalva.numeroEmpenho;
+          }
+        }
+      } catch (errRecup) {
+        console.warn('Aviso ao recuperar dados de processo do histórico para PDF:', errRecup);
+      }
+    }
+
     // Garante que o SICAF esteja preenchido antes de gerar o relatório com anexo
     if (!resultado.sicaf && resultado.fornecedorCnpj) {
       try {
@@ -1166,10 +1191,14 @@ app.get('/api/notas/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Análise não encontrada.' });
     }
     const nota = result.rows[0];
+    const dados = nota.dados_json || {};
     res.json({
       id: nota.id,
       created_at: nota.created_at,
-      ...nota.dados_json
+      ...dados,
+      numeroProcesso: nota.numero_processo || dados.numeroProcesso || '',
+      numeroEmpenho: nota.numero_empenho || dados.numeroEmpenho || '',
+      documentoHabil: nota.documento_habil || dados.documentoHabil || ''
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Erro ao carregar nota.' });

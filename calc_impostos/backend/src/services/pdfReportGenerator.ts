@@ -179,38 +179,48 @@ export class PdfReportGenerator {
         let currentY = simpY + 40;
 
         resultado.itens.forEach((item) => {
+          const cardH = 114;
           // Quebra de página segura se o item não couber na folha atual
-          if (currentY + 110 > 750) {
+          if (currentY + cardH + 10 > 750) {
             doc.addPage();
             currentY = 40;
           }
 
-          doc.rect(35, currentY, 525, 100).fillAndStroke('#ffffff', borderColor);
+          doc.rect(35, currentY, 525, cardH).fillAndStroke('#ffffff', borderColor);
 
-          // Topo do Item
-          doc.fillColor(accentColor).fontSize(8).font('Helvetica-Bold')
-             .text(resultado.tipoDocumento === 'NFE' ? 'CRITERIO NCM & CST' : 'CODIGO DO SERVICO', 45, currentY + 6);
+          // 1. Topo: Classificação Fiscal à esquerda e Valor Bruto à direita
+          const ehNfe = resultado.tipoDocumento === 'NFE';
+          const labelFiscal = ehNfe ? 'CLASSIFICAÇÃO FISCAL (NCM & CST)' : 'CÓDIGO DE SERVIÇO MUNICIPAL';
+          doc.fillColor('#2563eb').fontSize(7.5).font('Helvetica-Bold')
+             .text(labelFiscal, 45, currentY + 6);
 
-          doc.fillColor(textMuted).fontSize(7.5).font('Helvetica-Bold')
+          doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold')
              .text('VALOR BRUTO DO ITEM', 420, currentY + 6, { width: 130, align: 'right' });
 
-          const tituloItem = resultado.tipoDocumento === 'NFE' 
-            ? `NCM: ${item.ncm || 'Geral'}${item.cst ? ` • CST: ${item.cst}` : ''}${item.descricao ? ` • ${item.descricao}` : ''}` 
-            : `Cod. Servico: ${item.codigoServico || '6190'}${item.descricao ? ` • ${item.descricao}` : ''}`;
+          // NCM e CST em destaque limpo
+          const fiscalText = ehNfe 
+            ? `NCM: ${item.ncm || 'Geral'}       CST: ${item.cst || '01'}`
+            : `Cód. Serviço: ${item.codigoServico || '6190'}`;
 
-          doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold')
-             .text(tituloItem, 45, currentY + 17, { width: 370, ellipsis: true });
+          doc.fillColor('#0f172a').fontSize(9.5).font('Helvetica-Bold')
+             .text(fiscalText, 45, currentY + 16, { width: 350 });
 
-          doc.fillColor(primaryColor).fontSize(10.5).font('Helvetica-Bold')
-             .text(formatBRL(item.valorBruto), 420, currentY + 17, { width: 130, align: 'right' });
+          doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold')
+             .text(formatBRL(item.valorBruto), 420, currentY + 16, { width: 130, align: 'right' });
 
-          // Condição Aplicável
-          doc.rect(45, currentY + 30, 505, 16).fillAndStroke(lightBg, borderColor);
+          // 2. Linha própria para a descrição do material/serviço
+          const descrLimpa = item.descricao ? `Item: ${item.descricao}` : 'Item: Material / Mercadoria';
+          doc.fillColor('#475569').fontSize(7.5).font('Helvetica')
+             .text(descrLimpa, 45, currentY + 28, { width: 505, height: 11, ellipsis: true });
+
+          // 3. Faixa de Condição Aplicável
+          const condY = currentY + 41;
+          doc.rect(45, condY, 505, 16).fillAndStroke(lightBg, borderColor);
           doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica-Bold')
-             .text(`Condicao aplicavel: ${item.condicaoAplicavel}`, 52, currentY + 34, { width: 490, ellipsis: true });
+             .text(`Condição aplicável: ${item.condicaoAplicavel}`, 52, condY + 4, { width: 490, height: 10, ellipsis: true });
 
-          // DESTAQUE DA NATUREZA EFD-REINF R-4020 E CÓDIGO DARF
-          const reinfY = currentY + 50;
+          // 4. Bloco EFD-REINF e Código DARF
+          const reinfY = currentY + 60;
           doc.rect(45, reinfY, 505, 30).fillAndStroke('#f0f9ff', '#bae6fd');
 
           // Coluna 1: Reinf
@@ -218,14 +228,14 @@ export class PdfReportGenerator {
           doc.fillColor('#0c4a6e').fontSize(11).font('Helvetica-Bold').text(item.naturezaRendimentoReinf || '17006', 53, reinfY + 15);
 
           // Coluna 2: Código DARF
-          doc.fillColor('#0369a1').fontSize(7).font('Helvetica-Bold').text('CODIGO DA RECEITA DARF (RFB):', 300, reinfY + 5);
+          doc.fillColor('#0369a1').fontSize(7).font('Helvetica-Bold').text('CÓDIGO DA RECEITA DARF (RFB):', 300, reinfY + 5);
           doc.fillColor('#0c4a6e').fontSize(11).font('Helvetica-Bold').text(item.codigoReceitaDarf || '6190', 300, reinfY + 15);
 
-          // Fundamentação Legal
+          // 5. Fundamentação Legal
           doc.fillColor(textMuted).fontSize(7).font('Helvetica')
-             .text(`Fundamentacao Legal: ${item.fundamentacaoLegal}`, 45, currentY + 85, { width: 505, ellipsis: true });
+             .text(`Fundamentação Legal: ${item.fundamentacaoLegal}`, 45, currentY + 96, { width: 505, height: 10, ellipsis: true });
 
-          currentY += 108;
+          currentY += cardH + 8;
         });
 
         // ==========================================

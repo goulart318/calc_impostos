@@ -97,7 +97,7 @@ export class HistoryService {
         const resChave = await pool.query(
           `SELECT id, tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
                   destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto, valor_liquido,
-                  total_retido, numero_processo, numero_empenho, dados_json, created_at, updated_at
+                  total_retido, numero_processo, numero_empenho, documento_habil, uasg, dados_json, created_at, updated_at
            FROM notas_analisadas
            WHERE chave_acesso = $1 AND uasg = $2
            ORDER BY updated_at DESC, created_at DESC
@@ -115,7 +115,7 @@ export class HistoryService {
         const resCnpjNota = await pool.query(
           `SELECT id, tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
                   destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto, valor_liquido,
-                  total_retido, numero_processo, numero_empenho, dados_json, created_at, updated_at
+                  total_retido, numero_processo, numero_empenho, documento_habil, uasg, dados_json, created_at, updated_at
            FROM notas_analisadas
            WHERE tipo_documento = $1
              AND uasg = $6
