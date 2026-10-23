@@ -210,25 +210,49 @@ export class AuthService {
       throw new AuthError(msgGenerica, 401);
     }
 
-    // UASG escolhida: usuário comum só entra na UASG de origem; superadmin em qualquer UASG ativa
-    const ua = await pool.query('SELECT * FROM uasgs WHERE id = $1 AND ativo = TRUE', [uasgId]);
-    if (ua.rows.length === 0) {
-      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
-      throw new AuthError(msgGenerica, 401);
+    // Determinação da Unidade Gestora (UASG) ativa para a sessão:
+    let uaFinal: any = null;
+
+    if (row.role === 'superadmin') {
+      // Superadmin pode escolher qualquer UASG ativa no momento do login
+      if (uasgId) {
+        const ua = await pool.query('SELECT * FROM uasgs WHERE id = $1 AND ativo = TRUE', [uasgId]);
+        if (ua.rows.length > 0) uaFinal = ua.rows[0];
+      }
+      if (!uaFinal) {
+        const uaPadrao = await pool.query("SELECT * FROM uasgs WHERE ativo = TRUE ORDER BY (uasg = '155012') DESC, id ASC LIMIT 1");
+        uaFinal = uaPadrao.rows[0];
+      }
+    } else {
+      // Usuário comum: conecta compulsoriamente à sua UASG de origem cadastrada
+      if (row.uasg_origem_id) {
+        const ua = await pool.query('SELECT * FROM uasgs WHERE id = $1 AND ativo = TRUE', [row.uasg_origem_id]);
+        if (ua.rows.length > 0) uaFinal = ua.rows[0];
+      }
+      // Se não encontrou a UASG de origem (ou se ainda não foi vinculada), tenta pela UASG informada ou padrão
+      if (!uaFinal && uasgId) {
+        const ua = await pool.query('SELECT * FROM uasgs WHERE id = $1 AND ativo = TRUE', [uasgId]);
+        if (ua.rows.length > 0) uaFinal = ua.rows[0];
+      }
+      if (!uaFinal) {
+        const uaPadrao = await pool.query("SELECT * FROM uasgs WHERE ativo = TRUE ORDER BY (uasg = '155012') DESC, id ASC LIMIT 1");
+        uaFinal = uaPadrao.rows[0];
+      }
     }
-    if (row.role !== 'superadmin' && row.uasg_origem_id !== ua.rows[0].id) {
+
+    if (!uaFinal) {
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
-      throw new AuthError(msgGenerica, 401);
+      throw new AuthError('Unidade Gestora vinculada não encontrada ou inativa.', 401);
     }
 
     if (ipOrigem) this.limparFalhasIp(ipOrigem);
     await pool.query('UPDATE usuarios_calc SET tentativas_falhas = 0, bloqueado_ate = NULL, ultimo_login = NOW() WHERE id = $1', [row.id]);
-    console.log(`🔐 Login: ${row.email} (${row.role}) na UASG ${ua.rows[0].uasg}`);
+    console.log(`🔐 Login realizado com sucesso: ${row.email} (${row.role}) na UASG ${uaFinal.uasg} - ${uaFinal.sigla || uaFinal.nome}`);
 
     return {
-      token: this.emitirToken(row.id, ua.rows[0].id),
+      token: this.emitirToken(row.id, uaFinal.id),
       usuario: mapUsuario(row),
-      uasg: mapUasg(ua.rows[0])
+      uasg: mapUasg(uaFinal)
     };
   }
 
