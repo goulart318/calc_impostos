@@ -120,7 +120,7 @@ export class RaufIntegrationService {
     for (const [, chave] of chaves) {
       try {
         const i = await this.chamar<IdentidadeOrgaoRauf>('GET', '/retencoes/minha-instituicao', chave);
-        out.push({ id: i.id, nome: i.nome || '', cnpj: i.cnpj || '', uasg: i.uasg || '', sigla: i.sigla || '', municipio: '' });
+        out.push({ id: i.id, nome: i.nome || '', cnpj: i.cnpj || '', uasg: i.uasg || '', sigla: i.sigla || '', municipio: i.municipio || '' });
       } catch (e: any) {
         console.warn('⚠️ [Rauf] Falha ao validar uma chave de integração:', e?.message || e);
       }
