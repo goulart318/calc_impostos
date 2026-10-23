@@ -58,6 +58,11 @@ ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS numero_processo VARCHAR(60
 ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS numero_empenho VARCHAR(50);
 ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS documento_habil VARCHAR(60);
 
+-- Multitenant: UASG do órgão dono da análise. Dados legados são todos do HUCAM (UASG 155012).
+ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS uasg VARCHAR(6);
+UPDATE notas_analisadas SET uasg = '155012' WHERE uasg IS NULL;
+CREATE INDEX IF NOT EXISTS idx_notas_uasg ON notas_analisadas(uasg);
+
 -- Índices para busca ultrarrápida por CNPJ, Chave de Acesso, Número da Nota, Processo, Empenho e Documento Hábil
 CREATE INDEX IF NOT EXISTS idx_notas_fornecedor_cnpj ON notas_analisadas(fornecedor_cnpj);
 CREATE INDEX IF NOT EXISTS idx_notas_chave_acesso ON notas_analisadas(chave_acesso);
@@ -102,6 +107,22 @@ CREATE INDEX IF NOT EXISTS idx_retencoes_proc_dh ON retencoes_calc_impostos(nume
 CREATE INDEX IF NOT EXISTS idx_retencoes_cnpj ON retencoes_calc_impostos(fornecedor_cnpj);
 CREATE INDEX IF NOT EXISTS idx_retencoes_dh ON retencoes_calc_impostos(documento_habil);
 CREATE INDEX IF NOT EXISTS idx_retencoes_status ON retencoes_calc_impostos(status_conciliacao);
+
+-- Registros sem instituição pertencem ao HUCAM (UASG 155012; id 4 no Rauf SaaS)
+UPDATE retencoes_calc_impostos SET uasg = '155012' WHERE uasg IS NULL;
+UPDATE retencoes_calc_impostos SET instituicao_id = 4 WHERE instituicao_id IS NULL;
+
+-- Fila de sincronizações com o Rauf que falharam por indisponibilidade (reenviadas automaticamente)
+CREATE TABLE IF NOT EXISTS rauf_sync_pendentes (
+  id SERIAL PRIMARY KEY,
+  uasg VARCHAR(6) NOT NULL,
+  chave VARCHAR(200) NOT NULL UNIQUE,   -- processo|NS|nota|UASG
+  payload JSONB NOT NULL,
+  tentativas INTEGER NOT NULL DEFAULT 0,
+  ultimo_erro TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Tabela de Memória Tributária de Fornecedores (Aprendizado Ativo de Regras por CNPJ e NCM/Serviço)
 CREATE TABLE IF NOT EXISTS memoria_tributaria_fornecedores (

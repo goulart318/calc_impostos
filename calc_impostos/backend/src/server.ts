@@ -773,14 +773,26 @@ app.get('/api/integracao/rauf/consultar', async (req: Request, res: Response) =>
     if (!processo || !docHabil) {
       return res.status(400).json({ error: 'Parâmetros processo e documentoHabil são obrigatórios.' });
     }
-    const registros = await RaufIntegrationService.consultarRetencaoPorChave(processo, docHabil);
+    const registros = await RaufIntegrationService.consultarRetencaoPorChave(processo, docHabil, String(req.query.uasg || ''));
     res.json(registros);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Erro ao consultar retenções do Rauf_App' });
   }
 });
 
-// Listar instituições cadastradas no Rauf SaaS (Supabase) para seleção de tenant
+// Reenvia a fila local de sincronizações que falharam por indisponibilidade do Rauf
+app.post('/api/integracao/rauf/reenviar-pendentes', async (_req: Request, res: Response) => {
+  try {
+    res.json(await RaufIntegrationService.reenviarPendentes());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao reenviar pendências ao Rauf_App' });
+  }
+});
+setInterval(() => {
+  RaufIntegrationService.reenviarPendentes().catch(() => undefined);
+}, 5 * 60 * 1000).unref();
+
+// Órgãos para os quais este servidor possui chave de integração do Rauf (seleção de identidade)
 app.get('/api/integracao/rauf/instituicoes', async (req: Request, res: Response) => {
   try {
     const instituicoes = await RaufIntegrationService.listarInstituicoesRauf();

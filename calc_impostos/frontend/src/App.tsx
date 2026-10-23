@@ -99,10 +99,10 @@ export default function App() {
     } catch (e) {}
     return {
       id: 1,
-      nome: 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH',
+      nome: 'Hospital Universitário Cassiano Antônio Moraes',
       cnpj: '15.126.437/0006-58',
-      uasg: '155007',
-      sigla: 'HUCAM-UFES',
+      uasg: '155012',
+      sigla: 'HUCAM',
       municipio: 'Vitória'
     };
   });

@@ -212,9 +212,9 @@ export class HistoryService {
           `INSERT INTO notas_analisadas (
             tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
             destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto,
-            valor_liquido, total_retido, dados_json, numero_processo, numero_empenho, documento_habil,
+            valor_liquido, total_retido, dados_json, numero_processo, numero_empenho, documento_habil, uasg,
             created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           RETURNING id;`,
           [
             resultado.tipoDocumento,
@@ -231,7 +231,8 @@ export class HistoryService {
             payloadJson,
             processoFinal,
             empenhoFinal,
-            docHabilFinal
+            docHabilFinal,
+            ((resultado.uasg || '').replace(/\D/g, '') || RaufIntegrationService.uasgPadrao()).padStart(6, '0')
           ]
         );
         idFinal = insertRes.rows[0].id;
