@@ -13,6 +13,7 @@ import { HistoryService } from './services/historyService';
 import { SupplierMemoryService } from './services/supplierMemoryService';
 import { SicafService, DadosSicafConsulta } from './services/sicafService';
 import { RaufIntegrationService } from './services/raufIntegrationService';
+import { RaufCredenciaisService, cadastroPelaTelaHabilitado, tokenAdminValido } from './services/raufCredenciaisService';
 
 dotenv.config();
 
@@ -791,6 +792,66 @@ app.post('/api/integracao/rauf/reenviar-pendentes', async (_req: Request, res: R
 setInterval(() => {
   RaufIntegrationService.reenviarPendentes().catch(() => undefined);
 }, 5 * 60 * 1000).unref();
+
+// ── Cadastro das chaves do Rauf pela tela (protegido por token de administração do servidor) ──
+// Enquanto o login por usuário não existir, estas rotas exigem o header x-admin-token == CALC_ADMIN_TOKEN.
+function exigirAdminServidor(req: Request, res: Response): boolean {
+  if (!cadastroPelaTelaHabilitado()) {
+    res.status(503).json({ error: 'Cadastro pela tela desabilitado: defina CALC_ADMIN_TOKEN e CALC_SECRET_KEY (mín. 16 caracteres) no servidor.' });
+    return false;
+  }
+  if (!tokenAdminValido(String(req.headers['x-admin-token'] || ''))) {
+    res.status(403).json({ error: 'Token de administração inválido.' });
+    return false;
+  }
+  return true;
+}
+
+app.get('/api/integracao/rauf/credenciais/status', (_req: Request, res: Response) => {
+  res.json({ habilitado: cadastroPelaTelaHabilitado() });
+});
+
+app.get('/api/integracao/rauf/credenciais', async (req: Request, res: Response) => {
+  if (!exigirAdminServidor(req, res)) return;
+  try {
+    res.json(await RaufCredenciaisService.listar());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao listar credenciais.' });
+  }
+});
+
+app.post('/api/integracao/rauf/credenciais', async (req: Request, res: Response) => {
+  if (!exigirAdminServidor(req, res)) return;
+  const chave = String(req.body?.chave || '').trim();
+  if (!/^rauf_[A-Za-z0-9_-]{20,}$/.test(chave)) {
+    return res.status(400).json({ error: 'Chave em formato inválido (esperado: rauf_…).' });
+  }
+  try {
+    const ident = await RaufIntegrationService.validarChave(chave);
+    if (!ident?.uasg) {
+      return res.status(409).json({ error: 'O órgão desta chave não possui UASG cadastrada no Rauf.' });
+    }
+    await RaufCredenciaisService.salvar(ident.uasg.padStart(6, '0'), ident.nome || '', chave);
+    RaufIntegrationService.invalidarChaves();
+    res.json({ sucesso: true, orgao: { nome: ident.nome, uasg: ident.uasg, sigla: ident.sigla, cnpj: ident.cnpj } });
+  } catch (err: any) {
+    const rejeitada = err?.status === 401 || err?.status === 403;
+    res.status(rejeitada ? 400 : 502).json({
+      error: rejeitada ? 'O Rauf recusou a chave (inválida ou revogada).' : `Não foi possível validar a chave no Rauf: ${err?.message || err}`
+    });
+  }
+});
+
+app.delete('/api/integracao/rauf/credenciais/:uasg', async (req: Request, res: Response) => {
+  if (!exigirAdminServidor(req, res)) return;
+  try {
+    const ok = await RaufCredenciaisService.remover(String(req.params.uasg).replace(/\D/g, '').padStart(6, '0'));
+    RaufIntegrationService.invalidarChaves();
+    res.json({ sucesso: ok });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao remover credencial.' });
+  }
+});
 
 // Órgãos para os quais este servidor possui chave de integração do Rauf (seleção de identidade)
 app.get('/api/integracao/rauf/instituicoes', async (req: Request, res: Response) => {

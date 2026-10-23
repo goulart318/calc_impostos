@@ -1,5 +1,6 @@
 import { pool } from '../config/db';
 import { ResultadoConsolidado } from './taxEngine';
+import { RaufCredenciaisService } from './raufCredenciaisService';
 
 /**
  * Integração do calc_impostos com o Rauf SaaS (somente via API REST autenticada).
@@ -69,6 +70,16 @@ export class RaufIntegrationService {
     return (process.env.RAUF_API_URL || 'https://rauf-app-backend.onrender.com').replace(/\/$/, '');
   }
 
+  /** Descarta o cache de chaves (após cadastrar/remover pela tela). */
+  public static invalidarChaves(): void {
+    this.chavesPorUasg = null;
+  }
+
+  /** Valida uma chave no Rauf e devolve a identidade do órgão (a UASG é a informada pelo Rauf). */
+  public static async validarChave(chave: string): Promise<IdentidadeOrgaoRauf> {
+    return this.chamar<IdentidadeOrgaoRauf>('GET', '/retencoes/minha-instituicao', chave);
+  }
+
   public static uasgPadrao(): string {
     return (process.env.CALC_UASG_PADRAO || '155012').replace(/\D/g, '').padStart(6, '0');
   }
@@ -77,6 +88,8 @@ export class RaufIntegrationService {
   private static async carregarChaves(): Promise<Map<string, string>> {
     if (this.chavesPorUasg) return this.chavesPorUasg;
     const mapa = new Map<string, string>();
+    // Chaves cadastradas pela tela (cifradas no banco); o ambiente tem precedência em caso de conflito
+    for (const [uasg, chave] of await RaufCredenciaisService.chavesDecifradas()) mapa.set(uasg, chave);
     for (const par of (process.env.RAUF_API_KEYS || '').split(/[,;]/)) {
       const [uasg, chave] = par.split(':').map(s => (s || '').trim());
       if (uasg && chave) mapa.set(uasg.replace(/\D/g, '').padStart(6, '0'), chave);

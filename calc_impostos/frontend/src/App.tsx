@@ -17,13 +17,15 @@ import {
   AlertTriangle,
   CheckCircle2,
   BarChart3,
-  RefreshCw
+  RefreshCw,
+  Link2,
 } from 'lucide-react';
 import { ReportPreview, type ResultadoConsolidado, type DadosSicafConsulta } from './components/ReportPreview';
 import { SicafCard } from './components/SicafCard';
 import { HistoricoSearch } from './components/HistoricoSearch';
 import { Anexo1Tab } from './components/Anexo1Tab';
 import { NcmMatrixTab } from './components/NcmMatrixTab';
+import { RaufIntegracaoTab } from './components/RaufIntegracaoTab';
 import { DashboardTab } from './components/DashboardTab';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './components/ProcessoConsolidadoModal';
 import { LoteTriagemModal } from './components/LoteTriagemModal';
@@ -39,7 +41,7 @@ export interface IdentidadeOrgao {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'analise' | 'historico' | 'anexo1' | 'ncm'>('analise');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'analise' | 'historico' | 'anexo1' | 'ncm' | 'rauf'>('analise');
   
   // Estado do formulário de análise (100% limpo inicialmente)
   const [tipoDocumento, setTipoDocumento] = useState<'NFE' | 'NFSE'>('NFE');
@@ -718,6 +720,14 @@ export default function App() {
         >
           <Layers size={18} />
           <span>Matriz de NCMs</span>
+        </button>
+
+        <button 
+          className={`nav-tab ${activeTab === 'rauf' ? 'active' : ''}`}
+          onClick={() => setActiveTab('rauf')}
+        >
+          <Link2 size={18} />
+          <span>Integração Rauf</span>
         </button>
       </nav>
 
@@ -1704,6 +1714,7 @@ export default function App() {
         )}
         {activeTab === 'anexo1' && <Anexo1Tab />}
         {activeTab === 'ncm' && <NcmMatrixTab />}
+        {activeTab === 'rauf' && <RaufIntegracaoTab />}
       </main>
 
       {/* Central de Triagem e Análise Paginada de Lote (Opção A) */}

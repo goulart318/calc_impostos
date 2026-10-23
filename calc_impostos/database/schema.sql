@@ -112,6 +112,16 @@ CREATE INDEX IF NOT EXISTS idx_retencoes_status ON retencoes_calc_impostos(statu
 UPDATE retencoes_calc_impostos SET uasg = '155012' WHERE uasg IS NULL;
 UPDATE retencoes_calc_impostos SET instituicao_id = 4 WHERE instituicao_id IS NULL;
 
+-- Chaves de integração do Rauf cadastradas pela tela (cifradas com CALC_SECRET_KEY)
+CREATE TABLE IF NOT EXISTS rauf_credenciais (
+  uasg VARCHAR(6) PRIMARY KEY,
+  nome_orgao VARCHAR(255) NOT NULL,
+  prefixo VARCHAR(12) NOT NULL,
+  chave_cifrada TEXT NOT NULL,
+  validada_em TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Fila de sincronizações com o Rauf que falharam por indisponibilidade (reenviadas automaticamente)
 CREATE TABLE IF NOT EXISTS rauf_sync_pendentes (
   id SERIAL PRIMARY KEY,
