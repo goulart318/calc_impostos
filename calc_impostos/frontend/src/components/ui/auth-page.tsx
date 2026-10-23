@@ -90,52 +90,90 @@ export function AuthPage() {
   };
 
   return (
-    <main className="relative min-h-screen md:h-screen md:overflow-hidden lg:grid lg:grid-cols-2 bg-slate-900 text-slate-100">
+    <main
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#0f172a',
+        color: '#f8fafc',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+      className="relative min-h-screen lg:grid lg:grid-cols-2 bg-slate-900 text-slate-100"
+    >
       {/* Coluna Esquerda: Institucional / Branding com FloatingPaths */}
-      <div className="relative hidden h-full flex-col border-r border-slate-800 bg-slate-950/70 p-10 lg:flex overflow-hidden">
-        <div className="from-slate-950 absolute inset-0 z-10 bg-gradient-to-t to-transparent" />
+      <div
+        style={{
+          position: 'relative',
+          padding: '2.5rem',
+          backgroundColor: 'rgba(2, 6, 23, 0.7)',
+          borderRight: '1px solid #1e293b',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          overflow: 'hidden',
+          minHeight: '260px'
+        }}
+        className="relative hidden h-full flex-col border-r border-slate-800 bg-slate-950/70 p-10 lg:flex overflow-hidden"
+      >
+        <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'linear-gradient(to top, #020617, transparent)' }} className="from-slate-950 absolute inset-0 z-10 bg-gradient-to-t to-transparent pointer-events-none" />
         
-        <div className="z-20 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-500/20">
+        <div style={{ position: 'relative', zIndex: 20, display: 'flex', alignItems: 'center', gap: '0.75rem' }} className="z-20 flex items-center gap-3">
+          <div style={{ padding: '0.625rem', borderRadius: '0.75rem', backgroundColor: '#2563eb', color: '#ffffff' }} className="p-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-500/20">
             <Building2Icon className="size-6" />
           </div>
           <div>
-            <p className="text-xl font-bold tracking-tight text-white">Retenções Tributárias</p>
-            <p className="text-xs text-blue-400 font-medium">Matriz Fiscal & Liquidações SIAFI</p>
+            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#ffffff' }} className="text-xl font-bold tracking-tight text-white">Retenções Tributárias</p>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: '#60a5fa', fontWeight: 500 }} className="text-xs text-blue-400 font-medium">Matriz Fiscal & Liquidações SIAFI</p>
           </div>
         </div>
 
-        <div className="z-20 mt-auto space-y-4 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-300 border border-blue-500/20">
+        <div style={{ position: 'relative', zIndex: 20, marginTop: 'auto', maxWidth: '32rem', display: 'flex', flexDirection: 'column', gap: '1rem' }} className="z-20 mt-auto space-y-4 max-w-lg">
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 500, backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.2)', width: 'fit-content' }}>
             <ShieldCheckIcon className="size-4" />
             Em conformidade com a IN RFB nº 1.234/2012
           </div>
-          <blockquote className="space-y-2">
-            <p className="text-xl text-slate-200 font-light leading-relaxed">
+          <blockquote style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <p style={{ margin: 0, fontSize: '1.15rem', color: '#e2e8f0', fontWeight: 300, lineHeight: 1.6 }}>
               &ldquo;Instrução e auditoria automatizada de retenções federais (IR, CSLL, PIS, COFINS, INSS e ISS) para notas fiscais de bens e serviços com integração ao SIAFI.&rdquo;
             </p>
-            <footer className="font-mono text-xs text-slate-400">
+            <footer style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#94a3b8' }}>
               Hospital Universitário Cassiano Antônio Moraes — HUCAM/EBSERH
             </footer>
           </blockquote>
         </div>
 
-        <div className="absolute inset-0 z-0">
+        <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
           <FloatingPaths position={1} />
           <FloatingPaths position={-1} />
         </div>
       </div>
 
       {/* Coluna Direita: Formulário de Autenticação */}
-      <div className="relative flex min-h-screen flex-col justify-center p-6 md:p-12 bg-slate-900">
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          minHeight: '100vh',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '2rem 1.5rem',
+          backgroundColor: '#0f172a',
+          zIndex: 20
+        }}
+        className="relative flex min-h-screen flex-col justify-center p-6 md:p-12 bg-slate-900"
+      >
         <div
           aria-hidden
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.4 }}
           className="absolute inset-0 isolate contain-strict -z-10 opacity-40 pointer-events-none"
         >
           <div className="bg-[radial-gradient(50%_50%_at_50%_50%,rgba(37,99,235,0.15)_0,transparent_100%)] absolute top-0 right-0 h-[500px] w-[500px] -translate-y-1/2 rounded-full" />
         </div>
 
-        <div className="mx-auto w-full max-w-sm space-y-6">
+        <div style={{ width: '100%', maxWidth: '24rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }} className="mx-auto w-full max-w-sm space-y-6">
           {/* Header Mobile */}
           <div className="flex items-center gap-3 lg:hidden mb-2">
             <div className="p-2 rounded-lg bg-blue-600 text-white">
@@ -291,8 +329,9 @@ function FloatingPaths({ position }: { position: number }) {
   }));
 
   return (
-    <div className="pointer-events-none absolute inset-0">
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'hidden' }} className="pointer-events-none absolute inset-0">
       <svg
+        style={{ width: '100%', height: '100%', display: 'block' }}
         className="h-full w-full text-blue-500/20"
         viewBox="0 0 696 316"
         fill="none"
