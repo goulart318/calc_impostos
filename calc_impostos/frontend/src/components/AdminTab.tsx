@@ -14,7 +14,12 @@ import {
   CheckIcon,
   XIcon,
   PlusIcon,
-  CloudDownloadIcon
+  CloudDownloadIcon,
+  MailIcon,
+  UserIcon,
+  SparklesIcon,
+  LockIcon,
+  InfoIcon
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -135,6 +140,15 @@ export const AdminTab: React.FC = () => {
     } catch (e: any) {
       setMensagem({ tipo: 'erro', texto: e.message || 'Erro ao criar usuário.' });
     }
+  };
+
+  const gerarSenhaAleatoria = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*';
+    let pass = 'Ebserh#';
+    for (let i = 0; i < 6; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setSenhaNovoUser(pass);
   };
 
   const handleResetarSenha = async (user: UsuarioAdmin) => {
@@ -499,102 +513,161 @@ export const AdminTab: React.FC = () => {
 
       {/* ===================== MODAL NOVO USUÁRIO ===================== */}
       {modalNovoUsuario && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 relative">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-xl p-7 shadow-2xl shadow-black/80 text-slate-100 relative">
             <button
               onClick={() => setModalNovoUsuario(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              className="absolute top-5 right-5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              title="Fechar"
             >
               <XIcon className="size-5" />
             </button>
 
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
+            {/* Cabeçalho */}
+            <div className="flex items-center gap-3.5 mb-6 pb-4 border-b border-slate-800">
+              <div className="p-3 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
                 <UserPlusIcon className="size-6" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Cadastrar Novo Usuário</h3>
-                <p className="text-xs text-slate-400">Semelhante ao modelo de cadastro do Rauf</p>
+                <h3 className="text-xl font-bold text-white tracking-tight">Cadastrar Novo Usuário</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Criação de credenciais de acesso e vinculação institucional multi-UASG
+                </p>
               </div>
             </div>
 
-            <form onSubmit={handleCriarUsuario} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-300">Nome Completo</label>
-                <Input
-                  value={nomeNovoUser}
-                  onChange={(e) => setNomeNovoUser(e.target.value)}
-                  placeholder="ex: João da Silva"
-                  className="bg-slate-800 border-slate-700 text-white"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-300">E-mail Institucional</label>
-                <Input
-                  type="email"
-                  value={emailNovoUser}
-                  onChange={(e) => setEmailNovoUser(e.target.value)}
-                  placeholder="joao.silva@ebserh.gov.br"
-                  className="bg-slate-800 border-slate-700 text-white"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-300">Perfil de Acesso</label>
-                <select
-                  value={roleNovoUser}
-                  onChange={(e) => setRoleNovoUser(e.target.value as any)}
-                  className="w-full h-10 px-3 rounded-md border border-slate-700 bg-slate-800 text-white text-xs"
-                >
-                  <option value="usuario">Usuário Comum (vinculado a uma UASG)</option>
-                  <option value="superadmin">Superadmin (acesso irrestrito e troca de UASGs)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-300">
-                  UASG de Origem {roleNovoUser === 'superadmin' && '(Opcional para Superadmin)'}
+            <form onSubmit={handleCriarUsuario} className="space-y-4">
+              {/* Nome Completo */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  Nome Completo <span className="text-blue-400">*</span>
                 </label>
-                <select
-                  value={uasgNovoUser}
-                  onChange={(e) => setUasgNovoUser(e.target.value)}
-                  className="w-full h-10 px-3 rounded-md border border-slate-700 bg-slate-800 text-white text-xs"
-                  required={roleNovoUser !== 'superadmin'}
-                >
-                  {uasgs.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.sigla ? `${u.sigla} (UASG ${u.uasg})` : `UASG ${u.uasg}`} — {u.nome}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <Input
+                    value={nomeNovoUser}
+                    onChange={(e) => setNomeNovoUser(e.target.value)}
+                    placeholder="Ex: Carlos Eduardo de Oliveira"
+                    className="ps-10 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
+                    required
+                  />
+                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3.5">
+                    <UserIcon className="size-4" aria-hidden="true" />
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-300">
-                  Senha Inicial (opcional — se vazia, será gerada aleatoriamente)
-                </label>
-                <Input
-                  type="text"
-                  value={senhaNovoUser}
-                  onChange={(e) => setSenhaNovoUser(e.target.value)}
-                  placeholder="Deixe em branco para gerar automática"
-                  className="bg-slate-800 border-slate-700 text-white font-mono"
-                />
+              {/* Grid: E-mail e Perfil */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    E-mail Institucional <span className="text-blue-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type="email"
+                      value={emailNovoUser}
+                      onChange={(e) => setEmailNovoUser(e.target.value)}
+                      placeholder="usuario@ebserh.gov.br"
+                      className="ps-10 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
+                      required
+                    />
+                    <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3.5">
+                      <MailIcon className="size-4" aria-hidden="true" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    Perfil de Acesso
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={roleNovoUser}
+                      onChange={(e) => setRoleNovoUser(e.target.value as any)}
+                      className="w-full h-11 px-3.5 rounded-xl border border-slate-700 bg-slate-800/90 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer"
+                    >
+                      <option value="usuario">Usuário Comum (vinculado à UASG)</option>
+                      <option value="superadmin">Superadmin (Acesso irrestrito a todas)</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex gap-2 pt-2">
+              {/* UASG de Origem */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    UASG de Origem {roleNovoUser === 'superadmin' ? '(Padrão Inicial)' : <span className="text-blue-400">*</span>}
+                  </label>
+                  {roleNovoUser === 'superadmin' && (
+                    <span className="text-[11px] text-blue-400 font-medium">Superadmin pode alternar entre todas</span>
+                  )}
+                </div>
+                <div className="relative">
+                  <select
+                    value={uasgNovoUser}
+                    onChange={(e) => setUasgNovoUser(e.target.value)}
+                    className="w-full h-11 px-3.5 rounded-xl border border-slate-700 bg-slate-800/90 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer"
+                    required={roleNovoUser !== 'superadmin'}
+                  >
+                    {uasgs.map((u) => (
+                      <option key={u.id} value={u.id} className="bg-slate-900 text-white">
+                        {u.sigla ? `${u.sigla} (UASG ${u.uasg})` : `UASG ${u.uasg}`} — {u.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Senha Inicial */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    Senha Inicial (Opcional)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={gerarSenhaAleatoria}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                  >
+                    <SparklesIcon className="size-3.5" />
+                    Gerar senha segura
+                  </button>
+                </div>
+                <div className="relative">
+                  <Input
+                    type="text"
+                    value={senhaNovoUser}
+                    onChange={(e) => setSenhaNovoUser(e.target.value)}
+                    placeholder="Deixe em branco para gerar aleatoriamente"
+                    className="ps-10 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 font-mono text-sm focus-visible:ring-blue-500"
+                  />
+                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3.5">
+                    <LockIcon className="size-4" aria-hidden="true" />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-1">
+                  <InfoIcon className="size-3.5 text-slate-500 shrink-0" />
+                  Se deixar em branco, o sistema gerará uma senha temporária que será exibida para cópia ao salvar.
+                </p>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setModalNovoUsuario(false)}
-                  className="w-1/2 border-slate-700 text-slate-300 hover:bg-slate-800"
+                  className="px-5 h-11 rounded-xl border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white transition-all cursor-pointer"
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" className="w-1/2 bg-blue-600 hover:bg-blue-500 text-white">
+                <Button
+                  type="submit"
+                  className="px-6 h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-lg shadow-blue-600/25 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <UserPlusIcon className="size-4" />
                   Cadastrar Usuário
                 </Button>
               </div>
@@ -605,91 +678,108 @@ export const AdminTab: React.FC = () => {
 
       {/* ===================== MODAL NOVA UASG ===================== */}
       {modalNovaUasg && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 relative">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg p-7 shadow-2xl shadow-black/80 text-slate-100 relative">
             <button
               onClick={() => setModalNovaUasg(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              className="absolute top-5 right-5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              title="Fechar"
             >
               <XIcon className="size-5" />
             </button>
 
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
+            <div className="flex items-center gap-3.5 mb-6 pb-4 border-b border-slate-800">
+              <div className="p-3 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
                 <BuildingIcon className="size-6" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Cadastrar Unidade Gestora</h3>
-                <p className="text-xs text-slate-400">Modo isolado ou sem conexão com o Rauf</p>
+                <h3 className="text-xl font-bold text-white tracking-tight">Cadastrar Unidade Gestora</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Cadastro manual para operação isolada ou filiais descentralizadas
+                </p>
               </div>
             </div>
 
-            <form onSubmit={handleCriarUasg} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-300">Código UASG (6 dígitos)</label>
+            <form onSubmit={handleCriarUasg} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    Código UASG (6 dígitos) <span className="text-blue-400">*</span>
+                  </label>
                   <Input
                     maxLength={6}
                     value={codigoNovaUasg}
                     onChange={(e) => setCodigoNovaUasg(e.target.value.replace(/\D/g, ''))}
                     placeholder="155012"
-                    className="bg-slate-800 border-slate-700 text-white font-mono"
+                    className="h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white font-mono text-sm focus-visible:ring-blue-500"
                     required
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-300">Sigla / UG</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    Sigla / Unidade
+                  </label>
                   <Input
                     value={siglaNovaUasg}
                     onChange={(e) => setSiglaNovaUasg(e.target.value.toUpperCase())}
                     placeholder="HUCAM"
-                    className="bg-slate-800 border-slate-700 text-white"
+                    className="h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white text-sm focus-visible:ring-blue-500"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-300">Nome Oficial / Razão Social</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  Nome Oficial / Razão Social <span className="text-blue-400">*</span>
+                </label>
                 <Input
                   value={nomeNovaUasg}
                   onChange={(e) => setNomeNovaUasg(e.target.value)}
-                  placeholder="Hospital Universitário..."
-                  className="bg-slate-800 border-slate-700 text-white"
+                  placeholder="Hospital Universitário Cassiano Antônio Moraes"
+                  className="h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white text-sm focus-visible:ring-blue-500"
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-300">CNPJ do Tomador</label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    CNPJ do Tomador
+                  </label>
                   <Input
                     value={cnpjNovaUasg}
                     onChange={(e) => setCnpjNovaUasg(e.target.value.replace(/\D/g, ''))}
                     placeholder="15126437000658"
-                    className="bg-slate-800 border-slate-700 text-white font-mono"
+                    className="h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white font-mono text-sm focus-visible:ring-blue-500"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-300">Município (ISSQN)</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    Município (ISSQN)
+                  </label>
                   <Input
                     value={municipioNovaUasg}
                     onChange={(e) => setMunicipioNovaUasg(e.target.value)}
                     placeholder="Vitória"
-                    className="bg-slate-800 border-slate-700 text-white"
+                    className="h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white text-sm focus-visible:ring-blue-500"
                   />
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setModalNovaUasg(false)}
-                  className="w-1/2 border-slate-700 text-slate-300 hover:bg-slate-800"
+                  className="px-5 h-11 rounded-xl border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white transition-all cursor-pointer"
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" className="w-1/2 bg-blue-600 hover:bg-blue-500 text-white">
+                <Button
+                  type="submit"
+                  className="px-6 h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-lg shadow-blue-600/25 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <BuildingIcon className="size-4" />
                   Cadastrar UASG
                 </Button>
               </div>

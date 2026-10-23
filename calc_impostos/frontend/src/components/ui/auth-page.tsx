@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { Button } from './button';
 import { Input } from './input';
 import {
@@ -10,7 +9,8 @@ import {
   EyeIcon,
   EyeOffIcon,
   Loader2Icon,
-  AlertCircleIcon
+  AlertCircleIcon,
+  CheckCircle2Icon
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch } from '@/lib/apiFetch';
@@ -43,7 +43,6 @@ export function AuthPage() {
         if (ativo) {
           setUasgs(lista);
           if (lista.length > 0) {
-            // Seleciona preferencialmente a 155012 ou a primeira
             const padrao = lista.find(u => u.uasg === '155012') || lista[0];
             setUasgId(String(padrao.id));
           }
@@ -90,121 +89,118 @@ export function AuthPage() {
   };
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        backgroundColor: '#0f172a',
-        color: '#f8fafc',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-        position: 'relative',
-        overflow: 'hidden'
-      }}
-      className="relative min-h-screen lg:grid lg:grid-cols-2 bg-slate-900 text-slate-100"
-    >
-      {/* Coluna Esquerda: Institucional / Branding com FloatingPaths */}
-      <div
-        style={{
-          position: 'relative',
-          padding: '2.5rem',
-          backgroundColor: 'rgba(2, 6, 23, 0.7)',
-          borderRight: '1px solid #1e293b',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          overflow: 'hidden',
-          minHeight: '260px'
-        }}
-        className="relative hidden h-full flex-col border-r border-slate-800 bg-slate-950/70 p-10 lg:flex overflow-hidden"
-      >
-        <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'linear-gradient(to top, #020617, transparent)' }} className="from-slate-950 absolute inset-0 z-10 bg-gradient-to-t to-transparent pointer-events-none" />
-        
-        <div style={{ position: 'relative', zIndex: 20, display: 'flex', alignItems: 'center', gap: '0.75rem' }} className="z-20 flex items-center gap-3">
-          <div style={{ padding: '0.625rem', borderRadius: '0.75rem', backgroundColor: '#2563eb', color: '#ffffff' }} className="p-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-500/20">
-            <Building2Icon className="size-6" />
+    <div className="min-h-screen w-full bg-[#0a0f1d] text-slate-100 flex flex-col lg:grid lg:grid-cols-2 relative">
+      {/* Coluna Esquerda: Branding Institucional (Exibida em telas grandes) */}
+      <div className="hidden lg:flex relative flex-col justify-between p-12 bg-gradient-to-br from-slate-950 via-[#0b1329] to-[#0a0f1d] border-r border-slate-800/80 overflow-hidden">
+        {/* Padrão geométrico suave de fundo em SVG estático (sem carga de GPU) */}
+        <div className="absolute inset-0 opacity-15 pointer-events-none">
+          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+            <defs>
+              <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="0.8" />
+              </pattern>
+              <radialGradient id="grad-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid-pattern)" />
+            <circle cx="20%" cy="30%" r="280" fill="url(#grad-glow)" />
+          </svg>
+        </div>
+
+        {/* Topo: Logo e Nome do Sistema */}
+        <div className="relative z-10 flex items-center gap-3.5">
+          <div className="p-3 rounded-2xl bg-blue-600 text-white shadow-xl shadow-blue-600/30 ring-1 ring-blue-400/40">
+            <Building2Icon className="size-7" />
           </div>
           <div>
-            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#ffffff' }} className="text-xl font-bold tracking-tight text-white">Retenções Tributárias</p>
-            <p style={{ margin: 0, fontSize: '0.75rem', color: '#60a5fa', fontWeight: 500 }} className="text-xs text-blue-400 font-medium">Matriz Fiscal & Liquidações SIAFI</p>
+            <h1 className="text-2xl font-bold tracking-tight text-white leading-tight">Retenções Tributárias</h1>
+            <p className="text-xs text-blue-400 font-medium tracking-wide uppercase">Matriz Fiscal & Liquidações SIAFI</p>
           </div>
         </div>
 
-        <div style={{ position: 'relative', zIndex: 20, marginTop: 'auto', maxWidth: '32rem', display: 'flex', flexDirection: 'column', gap: '1rem' }} className="z-20 mt-auto space-y-4 max-w-lg">
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 500, backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.2)', width: 'fit-content' }}>
-            <ShieldCheckIcon className="size-4" />
-            Em conformidade com a IN RFB nº 1.234/2012
+        {/* Centro / Base: Destaques de Compliance */}
+        <div className="relative z-10 space-y-6 max-w-lg">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/25">
+            <ShieldCheckIcon className="size-4 text-blue-400" />
+            Conformidade com a IN RFB nº 1.234/2012 e LC nº 116/2003
           </div>
-          <blockquote style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <p style={{ margin: 0, fontSize: '1.15rem', color: '#e2e8f0', fontWeight: 300, lineHeight: 1.6 }}>
-              &ldquo;Instrução e auditoria automatizada de retenções federais (IR, CSLL, PIS, COFINS, INSS e ISS) para notas fiscais de bens e serviços com integração ao SIAFI.&rdquo;
+
+          <div className="space-y-3">
+            <blockquote className="text-lg text-slate-200 font-light leading-relaxed">
+              &ldquo;Plataforma integrada de instrução processual, liquidação orçamentária e cálculo automático de retenções federais e municipais para notas fiscais.&rdquo;
+            </blockquote>
+            <p className="text-xs font-mono text-slate-400">
+              Hospital Universitário Cassiano Antônio Moraes — HUCAM / EBSERH
             </p>
-            <footer style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#94a3b8' }}>
-              Hospital Universitário Cassiano Antônio Moraes — HUCAM/EBSERH
-            </footer>
-          </blockquote>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-slate-200 mb-1">
+                <CheckCircle2Icon className="size-4 text-emerald-400" />
+                Multi-Tenant Real
+              </div>
+              <p className="text-slate-400 text-[11px] leading-snug">
+                Isolamento estrito de notas, memórias tributárias e histórico por UASG.
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-slate-200 mb-1">
+                <CheckCircle2Icon className="size-4 text-blue-400" />
+                Integração Rauf
+              </div>
+              <p className="text-slate-400 text-[11px] leading-snug">
+                Sincronização e liquidação automática com dados do Rauf_App.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-          <FloatingPaths position={1} />
-          <FloatingPaths position={-1} />
+        {/* Rodapé institucional */}
+        <div className="relative z-10 text-xs text-slate-500 font-mono">
+          Ambiente Corporativo Seguro • EBSERH / MEC
         </div>
       </div>
 
-      {/* Coluna Direita: Formulário de Autenticação */}
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          minHeight: '100vh',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '2rem 1.5rem',
-          backgroundColor: '#0f172a',
-          zIndex: 20
-        }}
-        className="relative flex min-h-screen flex-col justify-center p-6 md:p-12 bg-slate-900"
-      >
-        <div
-          aria-hidden
-          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.4 }}
-          className="absolute inset-0 isolate contain-strict -z-10 opacity-40 pointer-events-none"
-        >
-          <div className="bg-[radial-gradient(50%_50%_at_50%_50%,rgba(37,99,235,0.15)_0,transparent_100%)] absolute top-0 right-0 h-[500px] w-[500px] -translate-y-1/2 rounded-full" />
-        </div>
-
-        <div style={{ width: '100%', maxWidth: '24rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }} className="mx-auto w-full max-w-sm space-y-6">
-          {/* Header Mobile */}
-          <div className="flex items-center gap-3 lg:hidden mb-2">
-            <div className="p-2 rounded-lg bg-blue-600 text-white">
-              <Building2Icon className="size-5" />
+      {/* Coluna Direita: Formulário de Autenticação Estável */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-14 relative bg-[#0a0f1d]">
+        <div className="w-full max-w-md mx-auto space-y-6">
+          {/* Header Mobile com Identidade */}
+          <div className="flex items-center gap-3 lg:hidden pb-3 border-b border-slate-800/60">
+            <div className="p-2.5 rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
+              <Building2Icon className="size-6" />
             </div>
             <div>
-              <p className="text-lg font-bold text-white">Retenções Tributárias</p>
-              <p className="text-xs text-blue-400">Plataforma de Matriz Fiscal</p>
+              <h2 className="text-lg font-bold text-white">Retenções Tributárias</h2>
+              <p className="text-xs text-blue-400 font-medium">Matriz Fiscal & Liquidações SIAFI</p>
             </div>
           </div>
 
+          {/* Título do Card */}
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+            <h2 className="text-2xl font-bold tracking-tight text-white">
               Acesse sua conta
-            </h1>
+            </h2>
             <p className="text-sm text-slate-400">
-              Selecione sua UASG de atuação e insira suas credenciais.
+              Selecione sua UASG de atuação e insira suas credenciais corporativas.
             </p>
           </div>
 
+          {/* Mensagem de Erro (se houver) */}
           {erro && (
-            <div className="p-3.5 rounded-lg bg-red-950/60 border border-red-500/40 text-red-200 text-sm flex items-start gap-2.5 animate-fadeIn">
+            <div className="p-3.5 rounded-xl bg-red-950/60 border border-red-500/40 text-red-200 text-sm flex items-start gap-2.5">
               <AlertCircleIcon className="size-5 text-red-400 shrink-0 mt-0.5" />
-              <span>{erro}</span>
+              <span className="leading-snug">{erro}</span>
             </div>
           )}
 
+          {/* Formulário */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Seletor de UASG */}
             <div className="space-y-1.5">
-              <label htmlFor="uasg-select" className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+              <label htmlFor="uasg-select" className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
                 Unidade Gestora (UASG)
               </label>
               <div className="relative">
@@ -213,15 +209,15 @@ export function AuthPage() {
                   value={uasgId}
                   onChange={(e) => setUasgId(e.target.value)}
                   disabled={carregandoUasgs || submetendo}
-                  className="w-full h-11 px-3.5 rounded-lg border border-slate-700 bg-slate-800/90 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:opacity-60"
+                  className="w-full h-11 px-3.5 rounded-xl border border-slate-700 bg-slate-900/95 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:opacity-60 cursor-pointer"
                 >
                   {carregandoUasgs ? (
-                    <option value="">Carregando UASGs...</option>
+                    <option value="">Carregando Unidades Gestoras...</option>
                   ) : uasgs.length === 0 ? (
-                    <option value="">Nenhuma UASG ativa</option>
+                    <option value="">Nenhuma UASG ativa disponível</option>
                   ) : (
                     uasgs.map((u) => (
-                      <option key={u.id} value={u.id} className="bg-slate-900 text-white">
+                      <option key={u.id} value={u.id} className="bg-slate-900 text-white py-1">
                         {u.sigla ? `${u.sigla} (UASG ${u.uasg})` : `UASG ${u.uasg}`} — {u.nome}
                       </option>
                     ))
@@ -230,16 +226,16 @@ export function AuthPage() {
               </div>
             </div>
 
-            {/* E-mail */}
+            {/* E-mail Institucional */}
             <div className="space-y-1.5">
-              <label htmlFor="email-input" className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+              <label htmlFor="email-input" className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
                 E-mail Institucional
               </label>
               <div className="relative">
                 <Input
                   id="email-input"
                   placeholder="usuario@ebserh.gov.br"
-                  className="peer ps-10 h-11 bg-slate-800/90 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
+                  className="ps-10 h-11 bg-slate-900/95 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
                   type="email"
                   autoComplete="email"
                   value={email}
@@ -255,14 +251,14 @@ export function AuthPage() {
 
             {/* Senha */}
             <div className="space-y-1.5">
-              <label htmlFor="password-input" className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                Senha
+              <label htmlFor="password-input" className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                Senha de Acesso
               </label>
               <div className="relative">
                 <Input
                   id="password-input"
                   placeholder="••••••••"
-                  className="peer ps-10 pe-10 h-11 bg-slate-800/90 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
+                  className="ps-10 pe-10 h-11 bg-slate-900/95 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
                   type={mostrarSenha ? 'text' : 'password'}
                   autoComplete="current-password"
                   value={senha}
@@ -277,17 +273,19 @@ export function AuthPage() {
                   type="button"
                   tabIndex={-1}
                   onClick={() => setMostrarSenha(!mostrarSenha)}
-                  className="absolute inset-y-0 end-0 flex items-center pe-3.5 text-slate-400 hover:text-slate-200 transition-colors"
+                  className="absolute inset-y-0 end-0 flex items-center pe-3.5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                  title={mostrarSenha ? 'Ocultar senha' : 'Ver senha'}
                 >
                   {mostrarSenha ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
                 </button>
               </div>
             </div>
 
+            {/* Botão de Login */}
             <Button
               type="submit"
               disabled={submetendo || carregandoUasgs}
-              className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-lg shadow-md transition-all mt-2"
+              className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-all mt-2 cursor-pointer"
             >
               {submetendo ? (
                 <>
@@ -300,64 +298,17 @@ export function AuthPage() {
             </Button>
           </form>
 
-          <div className="pt-4 border-t border-slate-800/80 text-center">
-            <p className="text-xs text-slate-500">
-              Acesso exclusivo a servidores e auditores autorizados.
+          {/* Rodapé do Form */}
+          <div className="pt-4 border-t border-slate-800/80 text-center space-y-1">
+            <p className="text-xs text-slate-400">
+              Acesso exclusivo a servidores e colaboradores autorizados.
             </p>
-            <p className="text-[11px] text-slate-600 mt-1">
-              v1.2.0 &bull; Sistema Integrado de Retenções Tributárias
+            <p className="text-[11px] text-slate-500 font-mono">
+              v1.2.0 • Sistema Integrado de Retenções Tributárias
             </p>
           </div>
         </div>
       </div>
-    </main>
-  );
-}
-
-function FloatingPaths({ position }: { position: number }) {
-  const paths = Array.from({ length: 36 }, (_, i) => ({
-    id: i,
-    d: `M-${380 - i * 5 * position} -${189 + i * 6}C-${
-      380 - i * 5 * position
-    } -${189 + i * 6} -${312 - i * 5 * position} ${216 - i * 6} ${
-      152 - i * 5 * position
-    } ${343 - i * 6}C${616 - i * 5 * position} ${470 - i * 6} ${
-      684 - i * 5 * position
-    } ${875 - i * 6} ${684 - i * 5 * position} ${875 - i * 6}`,
-    color: `rgba(59, 130, 246, ${0.08 + i * 0.02})`,
-    width: 0.5 + i * 0.03,
-  }));
-
-  return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'hidden' }} className="pointer-events-none absolute inset-0">
-      <svg
-        style={{ width: '100%', height: '100%', display: 'block' }}
-        className="h-full w-full text-blue-500/20"
-        viewBox="0 0 696 316"
-        fill="none"
-      >
-        <title>Linhas de Conexão</title>
-        {paths.map((path) => (
-          <motion.path
-            key={path.id}
-            d={path.d}
-            stroke="currentColor"
-            strokeWidth={path.width}
-            strokeOpacity={0.15 + path.id * 0.02}
-            initial={{ pathLength: 0.3, opacity: 0.6 }}
-            animate={{
-              pathLength: 1,
-              opacity: [0.3, 0.7, 0.3],
-              pathOffset: [0, 1, 0],
-            }}
-            transition={{
-              duration: 20 + Math.random() * 10,
-              repeat: Number.POSITIVE_INFINITY,
-              ease: 'linear',
-            }}
-          />
-        ))}
-      </svg>
     </div>
   );
 }
