@@ -170,38 +170,50 @@ export class AuthService {
   static async login(uasgId: number, emailRaw: string, senha: string, ipOrigem?: string) {
     if (ipOrigem) this.verificarIpBloqueado(ipOrigem);
 
-    const msgGenerica = 'UASG, e-mail ou senha inválidos.';
     const email = String(emailRaw || '').trim().toLowerCase();
     if (!email || !senha || !uasgId) {
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
-      throw new AuthError(msgGenerica, 401);
+      throw new AuthError('Preencha a UASG, o e-mail institucional e a senha.', 401);
     }
 
-    const r = await pool.query('SELECT * FROM usuarios_calc WHERE email = $1', [email]);
+    let r = await pool.query('SELECT * FROM usuarios_calc WHERE email = $1', [email]);
     if (r.rows.length === 0) {
-      console.warn(`[AUTH] Falha de login: e-mail não encontrado no banco (${email})`);
+      // 1. Busca por alias institucional ou prefixo de usuário (ex: tony.pereira@ebserh.gov.br -> tony.pereira@hubrasil.gov.br)
+      const username = email.includes('@') ? email.split('@')[0] : email;
+      const rPrefixo = await pool.query(
+        "SELECT * FROM usuarios_calc WHERE SPLIT_PART(email, '@', 1) = $1",
+        [username]
+      );
+      if (rPrefixo.rows.length === 1) {
+        r = rPrefixo;
+        console.log(`ℹ️ [AUTH] Login associado por prefixo institucional (${email} -> ${rPrefixo.rows[0].email})`);
+      }
+    }
+
+    if (r.rows.length === 0) {
+      console.warn(`[AUTH] Falha de login: e-mail ou prefixo não encontrado no banco (${email})`);
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
-      throw new AuthError(msgGenerica, 401);
+      throw new AuthError(`Usuário não encontrado (${email}). Verifique se o e-mail digitado confere com o cadastrado no sistema.`, 401);
     }
     const row = r.rows[0];
 
     if (!row.ativo) {
       console.warn(`[AUTH] Falha de login: usuário inativo no sistema (${email})`);
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
-      throw new AuthError('Usuário inativo. Entre em contato com o administrador.', 401);
+      throw new AuthError('Conta inativa no sistema. Solicite a reativação ao administrador.', 401);
     }
 
     if (row.bloqueado_ate && new Date(row.bloqueado_ate) > new Date()) {
       const minRestantes = Math.ceil((new Date(row.bloqueado_ate).getTime() - Date.now()) / 60000);
       console.warn(`[AUTH] Falha de login: conta temporariamente bloqueada por ${minRestantes} min (${email})`);
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
-      throw new AuthError(`Conta bloqueada por excesso de tentativas. Tente novamente em ${minRestantes} minuto(s).`, 401);
+      throw new AuthError(`Conta bloqueada por excesso de tentativas incorretas. Tente novamente em ${minRestantes} minuto(s).`, 401);
     }
 
     const senhaOk = await bcrypt.compare(senha, row.senha_hash);
     if (!senhaOk) {
       const tentativas = (row.tentativas_falhas || 0) + 1;
-      console.warn(`[AUTH] Falha de login: senha incorreta para ${email} (tentativa ${tentativas}/${MAX_TENTATIVAS})`);
+      console.warn(`[AUTH] Falha de login: senha incorreta para ${row.email} (tentativa ${tentativas}/${MAX_TENTATIVAS})`);
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
       if (tentativas >= MAX_TENTATIVAS) {
         await pool.query(
@@ -212,7 +224,7 @@ export class AuthService {
       } else {
         await pool.query('UPDATE usuarios_calc SET tentativas_falhas = $2 WHERE id = $1', [row.id, tentativas]);
       }
-      throw new AuthError(msgGenerica, 401);
+      throw new AuthError(`Senha incorreta para a conta ${row.email}. Restam ${MAX_TENTATIVAS - tentativas} tentativa(s).`, 401);
     }
 
     // Determinação da Unidade Gestora (UASG) ativa para a sessão:
@@ -318,7 +330,7 @@ export class AuthService {
     return { id: ins.rows[0].id, senhaTemporaria: senha };
   }
 
-  static async atualizarUsuario(id: number, dados: { nome?: string; email?: string; uasgOrigemId?: number }) {
+  static async atualizarUsuario(id: number, dados: { nome?: string; email?: string; uasgOrigemId?: number; senha?: string }) {
     const r = await pool.query('SELECT * FROM usuarios_calc WHERE id = $1', [id]);
     if (r.rows.length === 0) throw new AuthError('Usuário não encontrado.', 404);
     const atual = r.rows[0];
@@ -339,19 +351,31 @@ export class AuthService {
       if (ua.rows.length === 0) throw new AuthError('UASG de origem inexistente.');
       uasgOrigem = dados.uasgOrigemId;
     }
-    await pool.query('UPDATE usuarios_calc SET nome=$2, email=$3, uasg_origem_id=$4, updated_at=NOW() WHERE id=$1', [id, nome, email, uasgOrigem]);
+
+    if (dados.senha && dados.senha.trim()) {
+      this.validarSenhaNova(dados.senha.trim());
+      const hash = await bcrypt.hash(dados.senha.trim(), 10);
+      await pool.query(
+        'UPDATE usuarios_calc SET nome=$2, email=$3, uasg_origem_id=$4, senha_hash=$5, tentativas_falhas=0, bloqueado_ate=NULL, updated_at=NOW() WHERE id=$1',
+        [id, nome, email, uasgOrigem, hash]
+      );
+    } else {
+      await pool.query('UPDATE usuarios_calc SET nome=$2, email=$3, uasg_origem_id=$4, updated_at=NOW() WHERE id=$1', [id, nome, email, uasgOrigem]);
+    }
+    console.log(`👤 Usuário atualizado: ${email}`);
   }
 
-  static async resetarSenha(id: number) {
+  static async resetarSenha(id: number, novaSenha?: string) {
     const r = await pool.query('SELECT id, email FROM usuarios_calc WHERE id = $1', [id]);
     if (r.rows.length === 0) throw new AuthError('Usuário não encontrado.', 404);
-    const senha = this.gerarSenhaAleatoria();
+    const senha = novaSenha && novaSenha.trim() ? novaSenha.trim() : this.gerarSenhaAleatoria();
+    this.validarSenhaNova(senha);
     const hash = await bcrypt.hash(senha, 10);
     await pool.query(
-      'UPDATE usuarios_calc SET senha_hash=$2, forca_troca_senha = (email <> $3), tentativas_falhas=0, bloqueado_ate=NULL, updated_at=NOW() WHERE id=$1',
-      [id, hash, MASTER_EMAIL]
+      'UPDATE usuarios_calc SET senha_hash=$2, forca_troca_senha = FALSE, tentativas_falhas=0, bloqueado_ate=NULL, updated_at=NOW() WHERE id=$1',
+      [id, hash]
     );
-    console.log(`🔑 Senha redefinida para o usuário ${r.rows[0].email}`);
+    console.log(`🔑 Senha redefinida para o usuário ${r.rows[0].email}: ${senha}`);
     return { senhaTemporaria: senha };
   }
 

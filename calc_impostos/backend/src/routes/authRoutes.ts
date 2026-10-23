@@ -78,11 +78,12 @@ adminRouter.post('/usuarios', async (req: Request, res: Response) => {
 
 adminRouter.put('/usuarios/:id', async (req: Request, res: Response) => {
   try {
-    const { nome, email, uasgOrigemId } = req.body || {};
+    const { nome, email, uasgOrigemId, senha } = req.body || {};
     await AuthService.atualizarUsuario(Number(req.params.id), {
       nome,
       email,
-      uasgOrigemId: uasgOrigemId ? Number(uasgOrigemId) : undefined
+      uasgOrigemId: uasgOrigemId ? Number(uasgOrigemId) : undefined,
+      senha
     });
     res.json({ success: true });
   } catch (err) {
@@ -92,7 +93,8 @@ adminRouter.put('/usuarios/:id', async (req: Request, res: Response) => {
 
 adminRouter.post('/usuarios/:id/resetar-senha', async (req: Request, res: Response) => {
   try {
-    res.json(await AuthService.resetarSenha(Number(req.params.id)));
+    const { novaSenha } = req.body || {};
+    res.json(await AuthService.resetarSenha(Number(req.params.id), novaSenha));
   } catch (err) {
     tratarErro(res, err);
   }

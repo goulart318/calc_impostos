@@ -20,7 +20,8 @@ import {
   SparklesIcon,
   LockIcon,
   InfoIcon,
-  SearchIcon
+  SearchIcon,
+  PencilIcon
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -80,6 +81,19 @@ export const AdminTab: React.FC = () => {
   // Feedback geral
   const [mensagem, setMensagem] = useState<{ tipo: 'sucesso' | 'erro'; texto: string } | null>(null);
   const [sincronizandoRauf, setSincronizandoRauf] = useState(false);
+
+  // Estados para Redefinir Senha Customizada
+  const [usuarioParaResetar, setUsuarioParaResetar] = useState<UsuarioAdmin | null>(null);
+  const [novaSenhaManual, setNovaSenhaManual] = useState('senha123');
+  const [redefinindoSenha, setRedefinindoSenha] = useState(false);
+
+  // Estados para Edição de Usuário
+  const [usuarioParaEditar, setUsuarioParaEditar] = useState<UsuarioAdmin | null>(null);
+  const [editNome, setEditNome] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editUasgId, setEditUasgId] = useState('');
+  const [editNovaSenha, setEditNovaSenha] = useState('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
   // Estados de busca instantânea
   const [buscaUsuario, setBuscaUsuario] = useState('');
@@ -182,21 +196,53 @@ export const AdminTab: React.FC = () => {
     setSenhaNovoUser(pass);
   };
 
-  const handleResetarSenha = async (user: UsuarioAdmin) => {
-    if (!confirm(`Deseja realmente redefinir a senha de ${user.nome} (${user.email})? Uma nova senha temporária será gerada.`)) {
-      return;
-    }
+  const handleConfirmarResetSenha = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usuarioParaResetar) return;
+    setRedefinindoSenha(true);
     try {
-      const res = await apiFetch<{ senhaTemporaria: string }>(`/api/admin/usuarios/${user.id}/resetar-senha`, {
-        method: 'POST'
+      const res = await apiFetch<{ senhaTemporaria: string }>(`/api/admin/usuarios/${usuarioParaResetar.id}/resetar-senha`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ novaSenha: novaSenhaManual.trim() || undefined })
       });
       setSenhaGeradaModal({
-        email: user.email,
+        email: usuarioParaResetar.email,
         senha: res.senhaTemporaria
       });
+      setUsuarioParaResetar(null);
+      setNovaSenhaManual('senha123');
+      setMensagem({ tipo: 'sucesso', texto: `Senha do usuário ${usuarioParaResetar.nome} redefinida com sucesso!` });
       carregarUsuarios();
     } catch (e: any) {
-      setMensagem({ tipo: 'erro', texto: e.message || 'Erro ao resetar senha.' });
+      setMensagem({ tipo: 'erro', texto: e.message || 'Erro ao redefinir senha.' });
+    } finally {
+      setRedefinindoSenha(false);
+    }
+  };
+
+  const handleSalvarEdicaoUsuario = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usuarioParaEditar) return;
+    setSalvandoEdicao(true);
+    try {
+      await apiFetch(`/api/admin/usuarios/${usuarioParaEditar.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: editNome.trim(),
+          email: editEmail.trim().toLowerCase(),
+          uasgOrigemId: editUasgId ? Number(editUasgId) : undefined,
+          senha: editNovaSenha.trim() || undefined
+        })
+      });
+      setMensagem({ tipo: 'sucesso', texto: `Cadastro de ${editNome} atualizado com sucesso!` });
+      setUsuarioParaEditar(null);
+      carregarUsuarios();
+    } catch (e: any) {
+      setMensagem({ tipo: 'erro', texto: e.message || 'Erro ao atualizar dados do usuário.' });
+    } finally {
+      setSalvandoEdicao(false);
     }
   };
 
@@ -555,9 +601,26 @@ export const AdminTab: React.FC = () => {
                       <td className="py-4 px-5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => handleResetarSenha(u)}
-                            title="Gerar nova senha temporária de acesso"
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors inline-flex items-center gap-1.5 border border-slate-200 cursor-pointer"
+                            onClick={() => {
+                              setUsuarioParaEditar(u);
+                              setEditNome(u.nome);
+                              setEditEmail(u.email);
+                              setEditUasgId(String(u.uasg_origem_id || ''));
+                              setEditNovaSenha('');
+                            }}
+                            title="Editar dados cadastrais e e-mail"
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 transition-colors inline-flex items-center gap-1.5 border border-slate-200 cursor-pointer shadow-2xs"
+                          >
+                            <PencilIcon className="size-3.5 text-slate-500" />
+                            <span>Editar</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setUsuarioParaResetar(u);
+                              setNovaSenhaManual('senha123');
+                            }}
+                            title="Definir nova senha de acesso"
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors inline-flex items-center gap-1.5 border border-slate-200 cursor-pointer shadow-2xs"
                           >
                             <KeyIcon className="size-3.5 text-slate-500" />
                             <span>Redefinir Senha</span>
@@ -565,7 +628,7 @@ export const AdminTab: React.FC = () => {
                           {u.email !== 'ulisses.goularte@ebserh.gov.br' && u.id !== usuarioLogado?.id && (
                             <button
                               onClick={() => handleToggleAtivo(u)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border cursor-pointer ${
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border cursor-pointer shadow-2xs ${
                                 u.ativo
                                   ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
                                   : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
@@ -1009,6 +1072,211 @@ export const AdminTab: React.FC = () => {
         </div>
       )}
 
+      {/* ===================== MODAL REDEFINIR SENHA ===================== */}
+      {usuarioParaResetar && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
+                  <KeyIcon className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Redefinir Senha</h3>
+                  <p className="text-xs text-slate-400">{usuarioParaResetar.nome}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setUsuarioParaResetar(null)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <XIcon className="size-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmarResetSenha} className="space-y-4">
+              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300">
+                <p>Conta: <strong className="text-white font-mono">{usuarioParaResetar.email}</strong></p>
+                <p className="mt-1 text-slate-400">Ao redefinir, a conta é imediatamente desbloqueada caso estivesse suspensa por tentativas.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    Nova Senha de Acesso
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+                      let pass = '';
+                      for (let i = 0; i < 10; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length));
+                      setNovaSenhaManual(pass);
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                  >
+                    <SparklesIcon className="size-3.5" />
+                    Gerar aleatória
+                  </button>
+                </div>
+                <div className="relative">
+                  <Input
+                    type="text"
+                    value={novaSenhaManual}
+                    onChange={(e) => setNovaSenhaManual(e.target.value)}
+                    placeholder="Ex: senha123"
+                    className="pl-12 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white font-mono text-sm focus-visible:ring-blue-500"
+                    style={{ paddingLeft: '44px' }}
+                    required
+                  />
+                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
+                    <LockIcon className="size-4" aria-hidden="true" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setUsuarioParaResetar(null)}
+                  className="px-4 h-10 rounded-xl border-slate-700 text-slate-300 hover:bg-slate-800"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={redefinindoSenha}
+                  className="px-5 h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium"
+                >
+                  {redefinindoSenha ? 'Salvando...' : 'Salvar Nova Senha'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL EDITAR USUÁRIO ===================== */}
+      {usuarioParaEditar && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
+                  <PencilIcon className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Editar Usuário</h3>
+                  <p className="text-xs text-slate-400">Atualizar dados cadastrais, e-mail institucional ou UASG</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setUsuarioParaEditar(null)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <XIcon className="size-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarEdicaoUsuario} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  Nome Completo
+                </label>
+                <div className="relative">
+                  <Input
+                    value={editNome}
+                    onChange={(e) => setEditNome(e.target.value)}
+                    className="pl-12 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white text-sm focus-visible:ring-blue-500"
+                    style={{ paddingLeft: '44px' }}
+                    required
+                  />
+                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
+                    <UserIcon className="size-4" aria-hidden="true" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  E-mail Institucional
+                </label>
+                <div className="relative">
+                  <Input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="pl-12 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white text-sm focus-visible:ring-blue-500"
+                    style={{ paddingLeft: '44px' }}
+                    required
+                  />
+                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
+                    <MailIcon className="size-4" aria-hidden="true" />
+                  </div>
+                </div>
+              </div>
+
+              {usuarioParaEditar.role !== 'superadmin' && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    UASG de Origem
+                  </label>
+                  <select
+                    value={editUasgId}
+                    onChange={(e) => setEditUasgId(e.target.value)}
+                    className="w-full h-11 px-3.5 rounded-xl border border-slate-700 bg-slate-800/90 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {uasgs.map((u) => (
+                      <option key={u.id} value={u.id} className="bg-slate-900 text-white">
+                        {u.sigla ? `${u.sigla} (UASG ${u.uasg})` : `UASG ${u.uasg}`} — {u.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  Definir Nova Senha (Opcional)
+                </label>
+                <div className="relative">
+                  <Input
+                    type="text"
+                    value={editNovaSenha}
+                    onChange={(e) => setEditNovaSenha(e.target.value)}
+                    placeholder="Deixe em branco para manter a senha atual"
+                    className="pl-12 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white font-mono text-sm focus-visible:ring-blue-500"
+                    style={{ paddingLeft: '44px' }}
+                  />
+                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
+                    <LockIcon className="size-4" aria-hidden="true" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setUsuarioParaEditar(null)}
+                  className="px-4 h-10 rounded-xl border-slate-700 text-slate-300 hover:bg-slate-800"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={salvandoEdicao}
+                  className="px-5 h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium"
+                >
+                  {salvandoEdicao ? 'Salvando...' : 'Salvar Alterações'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ===================== MODAL SENHA GERADA (FEEDBACK) ===================== */}
       {senhaGeradaModal && (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
@@ -1018,7 +1286,7 @@ export const AdminTab: React.FC = () => {
                 <KeyIcon className="size-6" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Senha de Acesso Gerada</h3>
+                <h3 className="text-lg font-bold text-white">Senha de Acesso Atualizada</h3>
                 <p className="text-xs text-slate-400">{senhaGeradaModal.email}</p>
               </div>
             </div>
@@ -1038,15 +1306,15 @@ export const AdminTab: React.FC = () => {
               </Button>
             </div>
 
-            <p className="text-xs text-amber-300 bg-amber-950/40 p-3 rounded-lg border border-amber-500/30">
-              ⚠️ <strong>Importante:</strong> Esta senha só é exibida neste momento. Copie e repasse ao usuário. Ele será orientado a alterá-la no primeiro acesso.
+            <p className="text-xs text-slate-300 bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+              Esta é a nova credencial de acesso. O usuário poderá utilizá-la imediatamente para entrar na plataforma.
             </p>
 
             <Button
               className="w-full bg-blue-600 hover:bg-blue-500 text-white"
               onClick={() => setSenhaGeradaModal(null)}
             >
-              Compreendi e Copiei a Senha
+              Concluir
             </Button>
           </div>
         </div>
