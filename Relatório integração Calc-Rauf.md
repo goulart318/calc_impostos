@@ -253,3 +253,16 @@ Em atendimento aos requisitos de governança, conformidade e compatibilidade com
    - Gestão de Usuários (criação, edição, desativação, reset com senha segura gerada automaticamente).
    - Gestão de UASGs (cadastro manual para modo isolado e sincronização/importação direta a partir das instituições cadastradas no Rauf).
 
+### 10.3. Blindagem de Isolamento, Auditoria e Segurança de Sessão
+1. **Segregação Física do Cache em Memória (`HistoryService`):**
+   - Substituição do mapa plano global por mapa particionado por UASG (`Map<UASG, Map<Chave, Registro>>`), impedindo colisão ou leitura de análises de outro órgão no fallback em memória.
+   - Amarração estrita de concorrência nos comandos de persistência: tanto o `INSERT` quanto o `UPDATE` filtram por `WHERE id = $X AND uasg = $Y`.
+2. **Auditoria de Ações e Análises:**
+   - **Notas Analisadas:** Adição das colunas `usuario_id` e `usuario_email` na tabela `notas_analisadas`, gravando quem efetuou ou atualizou a análise da nota fiscal.
+   - **Credenciais do Rauf:** Adição de `cadastrado_por_id` e `cadastrado_por_email` em `rauf_credenciais`.
+   - **Tabela `auditoria_chaves_rauf`:** Histórico de auditoria registrando `data_hora`, `uasg`, `nome_orgao`, `acao` (`CADASTRO` ou `REMOCAO`), `usuario_id`, `usuario_email` e `ip_origem`.
+3. **Segurança de Sessão e CORS:**
+   - **CORS Restrito:** Liberação exclusiva para os front-ends homologados (`localhost:5173`, `localhost:5174`, `localhost:3000` e variável `FRONTEND_URL`), com bloqueio de origens externas não autorizadas.
+   - **Logout Automático por Inatividade:** Implementado listener de atividade do usuário com encerramento automático da sessão e descarte de tokens após **2 horas sem interação** no front-end.
+
+

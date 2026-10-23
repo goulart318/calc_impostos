@@ -112,7 +112,7 @@ export function AuthPage() {
           </div>
           <blockquote className="space-y-2">
             <p className="text-xl text-slate-200 font-light leading-relaxed">
-              &ldquo;Instrução e auditoria automatizada de retenções federais (IR, CSLL, PIS, COFINS, INSS e ISS) para notas fiscais de bens e serviços com integração ao SIAFI e Rauf SaaS.&rdquo;
+              &ldquo;Instrução e auditoria automatizada de retenções federais (IR, CSLL, PIS, COFINS, INSS e ISS) para notas fiscais de bens e serviços com integração ao SIAFI.&rdquo;
             </p>
             <footer className="font-mono text-xs text-slate-400">
               Hospital Universitário Cassiano Antônio Moraes — HUCAM/EBSERH

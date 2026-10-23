@@ -24,7 +24,31 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  'http://127.0.0.1:3000'
+];
+
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL.replace(/\/$/, ''));
+}
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    return callback(new Error('Acesso bloqueado por política de CORS: ' + origin));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Admin-Token']
+}));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
@@ -846,7 +870,12 @@ app.post('/api/integracao/rauf/credenciais', async (req: Request, res: Response)
     if (!ident?.uasg) {
       return res.status(409).json({ error: 'O órgão desta chave não possui UASG cadastrada no Rauf.' });
     }
-    await RaufCredenciaisService.salvar(ident.uasg.padStart(6, '0'), ident.nome || '', chave);
+    const ctx = contextoAtual();
+    const usuarioId = ctx?.usuario?.id || null;
+    const usuarioEmail = ctx?.usuario?.email || null;
+    const ipOrigem = req.ip || req.socket.remoteAddress || null;
+
+    await RaufCredenciaisService.salvar(ident.uasg.padStart(6, '0'), ident.nome || '', chave, usuarioId, usuarioEmail, ipOrigem);
     RaufIntegrationService.invalidarChaves();
     res.json({ sucesso: true, orgao: { nome: ident.nome, uasg: ident.uasg, sigla: ident.sigla, cnpj: ident.cnpj } });
   } catch (err: any) {
@@ -860,11 +889,27 @@ app.post('/api/integracao/rauf/credenciais', async (req: Request, res: Response)
 app.delete('/api/integracao/rauf/credenciais/:uasg', async (req: Request, res: Response) => {
   if (!exigirAdminServidor(req, res)) return;
   try {
-    const ok = await RaufCredenciaisService.remover(String(req.params.uasg).replace(/\D/g, '').padStart(6, '0'));
+    const ctx = contextoAtual();
+    const usuarioId = ctx?.usuario?.id || null;
+    const usuarioEmail = ctx?.usuario?.email || null;
+    const ipOrigem = req.ip || req.socket.remoteAddress || null;
+
+    const ok = await RaufCredenciaisService.remover(String(req.params.uasg).replace(/\D/g, '').padStart(6, '0'), usuarioId, usuarioEmail, ipOrigem);
     RaufIntegrationService.invalidarChaves();
     res.json({ sucesso: ok });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Erro ao remover credencial.' });
+  }
+});
+
+// Histórico de auditoria de operações sobre chaves de integração do Rauf
+app.get('/api/integracao/rauf/credenciais/auditoria', exigirSuperadmin, async (req: Request, res: Response) => {
+  try {
+    const uasg = req.query.uasg ? String(req.query.uasg) : undefined;
+    const logs = await RaufCredenciaisService.listarAuditoria(uasg);
+    res.json(logs);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao listar auditoria de credenciais.' });
   }
 });
 

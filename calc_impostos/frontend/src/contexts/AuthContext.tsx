@@ -106,6 +106,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUasg(null);
   };
 
+  // Logout automático após 2 horas de inatividade do usuário
+  useEffect(() => {
+    if (!usuario) return;
+
+    const TEMPO_INATIVIDADE_MS = 2 * 60 * 60 * 1000; // 2 horas
+    let ultimoAcesso = Date.now();
+
+    const registrarAtividade = () => {
+      ultimoAcesso = Date.now();
+    };
+
+    const eventos = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    eventos.forEach(evt => window.addEventListener(evt, registrarAtividade, { passive: true }));
+
+    const checadorInatividade = setInterval(() => {
+      if (Date.now() - ultimoAcesso >= TEMPO_INATIVIDADE_MS) {
+        console.warn('Sessão encerrada automaticamente por inatividade (2 horas sem interação).');
+        logout();
+        alert('Sua sessão expirou por inatividade após 2 horas. Por favor, faça login novamente para continuar.');
+      }
+    }, 30000); // Checa a cada 30 segundos
+
+    return () => {
+      eventos.forEach(evt => window.removeEventListener(evt, registrarAtividade));
+      clearInterval(checadorInatividade);
+    };
+  }, [usuario]);
+
   const trocarUasg = async (novaUasgId: number) => {
     const resp = await apiFetch<{ token: string; uasg: UasgSessao }>('/api/auth/trocar-uasg', {
       method: 'POST',

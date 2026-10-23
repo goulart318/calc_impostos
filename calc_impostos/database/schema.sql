@@ -102,6 +102,11 @@ ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS uasg VARCHAR(6);
 UPDATE notas_analisadas SET uasg = '155012' WHERE uasg IS NULL;
 CREATE INDEX IF NOT EXISTS idx_notas_uasg ON notas_analisadas(uasg);
 
+-- Auditoria da análise: registra qual usuário logado realizou a análise da nota
+ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS usuario_id INTEGER;
+ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS usuario_email VARCHAR(100);
+CREATE INDEX IF NOT EXISTS idx_notas_usuario_email ON notas_analisadas(usuario_email);
+
 -- Índices para busca ultrarrápida por CNPJ, Chave de Acesso, Número da Nota, Processo, Empenho e Documento Hábil
 CREATE INDEX IF NOT EXISTS idx_notas_fornecedor_cnpj ON notas_analisadas(fornecedor_cnpj);
 CREATE INDEX IF NOT EXISTS idx_notas_chave_acesso ON notas_analisadas(chave_acesso);
@@ -158,8 +163,28 @@ CREATE TABLE IF NOT EXISTS rauf_credenciais (
   prefixo VARCHAR(12) NOT NULL,
   chave_cifrada TEXT NOT NULL,
   validada_em TIMESTAMP,
+  cadastrado_por_id INTEGER,
+  cadastrado_por_email VARCHAR(100),
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE rauf_credenciais ADD COLUMN IF NOT EXISTS cadastrado_por_id INTEGER;
+ALTER TABLE rauf_credenciais ADD COLUMN IF NOT EXISTS cadastrado_por_email VARCHAR(100);
+
+-- Tabela de Auditoria de Operações de Chaves de Integração Rauf
+CREATE TABLE IF NOT EXISTS auditoria_chaves_rauf (
+  id SERIAL PRIMARY KEY,
+  uasg VARCHAR(6) NOT NULL,
+  nome_orgao VARCHAR(255),
+  acao VARCHAR(20) NOT NULL, -- 'CADASTRO' | 'REMOCAO'
+  usuario_id INTEGER,
+  usuario_email VARCHAR(100),
+  ip_origem VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_rauf_uasg ON auditoria_chaves_rauf(uasg);
+CREATE INDEX IF NOT EXISTS idx_audit_rauf_usuario ON auditoria_chaves_rauf(usuario_email);
 
 -- Fila de sincronizações com o Rauf que falharam por indisponibilidade (reenviadas automaticamente)
 CREATE TABLE IF NOT EXISTS rauf_sync_pendentes (

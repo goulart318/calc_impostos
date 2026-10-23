@@ -1,7 +1,7 @@
 import { pool } from '../config/db';
 import { ResultadoConsolidado } from './taxEngine';
 import { RaufIntegrationService } from './raufIntegrationService';
-import { uasgDaSessao } from './requestContext';
+import { uasgDaSessao, contextoAtual } from './requestContext';
 
 export interface NotaHistoricoRegistro {
   id: number;
@@ -19,14 +19,20 @@ export interface NotaHistoricoRegistro {
   numeroProcesso?: string;
   numeroEmpenho?: string;
   documentoHabil?: string;
+  uasg?: string;
+  usuarioId?: number;
+  usuarioEmail?: string;
   dadosJson?: any;
   createdAt: Date | string;
   updatedAt?: Date | string;
 }
 
 export class HistoryService {
-  // Cache em memória resiliente para garantir cruzamento imediato mesmo se o PostgreSQL estiver offline em dev
-  private static cacheMemoria: Map<string, NotaHistoricoRegistro> = new Map();
+  /**
+   * Cache em memória estritamente segregado por UASG (Map<UASG, Map<Chave, Registro>>)
+   * Garante isolamento total entre órgãos mesmo se o banco estiver indisponível.
+   */
+  private static cacheMemoriaPorUasg: Map<string, Map<string, NotaHistoricoRegistro>> = new Map();
   private static proximoIdMemoria = 1;
 
   public static normalizarCnpj(cnpj?: string): string {
@@ -39,23 +45,31 @@ export class HistoryService {
     return limpo.replace(/^0+/, '') || limpo || num.trim();
   }
 
+  private static obterMapaUasg(uasgInformada?: string): Map<string, NotaHistoricoRegistro> {
+    const uasg = (uasgInformada || uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
+    let mapa = this.cacheMemoriaPorUasg.get(uasg);
+    if (!mapa) {
+      mapa = new Map<string, NotaHistoricoRegistro>();
+      this.cacheMemoriaPorUasg.set(uasg, mapa);
+    }
+    return mapa;
+  }
+
   private static gerarChavesCache(n: {
     chaveAcesso?: string;
     fornecedorCnpj?: string;
     numeroNota?: string;
     tipoDocumento?: string;
-    uasg?: string;
   }): string[] {
     const chaves: string[] = [];
-    const uasg = (n.uasg || uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
     if (n.chaveAcesso && n.chaveAcesso.length >= 44) {
-      chaves.push(`uasg:${uasg}:chave:${n.chaveAcesso.trim()}`);
+      chaves.push(`chave:${n.chaveAcesso.trim()}`);
     }
     const cnpj = this.normalizarCnpj(n.fornecedorCnpj);
     const nota = this.normalizarNumeroNota(n.numeroNota);
     const tipo = n.tipoDocumento || 'NFE';
     if (cnpj && nota) {
-      chaves.push(`uasg:${uasg}:cnpj_nota:${tipo}:${cnpj}:${nota}`);
+      chaves.push(`cnpj_nota:${tipo}:${cnpj}:${nota}`);
     }
     return chaves;
   }
@@ -125,11 +139,12 @@ export class HistoryService {
       console.warn('HistoryService: Consulta PostgreSQL indisponível, usando cache de memória:', err?.message || err);
     }
 
-    // 2. Fallback de cache em memória
+    // 2. Fallback de cache em memória estritamente segregado por UASG
+    const mapaUasg = this.obterMapaUasg(uasg);
     const chavesBusca = this.gerarChavesCache(filtro);
     for (const k of chavesBusca) {
-      if (this.cacheMemoria.has(k)) {
-        return this.cacheMemoria.get(k)!;
+      if (mapaUasg.has(k)) {
+        return mapaUasg.get(k)!;
       }
     }
 
@@ -139,6 +154,7 @@ export class HistoryService {
   /**
    * Salva ou atualiza a análise de uma nota fiscal evitando qualquer duplicidade.
    * Se a nota já existir, faz UPDATE preservando e mesclando o número do processo e nota de empenho.
+   * Registra auditoria do usuário que analisou a nota.
    */
   public static async salvarOuAtualizarNota(resultado: ResultadoConsolidado): Promise<{
     id: number;
@@ -164,13 +180,18 @@ export class HistoryService {
     if (empenhoFinal) resultado.numeroEmpenho = empenhoFinal;
     if (docHabilFinal) resultado.documentoHabil = docHabilFinal;
 
+    const ctx = contextoAtual();
+    const usuarioId = ctx?.usuario?.id || null;
+    const usuarioEmail = ctx?.usuario?.email || null;
+    const uasgEfetiva = ((resultado.uasg || '').replace(/\D/g, '') || uasgDaSessao() || RaufIntegrationService.uasgPadrao()).padStart(6, '0');
+
     const payloadJson = JSON.stringify(resultado);
     let idFinal = notaExistente ? notaExistente.id : this.proximoIdMemoria++;
     let acaoFinal: 'CRIADA' | 'ATUALIZADA' = notaExistente ? 'ATUALIZADA' : 'CRIADA';
 
     try {
       if (notaExistente) {
-        // UPDATE no PostgreSQL
+        // UPDATE no PostgreSQL com filtro estrito por ID e UASG
         await pool.query(
           `UPDATE notas_analisadas SET
             tipo_documento = $1,
@@ -188,8 +209,10 @@ export class HistoryService {
             numero_processo = COALESCE($13, numero_processo),
             numero_empenho = COALESCE($14, numero_empenho),
             documento_habil = COALESCE($15, documento_habil),
+            usuario_id = COALESCE($16, usuario_id),
+            usuario_email = COALESCE($17, usuario_email),
             updated_at = CURRENT_TIMESTAMP
-           WHERE id = $16;`,
+           WHERE id = $18 AND uasg = $19;`,
           [
             resultado.tipoDocumento,
             resultado.numeroNota || 'S/N',
@@ -206,20 +229,23 @@ export class HistoryService {
             processoFinal,
             empenhoFinal,
             docHabilFinal,
-            notaExistente.id
+            usuarioId,
+            usuarioEmail,
+            notaExistente.id,
+            uasgEfetiva
           ]
         );
         idFinal = notaExistente.id;
         acaoFinal = 'ATUALIZADA';
       } else {
-        // INSERT no PostgreSQL
+        // INSERT no PostgreSQL com auditoria de usuário e UASG
         const insertRes = await pool.query(
           `INSERT INTO notas_analisadas (
             tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
             destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto,
             valor_liquido, total_retido, dados_json, numero_processo, numero_empenho, documento_habil, uasg,
-            created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            usuario_id, usuario_email, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           RETURNING id;`,
           [
             resultado.tipoDocumento,
@@ -237,7 +263,9 @@ export class HistoryService {
             processoFinal,
             empenhoFinal,
             docHabilFinal,
-            ((resultado.uasg || '').replace(/\D/g, '') || RaufIntegrationService.uasgPadrao()).padStart(6, '0')
+            uasgEfetiva,
+            usuarioId,
+            usuarioEmail
           ]
         );
         idFinal = insertRes.rows[0].id;
@@ -247,7 +275,7 @@ export class HistoryService {
       console.warn('HistoryService: Persistência PostgreSQL em fallback:', err?.message || err);
     }
 
-    // Registra e sincroniza no cache de memória
+    // Registra e sincroniza no cache de memória exclusivo da UASG
     const regMemoria: NotaHistoricoRegistro = {
       id: idFinal,
       tipoDocumento: resultado.tipoDocumento,
@@ -264,14 +292,18 @@ export class HistoryService {
       numeroProcesso: processoFinal || undefined,
       numeroEmpenho: empenhoFinal || undefined,
       documentoHabil: docHabilFinal || undefined,
+      uasg: uasgEfetiva,
+      usuarioId: usuarioId || undefined,
+      usuarioEmail: usuarioEmail || undefined,
       dadosJson: resultado,
       createdAt: notaExistente?.createdAt || new Date(),
       updatedAt: new Date()
     };
 
+    const mapaUasg = this.obterMapaUasg(uasgEfetiva);
     const chaves = this.gerarChavesCache(resultado);
     for (const k of chaves) {
-      this.cacheMemoria.set(k, regMemoria);
+      mapaUasg.set(k, regMemoria);
     }
 
     // Integração automática direta com a tabela retencoes_calc_impostos do Rauf_App
@@ -313,6 +345,9 @@ export class HistoryService {
       numeroProcesso: r.numero_processo || undefined,
       numeroEmpenho: r.numero_empenho || undefined,
       documentoHabil: r.documento_habil || undefined,
+      uasg: r.uasg || undefined,
+      usuarioId: r.usuario_id || undefined,
+      usuarioEmail: r.usuario_email || undefined,
       dadosJson: r.dados_json,
       createdAt: r.created_at,
       updatedAt: r.updated_at

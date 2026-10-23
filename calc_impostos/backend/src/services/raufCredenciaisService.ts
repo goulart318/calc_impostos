@@ -14,6 +14,18 @@ export interface CredencialRauf {
   nomeOrgao: string;
   prefixo: string;
   validadaEm: string | null;
+  cadastradoPorEmail?: string | null;
+}
+
+export interface AuditoriaChaveRauf {
+  id: number;
+  uasg: string;
+  nomeOrgao?: string;
+  acao: 'CADASTRO' | 'REMOCAO';
+  usuarioId?: number | null;
+  usuarioEmail?: string | null;
+  ipOrigem?: string | null;
+  createdAt: string;
 }
 
 function segredo(): Buffer | null {
@@ -60,29 +72,104 @@ export function tokenAdminValido(informado?: string): boolean {
 export class RaufCredenciaisService {
   static async listar(): Promise<CredencialRauf[]> {
     const r = await pool.query(
-      'SELECT uasg, nome_orgao, prefixo, validada_em FROM rauf_credenciais ORDER BY uasg'
+      'SELECT uasg, nome_orgao, prefixo, validada_em, cadastrado_por_email FROM rauf_credenciais ORDER BY uasg'
     );
     return r.rows.map(x => ({
       uasg: x.uasg,
       nomeOrgao: x.nome_orgao,
       prefixo: x.prefixo,
-      validadaEm: x.validada_em ? new Date(x.validada_em).toISOString() : null
+      validadaEm: x.validada_em ? new Date(x.validada_em).toISOString() : null,
+      cadastradoPorEmail: x.cadastrado_por_email || null
     }));
   }
 
-  static async salvar(uasg: string, nomeOrgao: string, chave: string): Promise<void> {
+  static async salvar(
+    uasg: string,
+    nomeOrgao: string,
+    chave: string,
+    usuarioId?: number | null,
+    usuarioEmail?: string | null,
+    ipOrigem?: string | null
+  ): Promise<void> {
     await pool.query(
-      `INSERT INTO rauf_credenciais (uasg, nome_orgao, prefixo, chave_cifrada, validada_em, updated_at)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `INSERT INTO rauf_credenciais (uasg, nome_orgao, prefixo, chave_cifrada, validada_em, cadastrado_por_id, cadastrado_por_email, updated_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, CURRENT_TIMESTAMP)
        ON CONFLICT (uasg) DO UPDATE SET nome_orgao = EXCLUDED.nome_orgao, prefixo = EXCLUDED.prefixo,
-         chave_cifrada = EXCLUDED.chave_cifrada, validada_em = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP`,
-      [uasg, nomeOrgao, chave.slice(0, 10), cifrar(chave)]
+         chave_cifrada = EXCLUDED.chave_cifrada, validada_em = CURRENT_TIMESTAMP,
+         cadastrado_por_id = EXCLUDED.cadastrado_por_id, cadastrado_por_email = EXCLUDED.cadastrado_por_email,
+         updated_at = CURRENT_TIMESTAMP`,
+      [uasg, nomeOrgao, chave.slice(0, 10), cifrar(chave), usuarioId || null, usuarioEmail || null]
     );
+
+    // Grava histórico de auditoria
+    try {
+      await pool.query(
+        `INSERT INTO auditoria_chaves_rauf (uasg, nome_orgao, acao, usuario_id, usuario_email, ip_origem, created_at)
+         VALUES ($1, $2, 'CADASTRO', $3, $4, $5, CURRENT_TIMESTAMP);`,
+        [uasg, nomeOrgao, usuarioId || null, usuarioEmail || null, ipOrigem || null]
+      );
+    } catch (err: any) {
+      console.warn('Aviso ao registrar auditoria de cadastro de chave Rauf:', err?.message || err);
+    }
   }
 
-  static async remover(uasg: string): Promise<boolean> {
+  static async remover(
+    uasg: string,
+    usuarioId?: number | null,
+    usuarioEmail?: string | null,
+    ipOrigem?: string | null
+  ): Promise<boolean> {
+    let nomeOrgao = '';
+    try {
+      const info = await pool.query('SELECT nome_orgao FROM rauf_credenciais WHERE uasg = $1;', [uasg]);
+      if (info.rows.length > 0) {
+        nomeOrgao = info.rows[0].nome_orgao;
+      }
+    } catch {
+      /* ignora erro de leitura prévia */
+    }
+
     const r = await pool.query('DELETE FROM rauf_credenciais WHERE uasg = $1', [uasg]);
-    return (r.rowCount || 0) > 0;
+    const removido = (r.rowCount || 0) > 0;
+
+    if (removido) {
+      try {
+        await pool.query(
+          `INSERT INTO auditoria_chaves_rauf (uasg, nome_orgao, acao, usuario_id, usuario_email, ip_origem, created_at)
+           VALUES ($1, $2, 'REMOCAO', $3, $4, $5, CURRENT_TIMESTAMP);`,
+          [uasg, nomeOrgao || null, usuarioId || null, usuarioEmail || null, ipOrigem || null]
+        );
+      } catch (err: any) {
+        console.warn('Aviso ao registrar auditoria de remoção de chave Rauf:', err?.message || err);
+      }
+    }
+
+    return removido;
+  }
+
+  static async listarAuditoria(uasg?: string): Promise<AuditoriaChaveRauf[]> {
+    try {
+      let query = 'SELECT id, uasg, nome_orgao, acao, usuario_id, usuario_email, ip_origem, created_at FROM auditoria_chaves_rauf';
+      const params: any[] = [];
+      if (uasg) {
+        query += ' WHERE uasg = $1';
+        params.push(uasg.replace(/\D/g, '').padStart(6, '0'));
+      }
+      query += ' ORDER BY created_at DESC LIMIT 100;';
+      const r = await pool.query(query, params);
+      return r.rows.map(x => ({
+        id: x.id,
+        uasg: x.uasg,
+        nomeOrgao: x.nome_orgao,
+        acao: x.acao,
+        usuarioId: x.usuario_id,
+        usuarioEmail: x.usuario_email,
+        ipOrigem: x.ip_origem,
+        createdAt: x.created_at ? new Date(x.created_at).toISOString() : new Date().toISOString()
+      }));
+    } catch {
+      return [];
+    }
   }
 
   /** Mapa UASG -> chave em texto puro (uso interno do servidor). */
