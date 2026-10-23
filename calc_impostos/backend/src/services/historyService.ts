@@ -1,5 +1,6 @@
 import { pool } from '../config/db';
 import { ResultadoConsolidado } from './taxEngine';
+import { RaufIntegrationService } from './raufIntegrationService';
 
 export interface NotaHistoricoRegistro {
   id: number;
@@ -265,6 +266,19 @@ export class HistoryService {
     const chaves = this.gerarChavesCache(resultado);
     for (const k of chaves) {
       this.cacheMemoria.set(k, regMemoria);
+    }
+
+    // Integração automática direta com a tabela retencoes_calc_impostos do Rauf_App
+    try {
+      const resultadoComChaves: ResultadoConsolidado = {
+        ...resultado,
+        numeroProcesso: processoFinal || resultado.numeroProcesso,
+        documentoHabil: docHabilFinal || resultado.documentoHabil,
+        numeroEmpenho: empenhoFinal || resultado.numeroEmpenho
+      };
+      await RaufIntegrationService.inserirOuAtualizarRetencao(resultadoComChaves);
+    } catch (eRauf: any) {
+      console.warn('Aviso na sincronização de retenções com Rauf_App:', eRauf?.message || eRauf);
     }
 
     return {

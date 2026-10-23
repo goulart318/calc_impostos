@@ -12,6 +12,7 @@ import { PdfReportGenerator } from './services/pdfReportGenerator';
 import { HistoryService } from './services/historyService';
 import { SupplierMemoryService } from './services/supplierMemoryService';
 import { SicafService, DadosSicafConsulta } from './services/sicafService';
+import { RaufIntegrationService } from './services/raufIntegrationService';
 
 dotenv.config();
 
@@ -746,6 +747,36 @@ app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Erro ao pesquisar notas:', error);
     res.status(500).json({ error: 'Erro ao buscar registros no banco de dados.' });
+  }
+});
+
+// =========================================================================
+// ROTAS DE INTEGRAÇÃO COM RAUF_APP (LIQUIDAÇÃO E RETENÇÃO)
+// =========================================================================
+
+// Sincronizar manualmente uma nota para a tabela retencoes_calc_impostos
+app.post('/api/integracao/rauf/sincronizar', async (req: Request, res: Response) => {
+  try {
+    const nota: ResultadoConsolidado = req.body;
+    const resultado = await RaufIntegrationService.inserirOuAtualizarRetencao(nota);
+    res.json(resultado);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao sincronizar com Rauf_App' });
+  }
+});
+
+// Consultar retenções integradas por Processo e Documento Hábil
+app.get('/api/integracao/rauf/consultar', async (req: Request, res: Response) => {
+  try {
+    const processo = String(req.query.processo || '');
+    const docHabil = String(req.query.documentoHabil || '');
+    if (!processo || !docHabil) {
+      return res.status(400).json({ error: 'Parâmetros processo e documentoHabil são obrigatórios.' });
+    }
+    const registros = await RaufIntegrationService.consultarRetencaoPorChave(processo, docHabil);
+    res.json(registros);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao consultar retenções do Rauf_App' });
   }
 });
 

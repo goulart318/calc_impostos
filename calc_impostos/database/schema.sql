@@ -66,6 +66,40 @@ CREATE INDEX IF NOT EXISTS idx_notas_numero_processo ON notas_analisadas(numero_
 CREATE INDEX IF NOT EXISTS idx_notas_numero_empenho ON notas_analisadas(numero_empenho);
 CREATE INDEX IF NOT EXISTS idx_notas_documento_habil ON notas_analisadas(documento_habil);
 
+-- =========================================================================
+-- TABELA DE INTEGRAÇÃO COM RAUF_APP (ANÁLISE DOCUMENTAL E CONCILIAÇÃO DE LIQUIDAÇÕES)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS retencoes_calc_impostos (
+  id SERIAL PRIMARY KEY,
+  numero_processo VARCHAR(60) NOT NULL,
+  documento_habil VARCHAR(60) NOT NULL,
+  numero_empenho VARCHAR(60),
+  numero_nota VARCHAR(60) NOT NULL,
+  chave_acesso VARCHAR(60),
+  fornecedor_cnpj VARCHAR(20) NOT NULL,
+  fornecedor_nome VARCHAR(255) NOT NULL,
+  valor_bruto NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  total_retido NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  valor_liquido NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  valor_ir NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  valor_csll NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  valor_cofins NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  valor_pis NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  valor_inss NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  valor_iss NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  detalhamento_json JSONB,
+  status_conciliacao VARCHAR(30) NOT NULL DEFAULT 'PENDENTE',
+  origem_sistema VARCHAR(50) NOT NULL DEFAULT 'calc_impostos',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_retencoes_proc_dh_nota UNIQUE (numero_processo, documento_habil, numero_nota)
+);
+
+CREATE INDEX IF NOT EXISTS idx_retencoes_proc_dh ON retencoes_calc_impostos(numero_processo, documento_habil);
+CREATE INDEX IF NOT EXISTS idx_retencoes_cnpj ON retencoes_calc_impostos(fornecedor_cnpj);
+CREATE INDEX IF NOT EXISTS idx_retencoes_dh ON retencoes_calc_impostos(documento_habil);
+CREATE INDEX IF NOT EXISTS idx_retencoes_status ON retencoes_calc_impostos(status_conciliacao);
+
 -- Tabela de Memória Tributária de Fornecedores (Aprendizado Ativo de Regras por CNPJ e NCM/Serviço)
 CREATE TABLE IF NOT EXISTS memoria_tributaria_fornecedores (
   id SERIAL PRIMARY KEY,
