@@ -241,17 +241,27 @@ export class RaufIntegrationService {
     }
   }
 
-  /** Reenvia a fila local. Chamado periodicamente pelo servidor. */
-  public static async reenviarPendentes(limite = 50): Promise<{ enviados: number; restantes: number }> {
+  /** Reenvia a fila local. Chamado periodicamente pelo servidor ou sob demanda pelo usuário. */
+  public static async reenviarPendentes(limite = 50, uasgFiltro?: string): Promise<{ enviados: number; restantes: number }> {
     let enviados = 0;
     let linhas: any[] = [];
+    const uasgNormalizada = uasgFiltro ? uasgFiltro.replace(/\D/g, '').padStart(6, '0') : undefined;
+
     try {
-      linhas = (await pool.query(
-        'SELECT id, uasg, chave, payload FROM rauf_sync_pendentes ORDER BY id ASC LIMIT $1', [limite]
-      )).rows;
+      if (uasgNormalizada) {
+        linhas = (await pool.query(
+          'SELECT id, uasg, chave, payload FROM rauf_sync_pendentes WHERE uasg = $2 ORDER BY id ASC LIMIT $1',
+          [limite, uasgNormalizada]
+        )).rows;
+      } else {
+        linhas = (await pool.query(
+          'SELECT id, uasg, chave, payload FROM rauf_sync_pendentes ORDER BY id ASC LIMIT $1', [limite]
+        )).rows;
+      }
     } catch {
       return { enviados: 0, restantes: 0 };
     }
+
     const chaves = await this.carregarChaves();
     for (const l of linhas) {
       const apiKey = chaves.get(l.uasg);
@@ -269,7 +279,12 @@ export class RaufIntegrationService {
         if (definitivo) console.warn(`⚠️ [Rauf] Pendência ${l.chave} recusada definitivamente: ${e?.message}`);
       }
     }
-    const restantes = Number((await pool.query('SELECT count(*) FROM rauf_sync_pendentes').catch(() => ({ rows: [{ count: 0 }] }))).rows[0].count);
+
+    const countSql = uasgNormalizada
+      ? 'SELECT count(*) FROM rauf_sync_pendentes WHERE uasg = $1'
+      : 'SELECT count(*) FROM rauf_sync_pendentes';
+    const countParams = uasgNormalizada ? [uasgNormalizada] : [];
+    const restantes = Number((await pool.query(countSql, countParams).catch(() => ({ rows: [{ count: 0 }] }))).rows[0].count);
     return { enviados, restantes };
   }
 

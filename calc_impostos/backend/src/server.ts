@@ -838,26 +838,31 @@ app.get('/api/integracao/rauf/consultar', async (req: Request, res: Response) =>
 });
 
 // Reenvia a fila local de sincronizações que falharam por indisponibilidade do Rauf
-app.post('/api/integracao/rauf/reenviar-pendentes', async (_req: Request, res: Response) => {
+app.post('/api/integracao/rauf/reenviar-pendentes', async (req: Request, res: Response) => {
   try {
-    res.json(await RaufIntegrationService.reenviarPendentes());
+    const ctx = contextoAtual();
+    const isSuper = ctx?.usuario?.role === 'superadmin';
+    // Usuário comum só pode disparar o reenvio das pendências da sua própria UASG
+    const uasgFiltro = isSuper ? (req.body?.uasg ? String(req.body.uasg) : undefined) : uasgDaSessao();
+    res.json(await RaufIntegrationService.reenviarPendentes(50, uasgFiltro));
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Erro ao reenviar pendências ao Rauf_App' });
   }
 });
+
 setInterval(() => {
   RaufIntegrationService.reenviarPendentes().catch(() => undefined);
 }, 5 * 60 * 1000).unref();
 
-// ── Cadastro das chaves do Rauf pela tela (protegido por token de administração do servidor) ──
-// Enquanto o login por usuário não existir, estas rotas exigem o header x-admin-token == CALC_ADMIN_TOKEN.
-function exigirAdminServidor(req: Request, res: Response): boolean {
-  if (!cadastroPelaTelaHabilitado()) {
-    res.status(503).json({ error: 'Cadastro pela tela desabilitado: defina CALC_ADMIN_TOKEN e CALC_SECRET_KEY (mín. 16 caracteres) no servidor.' });
+// ── Gestão de chaves de integração do Rauf: restrita a usuários superadmin autenticados ──
+function exigirPermissaoGestaoChaves(req: Request, res: Response): boolean {
+  const ctx = contextoAtual();
+  if (!ctx || !ctx.usuario) {
+    res.status(401).json({ error: 'Autenticação necessária para gerenciar credenciais.' });
     return false;
   }
-  if (!tokenAdminValido(String(req.headers['x-admin-token'] || ''))) {
-    res.status(403).json({ error: 'Token de administração inválido.' });
+  if (ctx.usuario.role !== 'superadmin') {
+    res.status(403).json({ error: 'Acesso negado: apenas administradores do sistema podem cadastrar ou remover chaves de integração.' });
     return false;
   }
   return true;
@@ -868,7 +873,7 @@ app.get('/api/integracao/rauf/credenciais/status', (_req: Request, res: Response
 });
 
 app.get('/api/integracao/rauf/credenciais', async (req: Request, res: Response) => {
-  if (!exigirAdminServidor(req, res)) return;
+  if (!exigirPermissaoGestaoChaves(req, res)) return;
   try {
     res.json(await RaufCredenciaisService.listar());
   } catch (err: any) {
@@ -877,7 +882,7 @@ app.get('/api/integracao/rauf/credenciais', async (req: Request, res: Response) 
 });
 
 app.post('/api/integracao/rauf/credenciais', async (req: Request, res: Response) => {
-  if (!exigirAdminServidor(req, res)) return;
+  if (!exigirPermissaoGestaoChaves(req, res)) return;
   const chave = String(req.body?.chave || '').trim();
   if (!/^rauf_[A-Za-z0-9_-]{20,}$/.test(chave)) {
     return res.status(400).json({ error: 'Chave em formato inválido (esperado: rauf_…).' });
@@ -904,7 +909,7 @@ app.post('/api/integracao/rauf/credenciais', async (req: Request, res: Response)
 });
 
 app.delete('/api/integracao/rauf/credenciais/:uasg', async (req: Request, res: Response) => {
-  if (!exigirAdminServidor(req, res)) return;
+  if (!exigirPermissaoGestaoChaves(req, res)) return;
   try {
     const ctx = contextoAtual();
     const usuarioId = ctx?.usuario?.id || null;

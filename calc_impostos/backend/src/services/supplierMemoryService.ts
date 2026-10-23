@@ -1,5 +1,5 @@
 import { pool } from '../config/db';
-import { uasgDaSessao } from './requestContext';
+import { exigirUasgDaSessao } from './requestContext';
 
 export interface MemoriaFornecedorInput {
   fornecedorCnpj: string;
@@ -58,7 +58,7 @@ export class SupplierMemoryService {
     if (!cnpj) return null;
 
     const ncm = this.normalizarNcm(ncmRaw);
-    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
+    const uasg = exigirUasgDaSessao();
 
     try {
       // 1) Busca regra exata com o NCM especificado
@@ -105,7 +105,7 @@ export class SupplierMemoryService {
   public static async salvarOuAtualizarMemoria(input: MemoriaFornecedorInput): Promise<MemoriaFornecedorRegistro> {
     const cnpj = this.normalizarCnpj(input.fornecedorCnpj);
     const ncm = this.normalizarNcm(input.ncmPadrao) || null;
-    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
+    const uasg = exigirUasgDaSessao();
 
     // Verifica se já existe registro equivalente para a mesma UASG
     const queryExistente = `
@@ -196,7 +196,7 @@ export class SupplierMemoryService {
   public static async listarPorCnpj(cnpjRaw: string): Promise<MemoriaFornecedorRegistro[]> {
     const cnpj = this.normalizarCnpj(cnpjRaw);
     if (!cnpj) return [];
-    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
+    const uasg = exigirUasgDaSessao();
     try {
       const q = `
         SELECT * FROM memoria_tributaria_fornecedores
@@ -216,7 +216,7 @@ export class SupplierMemoryService {
    * Lista todas as memórias salvas no sistema
    */
   public static async listarTodas(): Promise<MemoriaFornecedorRegistro[]> {
-    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
+    const uasg = exigirUasgDaSessao();
     try {
       const q = `
         SELECT * FROM memoria_tributaria_fornecedores
@@ -235,7 +235,7 @@ export class SupplierMemoryService {
    * Remove uma regra memorizada por ID
    */
   public static async excluir(id: number): Promise<boolean> {
-    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
+    const uasg = exigirUasgDaSessao();
     try {
       const q = `DELETE FROM memoria_tributaria_fornecedores WHERE id = $1 AND uasg = $2;`;
       const res = await pool.query(q, [id, uasg]);

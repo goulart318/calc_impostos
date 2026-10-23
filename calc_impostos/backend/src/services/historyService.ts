@@ -1,7 +1,7 @@
 import { pool } from '../config/db';
 import { ResultadoConsolidado } from './taxEngine';
 import { RaufIntegrationService } from './raufIntegrationService';
-import { uasgDaSessao, contextoAtual } from './requestContext';
+import { uasgDaSessao, exigirUasgDaSessao, contextoAtual } from './requestContext';
 
 export interface NotaHistoricoRegistro {
   id: number;
@@ -46,7 +46,7 @@ export class HistoryService {
   }
 
   private static obterMapaUasg(uasgInformada?: string): Map<string, NotaHistoricoRegistro> {
-    const uasg = (uasgInformada || uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
+    const uasg = uasgInformada ? uasgInformada.replace(/\D/g, '').padStart(6, '0') : exigirUasgDaSessao();
     let mapa = this.cacheMemoriaPorUasg.get(uasg);
     if (!mapa) {
       mapa = new Map<string, NotaHistoricoRegistro>();
@@ -89,7 +89,7 @@ export class HistoryService {
     const numNota = (filtro.numeroNota || '').trim();
     const numNotaLimpo = this.normalizarNumeroNota(numNota);
     const tipo = filtro.tipoDocumento || 'NFE';
-    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
+    const uasg = exigirUasgDaSessao();
 
     // 1. Tenta consulta no PostgreSQL
     try {
@@ -155,6 +155,7 @@ export class HistoryService {
    * Salva ou atualiza a análise de uma nota fiscal evitando qualquer duplicidade.
    * Se a nota já existir, faz UPDATE preservando e mesclando o número do processo e nota de empenho.
    * Registra auditoria do usuário que analisou a nota.
+   * Prioridade absoluta da UASG da sessão autenticada.
    */
   public static async salvarOuAtualizarNota(resultado: ResultadoConsolidado): Promise<{
     id: number;
@@ -163,6 +164,10 @@ export class HistoryService {
     numeroEmpenho?: string;
     documentoHabil?: string;
   }> {
+    // A UASG da sessão autenticada tem prioridade absoluta sobre qualquer campo vindo no JSON
+    const uasgEfetiva = exigirUasgDaSessao();
+    resultado.uasg = uasgEfetiva;
+
     const notaExistente = await this.buscarNotaHistorico({
       chaveAcesso: resultado.chaveAcesso,
       numeroNota: resultado.numeroNota,
@@ -183,7 +188,6 @@ export class HistoryService {
     const ctx = contextoAtual();
     const usuarioId = ctx?.usuario?.id || null;
     const usuarioEmail = ctx?.usuario?.email || null;
-    const uasgEfetiva = ((resultado.uasg || '').replace(/\D/g, '') || uasgDaSessao() || RaufIntegrationService.uasgPadrao()).padStart(6, '0');
 
     const payloadJson = JSON.stringify(resultado);
     let idFinal = notaExistente ? notaExistente.id : this.proximoIdMemoria++;

@@ -227,8 +227,8 @@ Em atendimento aos requisitos de governança, conformidade e compatibilidade com
 
 ### 10.1. Modelo de Identidade e Segurança
 1. **Superadmin Master Inicial:**
-   - **E-mail:** `ulisses.goularte@ebserh.gov.br`
-   - **Senha Inicial:** `admin123` (sem bloqueio por troca forçada para o usuário master).
+   - **E-mail:** `xxxxx`
+   - **Senha Inicial:** `xxxx` (sem bloqueio por troca forçada para o usuário master).
    - Privilégios: cadastrar e gerenciar UASGs (modo isolado ou importando do Rauf), cadastrar novos usuários com senhas geradas automaticamente, resetar senhas e alternar dinamicamente a UASG de trabalho em tempo real através do cabeçalho da aplicação.
 2. **Usuários Convencionais (`role: 'usuario'`):**
    - Vinculados obrigatoriamente a uma **UASG de Origem** (espelhando a lógica de `instituicao_id`/UASG do Rauf).
@@ -262,7 +262,20 @@ Em atendimento aos requisitos de governança, conformidade e compatibilidade com
    - **Credenciais do Rauf:** Adição de `cadastrado_por_id` e `cadastrado_por_email` em `rauf_credenciais`.
    - **Tabela `auditoria_chaves_rauf`:** Histórico de auditoria registrando `data_hora`, `uasg`, `nome_orgao`, `acao` (`CADASTRO` ou `REMOCAO`), `usuario_id`, `usuario_email` e `ip_origem`.
 3. **Segurança de Sessão e CORS:**
-   - **CORS Restrito:** Liberação exclusiva para os front-ends homologados (`localhost:5173`, `localhost:5174`, `localhost:3000` e variável `FRONTEND_URL`), com bloqueio de origens externas não autorizadas.
+   - **CORS Restrito:** Liberação para origens homologadas (`localhost:5173`, `localhost:5174`, `localhost:3000`, `https://calc-impostos-frontend.onrender.com`, subdomínios `*.onrender.com` e variável `FRONTEND_URL`), com bloqueio de origens externas não autorizadas.
    - **Logout Automático por Inatividade:** Implementado listener de atividade do usuário com encerramento automático da sessão e descarte de tokens após **2 horas sem interação** no front-end.
+   - **Armazenamento Seguro do Token:** Uso exclusivo de `sessionStorage` no front-end (ao invés de `localStorage`), garantindo que o token de sessão seja automaticamente destruído ao fechar a aba/navegador.
+
+### 10.4. Resolução de Falhas de Segurança e Robustez Multi-Tenant
+1. **Chaves do Rauf (alto):** As rotas de gestão de chaves do Rauf (`/api/integracao/rauf/salvar-credenciais` e `/api/integracao/rauf/remover-credenciais`) agora exigem autenticação ativa de `superadmin` com verificação de perfil e gravação de trilha de auditoria completa com IP e e-mail do autor.
+2. **Eliminação de Fallback Silencioso para UASG HUCAM (alto):** Criada a função `exigirUasgDaSessao()`, lançando erro explícito (`401/400`) caso a sessão não possua uma UASG válida e ativa, eliminando o fallback silencioso para a UASG `155012` no histórico e na memória tributária de fornecedores.
+3. **Prioridade Absoluta da UASG da Sessão ao Salvar (médio):** No método `salvarOuAtualizarNota()` do `HistoryService`, a UASG autenticada da sessão agora sobrepõe compulsoriamente qualquer valor de UASG presente no payload da requisição.
+4. **Segregação da Fila de Reenvio ao Rauf (médio):** O endpoint `/api/integracao/rauf/reenviar-pendentes` agora isola o reenvio de pendências exclusivamente para a UASG do usuário autenticado. Usuários comuns só podem reprocessar a fila de seu próprio órgão; apenas o `superadmin` pode disparar o reenvio global.
+5. **Prevenção de Enumeração de Contas e Rate-Limiting por IP (médio):** 
+   - Implementado rate-limiting em memória por endereço IP (`10 tentativas falhas a cada 15 minutos`), bloqueando ataques distribuídos de força bruta.
+   - Mensagens de erro unificadas para `"UASG, e-mail ou senha inválidos."`, impedindo a enumeração de e-mails existentes no sistema através de status diferenciados de erro.
+6. **Robustez e Auto-DDL no Render (`/api/auth/uasgs`):** 
+   - A inicialização do banco (`initDatabase`) agora executa a criação de tabelas (`uasgs`, `usuarios_calc`, `notas_analisadas`, etc.) de forma embutida e resiliente caso o arquivo SQL externo não seja localizado no ambiente de contêiner.
+   - O serviço `listarUasgsPublicas()` foi encapsulado com proteção contra falhas e fallback para garantir disponibilidade da lista de órgãos mesmo durante eventuais oscilações de banco de dados, evitando erro 500 e bloqueio de CORS na tela de login.
 
 

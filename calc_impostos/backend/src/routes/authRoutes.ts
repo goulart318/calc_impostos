@@ -26,7 +26,8 @@ authRouter.get('/uasgs', async (_req: Request, res: Response) => {
 authRouter.post('/login', async (req: Request, res: Response) => {
   try {
     const { uasgId, email, senha } = req.body || {};
-    res.json(await AuthService.login(Number(uasgId), email, senha));
+    const ip = String(req.ip || req.socket.remoteAddress || '');
+    res.json(await AuthService.login(Number(uasgId), email, senha, ip));
   } catch (err) {
     tratarErro(res, err);
   }

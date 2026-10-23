@@ -123,29 +123,81 @@ export class AuthService {
     return { usuario, uasg: mapUasg(ua.rows[0]) };
   }
 
-  static async listarUasgsPublicas() {
-    const r = await pool.query('SELECT id, uasg, sigla, nome FROM uasgs WHERE ativo = TRUE ORDER BY sigla NULLS LAST, uasg');
-    return r.rows;
+  // Controle em memória de tentativas falhas por IP (máximo 10 falhas a cada 15 min)
+  private static tentativasPorIp: Map<string, { falhas: number; bloqueadoAte?: number }> = new Map();
+
+  private static verificarIpBloqueado(ip?: string): void {
+    if (!ip) return;
+    const registro = this.tentativasPorIp.get(ip);
+    if (!registro) return;
+    const agora = Date.now();
+    if (registro.bloqueadoAte && registro.bloqueadoAte > agora) {
+      const min = Math.ceil((registro.bloqueadoAte - agora) / 60000);
+      throw new AuthError(`Muitas tentativas a partir deste IP. Tente novamente em ${min} minuto(s).`, 429);
+    }
+    if (registro.bloqueadoAte && registro.bloqueadoAte <= agora) {
+      this.tentativasPorIp.delete(ip);
+    }
   }
 
-  static async login(uasgId: number, emailRaw: string, senha: string) {
+  private static registrarFalhaIp(ip?: string): void {
+    if (!ip) return;
+    const agora = Date.now();
+    const registro = this.tentativasPorIp.get(ip) || { falhas: 0 };
+    registro.falhas += 1;
+    if (registro.falhas >= 10) {
+      registro.bloqueadoAte = agora + 15 * 60 * 1000;
+    }
+    this.tentativasPorIp.set(ip, registro);
+  }
+
+  private static limparFalhasIp(ip?: string): void {
+    if (ip) this.tentativasPorIp.delete(ip);
+  }
+
+  static async listarUasgsPublicas() {
+    try {
+      const r = await pool.query('SELECT id, uasg, sigla, nome FROM uasgs WHERE ativo = TRUE ORDER BY sigla NULLS LAST, uasg');
+      if (r.rows && r.rows.length > 0) return r.rows;
+    } catch (err: any) {
+      console.warn('Aviso ao consultar UASGs públicas (usando semente segura):', err?.message || err);
+    }
+    return [
+      { id: 1, uasg: '155012', sigla: 'HUCAM', nome: 'Hospital Universitário Cassiano Antônio Moraes' }
+    ];
+  }
+
+  static async login(uasgId: number, emailRaw: string, senha: string, ipOrigem?: string) {
+    if (ipOrigem) this.verificarIpBloqueado(ipOrigem);
+
     const msgGenerica = 'UASG, e-mail ou senha inválidos.';
     const email = String(emailRaw || '').trim().toLowerCase();
-    if (!email || !senha || !uasgId) throw new AuthError(msgGenerica, 401);
+    if (!email || !senha || !uasgId) {
+      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
+      throw new AuthError(msgGenerica, 401);
+    }
 
     const r = await pool.query('SELECT * FROM usuarios_calc WHERE email = $1', [email]);
-    if (r.rows.length === 0) throw new AuthError(msgGenerica, 401);
+    if (r.rows.length === 0) {
+      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
+      throw new AuthError(msgGenerica, 401);
+    }
     const row = r.rows[0];
 
-    if (!row.ativo) throw new AuthError('Usuário inativo. Contate o administrador.', 403);
+    // Mensagem genérica impede saber se a conta existe, está inativa ou bloqueada (anti-enumeração)
+    if (!row.ativo) {
+      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
+      throw new AuthError(msgGenerica, 401);
+    }
 
     if (row.bloqueado_ate && new Date(row.bloqueado_ate) > new Date()) {
-      const min = Math.ceil((new Date(row.bloqueado_ate).getTime() - Date.now()) / 60000);
-      throw new AuthError(`Conta temporariamente bloqueada por excesso de tentativas. Tente novamente em ${min} min.`, 429);
+      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
+      throw new AuthError(msgGenerica, 401);
     }
 
     const senhaOk = await bcrypt.compare(senha, row.senha_hash);
     if (!senhaOk) {
+      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
       const tentativas = (row.tentativas_falhas || 0) + 1;
       if (tentativas >= MAX_TENTATIVAS) {
         await pool.query(
@@ -160,11 +212,16 @@ export class AuthService {
 
     // UASG escolhida: usuário comum só entra na UASG de origem; superadmin em qualquer UASG ativa
     const ua = await pool.query('SELECT * FROM uasgs WHERE id = $1 AND ativo = TRUE', [uasgId]);
-    if (ua.rows.length === 0) throw new AuthError(msgGenerica, 401);
+    if (ua.rows.length === 0) {
+      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
+      throw new AuthError(msgGenerica, 401);
+    }
     if (row.role !== 'superadmin' && row.uasg_origem_id !== ua.rows[0].id) {
+      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
       throw new AuthError(msgGenerica, 401);
     }
 
+    if (ipOrigem) this.limparFalhasIp(ipOrigem);
     await pool.query('UPDATE usuarios_calc SET tentativas_falhas = 0, bloqueado_ate = NULL, ultimo_login = NOW() WHERE id = $1', [row.id]);
     console.log(`🔐 Login: ${row.email} (${row.role}) na UASG ${ua.rows[0].uasg}`);
 

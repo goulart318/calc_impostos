@@ -41,13 +41,27 @@ export function uasgDaSessao(): string | undefined {
 }
 
 /**
+ * Retorna a UASG da sessão ou lança exceção imediata caso não haja sessão autenticada.
+ * Elimina qualquer fallback silencioso e impede mistura de dados entre órgãos em multi-tenant.
+ */
+export function exigirUasgDaSessao(): string {
+  const u = contextoStorage.getStore()?.uasg.uasg;
+  if (!u) {
+    throw new Error('Operação bloqueada: sessão sem UASG definida. Não é permitido consultar ou gravar dados sem contexto de órgão.');
+  }
+  return u.replace(/\D/g, '').padStart(6, '0');
+}
+
+/**
  * Aplica a identidade do órgão (UASG da sessão) ao resultado de uma análise: a UASG/instituição/sigla
  * sempre vêm da sessão autenticada (nunca do corpo da requisição), evitando adulteração entre órgãos.
  * Para NFS-e, o município do tomador também usa o município da UASG quando não informado.
  */
 export function aplicarIdentidadeOrgao<T extends Record<string, any>>(resultado: T): T {
   const ctx = contextoStorage.getStore();
-  if (!ctx) return resultado;
+  if (!ctx) {
+    throw new Error('Operação bloqueada: não há sessão autenticada para definir a identidade do órgão.');
+  }
   const { uasg } = ctx;
   (resultado as any).uasg = uasg.uasg;
   (resultado as any).siglaOrgao = uasg.sigla || undefined;
