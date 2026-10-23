@@ -129,10 +129,10 @@ export function AuthPage() {
 
           <div className="space-y-3">
             <blockquote className="text-lg text-slate-200 font-light leading-relaxed">
-              &ldquo;Plataforma integrada de instrução processual, liquidação orçamentária e cálculo automático de retenções federais e municipais para notas fiscais.&rdquo;
+              &ldquo;Sistema automatizado para análise de notas fiscais (NF-e de compras/materiais e NFS-e de serviços), aplicação automática das regras de retenção tributária federal (IN RFB nº 1.234/2012 por NCM ou código de serviço), previdenciária (IN RFB nº 2.110/2022 / CPRB) e geração de relatório individualizado detalhado para inserção no SEI..&rdquo;
             </blockquote>
             <p className="text-xs font-mono text-slate-400">
-              Hospital Universitário Cassiano Antônio Moraes — HUCAM / EBSERH
+              
             </p>
           </div>
 
@@ -149,10 +149,10 @@ export function AuthPage() {
             <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
               <div className="flex items-center gap-2 font-semibold text-slate-200 mb-1">
                 <CheckCircle2Icon className="size-4 text-blue-400" />
-                Integração Rauf
+                
               </div>
               <p className="text-slate-400 text-[11px] leading-snug">
-                Sincronização e liquidação automática com dados do Rauf_App.
+               
               </p>
             </div>
           </div>
@@ -160,7 +160,7 @@ export function AuthPage() {
 
         {/* Rodapé institucional */}
         <div className="relative z-10 text-xs text-slate-500 font-mono">
-          Ambiente Corporativo Seguro • EBSERH / MEC
+          Ambiente Corporativo Seguro •
         </div>
       </div>
 
