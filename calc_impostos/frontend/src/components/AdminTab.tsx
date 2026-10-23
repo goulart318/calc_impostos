@@ -412,9 +412,10 @@ export const AdminTab: React.FC = () => {
                   value={buscaUsuario}
                   onChange={(e) => setBuscaUsuario(e.target.value)}
                   placeholder="Filtrar por nome, e-mail..."
-                  className="ps-9 h-11 bg-slate-50 border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus-visible:ring-blue-500"
+                  className="pl-10 h-11 bg-slate-50 border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus-visible:ring-blue-500"
+                  style={{ paddingLeft: '38px' }}
                 />
-                <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3">
+                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3">
                   <SearchIcon className="size-4" />
                 </div>
               </div>
@@ -588,9 +589,10 @@ export const AdminTab: React.FC = () => {
                   value={buscaUasg}
                   onChange={(e) => setBuscaUasg(e.target.value)}
                   placeholder="Filtrar por código, sigla ou nome..."
-                  className="ps-9 h-11 bg-slate-50 border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus-visible:ring-blue-500"
+                  className="pl-10 h-11 bg-slate-50 border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus-visible:ring-blue-500"
+                  style={{ paddingLeft: '38px' }}
                 />
-                <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3">
+                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3">
                   <SearchIcon className="size-4" />
                 </div>
               </div>
@@ -741,10 +743,11 @@ export const AdminTab: React.FC = () => {
                     value={nomeNovoUser}
                     onChange={(e) => setNomeNovoUser(e.target.value)}
                     placeholder="Ex: Carlos Eduardo de Oliveira"
-                    className="ps-10 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
+                    className="pl-11 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
+                    style={{ paddingLeft: '42px' }}
                     required
                   />
-                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3.5">
+                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
                     <UserIcon className="size-4" aria-hidden="true" />
                   </div>
                 </div>
@@ -762,10 +765,11 @@ export const AdminTab: React.FC = () => {
                       value={emailNovoUser}
                       onChange={(e) => setEmailNovoUser(e.target.value)}
                       placeholder="usuario@ebserh.gov.br"
-                      className="ps-10 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
+                      className="pl-11 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
+                      style={{ paddingLeft: '42px' }}
                       required
                     />
-                    <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3.5">
+                    <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
                       <MailIcon className="size-4" aria-hidden="true" />
                     </div>
                   </div>
@@ -835,9 +839,10 @@ export const AdminTab: React.FC = () => {
                     value={senhaNovoUser}
                     onChange={(e) => setSenhaNovoUser(e.target.value)}
                     placeholder="Deixe em branco para gerar aleatoriamente"
-                    className="ps-10 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 font-mono text-sm focus-visible:ring-blue-500"
+                    className="pl-11 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 font-mono text-sm focus-visible:ring-blue-500"
+                    style={{ paddingLeft: '42px' }}
                   />
-                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3.5">
+                  <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
                     <LockIcon className="size-4" aria-hidden="true" />
                   </div>
                 </div>

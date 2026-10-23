@@ -248,7 +248,8 @@ export function AuthPage() {
                 <Input
                   id="email-input"
                   placeholder="usuario@ebserh.gov.br"
-                  className="ps-11 h-13 bg-slate-950/90 border-slate-700 rounded-xl text-white text-base placeholder:text-slate-500 focus-visible:ring-blue-500 transition-all"
+                  className="pl-12 h-13 bg-slate-950/90 border-slate-700 rounded-xl text-white text-base placeholder:text-slate-500 focus-visible:ring-blue-500 transition-all"
+                  style={{ paddingLeft: '48px' }}
                   type="email"
                   autoComplete="email"
                   value={email}
@@ -256,7 +257,7 @@ export function AuthPage() {
                   disabled={submetendo}
                   required
                 />
-                <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-4">
+                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-4">
                   <AtSignIcon className="size-5" aria-hidden="true" />
                 </div>
               </div>
@@ -271,7 +272,8 @@ export function AuthPage() {
                 <Input
                   id="password-input"
                   placeholder="••••••••••••"
-                  className="ps-11 pe-12 h-13 bg-slate-950/90 border-slate-700 rounded-xl text-white text-base placeholder:text-slate-500 focus-visible:ring-blue-500 transition-all font-mono"
+                  className="pl-12 pr-12 h-13 bg-slate-950/90 border-slate-700 rounded-xl text-white text-base placeholder:text-slate-500 focus-visible:ring-blue-500 transition-all font-mono"
+                  style={{ paddingLeft: '48px', paddingRight: '48px' }}
                   type={mostrarSenha ? 'text' : 'password'}
                   autoComplete="current-password"
                   value={senha}
@@ -279,14 +281,14 @@ export function AuthPage() {
                   disabled={submetendo}
                   required
                 />
-                <div className="text-slate-400 pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-4">
+                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-4">
                   <LockIcon className="size-5" aria-hidden="true" />
                 </div>
                 <button
                   type="button"
                   tabIndex={-1}
                   onClick={() => setMostrarSenha(!mostrarSenha)}
-                  className="absolute inset-y-0 end-0 flex items-center pe-4 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  className="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-white transition-colors cursor-pointer"
                   title={mostrarSenha ? 'Ocultar senha' : 'Ver senha'}
                 >
                   {mostrarSenha ? <EyeOffIcon className="size-5" /> : <EyeIcon className="size-5" />}

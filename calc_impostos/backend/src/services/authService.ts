@@ -179,31 +179,36 @@ export class AuthService {
 
     const r = await pool.query('SELECT * FROM usuarios_calc WHERE email = $1', [email]);
     if (r.rows.length === 0) {
+      console.warn(`[AUTH] Falha de login: e-mail não encontrado no banco (${email})`);
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
       throw new AuthError(msgGenerica, 401);
     }
     const row = r.rows[0];
 
-    // Mensagem genérica impede saber se a conta existe, está inativa ou bloqueada (anti-enumeração)
     if (!row.ativo) {
+      console.warn(`[AUTH] Falha de login: usuário inativo no sistema (${email})`);
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
-      throw new AuthError(msgGenerica, 401);
+      throw new AuthError('Usuário inativo. Entre em contato com o administrador.', 401);
     }
 
     if (row.bloqueado_ate && new Date(row.bloqueado_ate) > new Date()) {
+      const minRestantes = Math.ceil((new Date(row.bloqueado_ate).getTime() - Date.now()) / 60000);
+      console.warn(`[AUTH] Falha de login: conta temporariamente bloqueada por ${minRestantes} min (${email})`);
       if (ipOrigem) this.registrarFalhaIp(ipOrigem);
-      throw new AuthError(msgGenerica, 401);
+      throw new AuthError(`Conta bloqueada por excesso de tentativas. Tente novamente em ${minRestantes} minuto(s).`, 401);
     }
 
     const senhaOk = await bcrypt.compare(senha, row.senha_hash);
     if (!senhaOk) {
-      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
       const tentativas = (row.tentativas_falhas || 0) + 1;
+      console.warn(`[AUTH] Falha de login: senha incorreta para ${email} (tentativa ${tentativas}/${MAX_TENTATIVAS})`);
+      if (ipOrigem) this.registrarFalhaIp(ipOrigem);
       if (tentativas >= MAX_TENTATIVAS) {
         await pool.query(
           `UPDATE usuarios_calc SET tentativas_falhas = 0, bloqueado_ate = NOW() + ($2 || ' minutes')::interval WHERE id = $1`,
           [row.id, String(BLOQUEIO_MINUTOS)]
         );
+        throw new AuthError(`Excesso de tentativas incorretas. Conta bloqueada por ${BLOQUEIO_MINUTOS} minutos.`, 401);
       } else {
         await pool.query('UPDATE usuarios_calc SET tentativas_falhas = $2 WHERE id = $1', [row.id, tentativas]);
       }
