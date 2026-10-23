@@ -35,7 +35,8 @@ function segredo(): Buffer | null {
 }
 
 export function cadastroPelaTelaHabilitado(): boolean {
-  return segredo() !== null && !!(process.env.CALC_ADMIN_TOKEN || '').trim();
+  // Acesso às rotas é controlado pelo login (superadmin); basta o segredo de cifra das chaves.
+  return segredo() !== null;
 }
 
 function cifrar(texto: string): string {
