@@ -117,25 +117,55 @@ export default function App() {
 
   const [localPrestacaoServico, setLocalPrestacaoServico] = useState<string>('Vitória');
 
-  const carregarInstituicoesRauf = async () => {
+  const [feedbackSincronizacao, setFeedbackSincronizacao] = useState<{ tipo: 'sucesso' | 'aviso' | 'erro'; texto: string } | null>(null);
+
+  const carregarInstituicoesRauf = async (manual: boolean = false) => {
     setCarregandoInstituicoes(true);
+    setFeedbackSincronizacao(null);
     try {
       const res = await fetch(`${API_BASE_URL}/api/integracao/rauf/instituicoes`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setInstituicoesRauf(data);
+          if (manual) {
+            setFeedbackSincronizacao({
+              tipo: 'sucesso',
+              texto: `✓ Sincronização concluída com sucesso! Foram localizados ${data.length} órgão(s) no Rauf.`
+            });
+            setTimeout(() => setFeedbackSincronizacao(null), 6000);
+          }
+        } else {
+          if (manual) {
+            setFeedbackSincronizacao({
+              tipo: 'aviso',
+              texto: 'Aviso: Nenhuma instituição foi retornada pelo Rauf.'
+            });
+          }
+        }
+      } else {
+        if (manual) {
+          setFeedbackSincronizacao({
+            tipo: 'erro',
+            texto: `Erro HTTP ${res.status} ao sincronizar com o Rauf.`
+          });
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Aviso ao carregar instituições do Rauf:', err);
+      if (manual) {
+        setFeedbackSincronizacao({
+          tipo: 'erro',
+          texto: `Falha na conexão: ${err.message}`
+        });
+      }
     } finally {
       setCarregandoInstituicoes(false);
     }
   };
 
   useEffect(() => {
-    carregarInstituicoesRauf();
+    carregarInstituicoesRauf(false);
   }, []);
 
   const handleSelecionarInstituicao = (inst: Partial<IdentidadeOrgao>) => {
@@ -911,7 +941,7 @@ export default function App() {
                       <button
                         type="button"
                         className="btn-secondary"
-                        onClick={carregarInstituicoesRauf}
+                        onClick={() => carregarInstituicoesRauf(true)}
                         disabled={carregandoInstituicoes}
                         style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                         title="Sincronizar lista de órgãos do banco de dados do Rauf_App"
@@ -921,6 +951,21 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+
+                  {feedbackSincronizacao && (
+                    <div style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      marginBottom: '8px',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      background: feedbackSincronizacao.tipo === 'sucesso' ? '#ecfdf5' : feedbackSincronizacao.tipo === 'aviso' ? '#fffbeb' : '#fef2f2',
+                      color: feedbackSincronizacao.tipo === 'sucesso' ? '#065f46' : feedbackSincronizacao.tipo === 'aviso' ? '#92400e' : '#991b1b',
+                      border: feedbackSincronizacao.tipo === 'sucesso' ? '1px solid #a7f3d0' : feedbackSincronizacao.tipo === 'aviso' ? '1px solid #fde68a' : '1px solid #fecaca'
+                    }}>
+                      {feedbackSincronizacao.texto}
+                    </div>
+                  )}
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', paddingTop: '8px', borderTop: '1px solid #e2e8f0' }}>
                     <div>
