@@ -216,5 +216,40 @@ ALTER TABLE retencoes_calc_impostos ENABLE ROW LEVEL SECURITY;
 ## 9. Status do Versionamento e Deploy
 
 * **`Rauf_App`:** Commit `5ced77e` enviado para `origin/main` e implantado com sucesso no Render.
-* **`calc_impostos`:** Commit `5a18b6b` enviado para `origin/main` com build de front-end e back-end finalizado com **0 erros**.
+* **`calc_impostos`:** Builds de front-end e back-end finalizados com **0 erros**.
 * Ambos os repositórios encontram-se com suas *working trees* limpas e sincronizadas.
+
+---
+
+## 10. Atualização: Sistema de Autenticação, Perfis de Acesso e Isolamento Multi-UASG
+
+Em atendimento aos requisitos de governança, conformidade e compatibilidade com o modelo de usuários do `Rauf_App`, foi implementada a arquitetura completa de autenticação e controle de acesso no `calc_impostos`:
+
+### 10.1. Modelo de Identidade e Segurança
+1. **Superadmin Master Inicial:**
+   - **E-mail:** `ulisses.goularte@ebserh.gov.br`
+   - **Senha Inicial:** `admin123` (sem bloqueio por troca forçada para o usuário master).
+   - Privilégios: cadastrar e gerenciar UASGs (modo isolado ou importando do Rauf), cadastrar novos usuários com senhas geradas automaticamente, resetar senhas e alternar dinamicamente a UASG de trabalho em tempo real através do cabeçalho da aplicação.
+2. **Usuários Convencionais (`role: 'usuario'`):**
+   - Vinculados obrigatoriamente a uma **UASG de Origem** (espelhando a lógica de `instituicao_id`/UASG do Rauf).
+   - Ao realizarem o login, só podem acessar sua UASG de origem.
+   - Primeiro acesso com senha gerada automaticamente exige troca de senha imediata (`forca_troca_senha: true`).
+3. **Segurança de Sessão:**
+   - Senhas criptografadas com **bcrypt** (salt rounds = 10).
+   - Tokens JWT com expiração de 8 horas contendo `id`, `email`, `role`, `uasg_origem_id` e a UASG ativa.
+   - Bloqueio automático de segurança contra ataques de força bruta (5 tentativas falhas bloqueiam o acesso por 15 minutos).
+4. **Isolamento de Dados por UASG (AsyncLocalStorage):**
+   - Histórico de análises (`notas`) e Memória Tributária de Fornecedores (`memoria_tributaria_fornecedores`) possuem coluna `uasg` com isolamento estrito por UASG no backend.
+   - Dados legados foram migrados e atribuídos à UASG padrão `155012 – HUCAM`.
+
+### 10.2. Nova UX/UI de Login e Gestão
+1. **Página de Login (`FloatingPaths` & Tailwind v4):**
+   - Design moderno, responsivo e adaptado com animações fluidas de caminhos geométricos em tons escuros e azuis corporativos.
+   - Seletor de Unidade Gestora / UASG + e-mail + senha.
+2. **Cabeçalho Unificado:**
+   - O antigo card de configuração de órgão na tela de análise foi removido, sendo substituído pelo seletor e indicador permanente de UASG no cabeçalho do sistema.
+   - Exibição do usuário conectado, perfil, botão "Alterar Senha", seletor dinâmico de UASG (superadmin) e botão "Sair".
+3. **Painel de Administração (`/admin`):**
+   - Gestão de Usuários (criação, edição, desativação, reset com senha segura gerada automaticamente).
+   - Gestão de UASGs (cadastro manual para modo isolado e sincronização/importação direta a partir das instituições cadastradas no Rauf).
+

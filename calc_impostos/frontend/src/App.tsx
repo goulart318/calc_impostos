@@ -8,17 +8,19 @@ import {
   BookOpen, 
   Layers, 
   Building2, 
-  ShieldCheck,
+  AlertTriangle,
   Percent,
   Plus,
   Trash2,
   RotateCcw,
   Sparkles,
-  AlertTriangle,
   CheckCircle2,
   BarChart3,
-  RefreshCw,
   Link2,
+  User,
+  LogOut,
+  Key,
+  Shield
 } from 'lucide-react';
 import { ReportPreview, type ResultadoConsolidado, type DadosSicafConsulta } from './components/ReportPreview';
 import { SicafCard } from './components/SicafCard';
@@ -29,7 +31,11 @@ import { RaufIntegracaoTab } from './components/RaufIntegracaoTab';
 import { DashboardTab } from './components/DashboardTab';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './components/ProcessoConsolidadoModal';
 import { LoteTriagemModal } from './components/LoteTriagemModal';
-import { API_BASE_URL } from './config/api';
+import { AdminTab } from './components/AdminTab';
+import { ModalAlterarSenha } from './components/ModalAlterarSenha';
+import { AuthPage } from './components/ui/auth-page';
+import { useAuth } from './contexts/AuthContext';
+import { apiFetch } from './lib/apiFetch';
 
 export interface IdentidadeOrgao {
   id?: number;
@@ -41,7 +47,10 @@ export interface IdentidadeOrgao {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'analise' | 'historico' | 'anexo1' | 'ncm' | 'rauf'>('analise');
+  const { usuario, uasg, carregando: carregandoAuth, logout, abrirModalSenha, trocarUasg } = useAuth();
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'analise' | 'historico' | 'anexo1' | 'ncm' | 'rauf' | 'admin'>('analise');
+  const [listaUasgsSuperadmin, setListaUasgsSuperadmin] = useState<Array<{ id: number; uasg: string; sigla: string | null; nome: string }>>([]);
+  const [trocandoUasg, setTrocandoUasg] = useState(false);
   
   // Estado do formulário de análise (100% limpo inicialmente)
   const [tipoDocumento, setTipoDocumento] = useState<'NFE' | 'NFSE'>('NFE');
@@ -65,13 +74,10 @@ export default function App() {
     if (!cnpjLimpo) return;
     setConsultandoSicaf(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/sicaf/consultar/${cnpjLimpo}`);
-      if (res.ok) {
-        const dados: DadosSicafConsulta = await res.json();
-        setSicafData(dados);
-        if (resultado) {
-          setResultado(prev => prev ? { ...prev, sicaf: dados } : null);
-        }
+      const dados = await apiFetch<DadosSicafConsulta>(`/api/sicaf/consultar/${cnpjLimpo}`);
+      setSicafData(dados);
+      if (resultado) {
+        setResultado(prev => prev ? { ...prev, sicaf: dados } : null);
       }
     } catch (err) {
       console.warn('Erro ao consultar SICAF:', err);
@@ -90,126 +96,29 @@ export default function App() {
     return `${limpo.slice(0, 5)}.${limpo.slice(5, 11)}/${limpo.slice(11, 15)}-${limpo.slice(15)}`;
   };
 
-  // Identidade do Órgão / Unidade Gestora Ativa (Multi-Tenant)
-  const [instituicoesRauf, setInstituicoesRauf] = useState<IdentidadeOrgao[]>([]);
-  const [carregandoInstituicoes, setCarregandoInstituicoes] = useState(false);
-
-  const [orgaoAtivo, setOrgaoAtivo] = useState<IdentidadeOrgao>(() => {
-    try {
-      const salvo = localStorage.getItem('orgao_ativo_configurado');
-      if (salvo) return JSON.parse(salvo);
-    } catch (e) {}
-    return {
-      id: 1,
-      nome: 'Hospital Universitário Cassiano Antônio Moraes',
-      cnpj: '15.126.437/0006-58',
-      uasg: '155012',
-      sigla: 'HUCAM',
-      municipio: 'Vitória'
-    };
-  });
-
-  const [cnpjMeuEstabelecimento, setCnpjMeuEstabelecimento] = useState<string>(() => {
-    return localStorage.getItem('cnpj_orgao_configurado') || orgaoAtivo.cnpj || '15.126.437/0006-58';
-  });
-
-  const [municipioMeuOrgao, setMunicipioMeuOrgao] = useState<string>(() => {
-    return localStorage.getItem('municipio_orgao_configurado') || orgaoAtivo.municipio || 'Vitória';
-  });
-
   const [localPrestacaoServico, setLocalPrestacaoServico] = useState<string>('Vitória');
 
-  const [feedbackSincronizacao, setFeedbackSincronizacao] = useState<{ tipo: 'sucesso' | 'aviso' | 'erro'; texto: string } | null>(null);
-
-  const carregarInstituicoesRauf = async (manual: boolean = false) => {
-    setCarregandoInstituicoes(true);
-    setFeedbackSincronizacao(null);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/integracao/rauf/instituicoes`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setInstituicoesRauf(data);
-          if (manual) {
-            setFeedbackSincronizacao({
-              tipo: 'sucesso',
-              texto: `✓ Sincronização concluída com sucesso! Foram localizados ${data.length} órgão(s) no Rauf.`
-            });
-            setTimeout(() => setFeedbackSincronizacao(null), 6000);
-          }
-        } else {
-          if (manual) {
-            setFeedbackSincronizacao({
-              tipo: 'aviso',
-              texto: 'Aviso: Nenhuma instituição foi retornada pelo Rauf.'
-            });
-          }
-        }
-      } else {
-        if (manual) {
-          setFeedbackSincronizacao({
-            tipo: 'erro',
-            texto: `Erro HTTP ${res.status} ao sincronizar com o Rauf.`
-          });
-        }
-      }
-    } catch (err: any) {
-      console.warn('Aviso ao carregar instituições do Rauf:', err);
-      if (manual) {
-        setFeedbackSincronizacao({
-          tipo: 'erro',
-          texto: `Falha na conexão: ${err.message}`
-        });
-      }
-    } finally {
-      setCarregandoInstituicoes(false);
-    }
-  };
-
+  // Carrega UASGs para o seletor do superadmin no cabeçalho
   useEffect(() => {
-    carregarInstituicoesRauf(false);
-  }, []);
-
-  const handleSelecionarInstituicao = (inst: Partial<IdentidadeOrgao>) => {
-    const atualizado: IdentidadeOrgao = {
-      ...orgaoAtivo,
-      ...inst
-    };
-    setOrgaoAtivo(atualizado);
-    if (inst.cnpj) setCnpjMeuEstabelecimento(inst.cnpj);
-    if (inst.municipio) setMunicipioMeuOrgao(inst.municipio);
-    localStorage.setItem('orgao_ativo_configurado', JSON.stringify(atualizado));
-    if (inst.cnpj) localStorage.setItem('cnpj_orgao_configurado', inst.cnpj);
-    if (inst.municipio) localStorage.setItem('municipio_orgao_configurado', inst.municipio);
-  };
-
-  const handleSalvarCnpjConfigurado = async (val: string) => {
-    setCnpjMeuEstabelecimento(val);
-    localStorage.setItem('cnpj_orgao_configurado', val);
-
-    // Consulta automática da cidade do órgão via API da Receita Federal
-    const cnpjLimpo = val.replace(/\D/g, '');
-    if (cnpjLimpo.length === 14) {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/consultar-cnpj/${cnpjLimpo}`);
-        if (res.ok) {
-          const d = await res.json();
-          if (d.municipio) {
-            setMunicipioMeuOrgao(d.municipio);
-            localStorage.setItem('municipio_orgao_configurado', d.municipio);
-            handleSelecionarInstituicao({ cnpj: val, municipio: d.municipio, nome: d.razaoSocial || orgaoAtivo.nome });
-          }
-        }
-      } catch (e) {
-        // Silencioso
-      }
+    if (usuario?.role === 'superadmin') {
+      apiFetch<Array<{ id: number; uasg: string; sigla: string | null; nome: string }>>('/api/auth/uasgs')
+        .then(res => setListaUasgsSuperadmin(res || []))
+        .catch(() => undefined);
     }
-  };
+  }, [usuario?.role]);
 
-  const handleSalvarMunicipioConfigurado = (cidade: string) => {
-    setMunicipioMeuOrgao(cidade);
-    localStorage.setItem('municipio_orgao_configurado', cidade);
-    handleSelecionarInstituicao({ municipio: cidade });
+  const handleTrocarUasgSuperadmin = async (novaUasgId: number) => {
+    if (!novaUasgId || novaUasgId === uasg?.id) return;
+    try {
+      setTrocandoUasg(true);
+      await trocarUasg(novaUasgId);
+      setMensagemSucesso(`✓ Unidade Gestora de trabalho alterada com sucesso!`);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (e: any) {
+      alert('Erro ao trocar UASG: ' + (e?.message || 'Falha na requisição'));
+    } finally {
+      setTrocandoUasg(false);
+    }
   };
 
   // Dados do Destinatário/Tomador da Nota Fiscal Lido do Documento
@@ -241,7 +150,7 @@ export default function App() {
   // Resultado do Cálculo (Vazio por padrão)
   const [resultado, setResultado] = useState<ResultadoConsolidado | null>(null);
 
-  const cnpjConfigClean = cnpjMeuEstabelecimento.replace(/\D/g, '');
+  const cnpjConfigClean = (uasg?.cnpj || '15126437000658').replace(/\D/g, '');
   const destCnpjClean = destinatarioCnpj.replace(/\D/g, '');
   const temDivergenciaDestinatario = Boolean(
     destCnpjClean && cnpjConfigClean && destCnpjClean !== cnpjConfigClean
@@ -301,17 +210,17 @@ export default function App() {
         fornecedorCnpj: fornecedorCnpj || '',
         fornecedorMunicipio: fornecedorCidadeUf ? fornecedorCidadeUf.split('/')[0].trim() : undefined,
         fornecedorUf: fornecedorCidadeUf && fornecedorCidadeUf.includes('/') ? fornecedorCidadeUf.split('/')[1].trim() : undefined,
-        destinatarioNome: destinatarioNome || orgaoAtivo.nome,
-        destinatarioCnpj: destinatarioCnpj || orgaoAtivo.cnpj,
-        instituicaoId: orgaoAtivo.id,
-        uasg: orgaoAtivo.uasg,
-        siglaOrgao: orgaoAtivo.sigla,
+        destinatarioNome: destinatarioNome || uasg?.nome,
+        destinatarioCnpj: destinatarioCnpj || uasg?.cnpj,
+        instituicaoId: uasg?.raufInstituicaoId || undefined,
+        uasg: uasg?.uasg,
+        siglaOrgao: uasg?.sigla || undefined,
         optanteSimples,
         percentualReducaoIss,
         retencaoIss,
         aliqIss: habilitarAliquotaPersonalizadaIss ? Number(aliquotaIssPersonalizada) : undefined,
         localPrestacaoServico: tipoDocumento === 'NFSE' ? localPrestacaoServico : undefined,
-        municipioTomador: tipoDocumento === 'NFSE' ? municipioMeuOrgao : undefined,
+        municipioTomador: tipoDocumento === 'NFSE' ? (uasg?.municipio || 'Vitória') : undefined,
         retencaoInss: retencaoInss || Boolean(valorInssDestacado > 0 || valorMateriaisInss > 0),
         valorInssDestacado,
         valorMateriaisInss,
@@ -324,18 +233,11 @@ export default function App() {
         optanteCprb
       };
 
-      const res = await fetch(`${API_BASE_URL}/api/analisar`, {
+      const data = await apiFetch<ResultadoConsolidado>('/api/analisar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Erro HTTP ${res.status} ao calcular retenções`);
-      }
-
-      const data = await res.json();
       if (data.numeroProcesso) {
         setNumeroProcesso(data.numeroProcesso);
       } else if (numeroProcesso && !data.numeroProcesso) {
@@ -384,18 +286,15 @@ export default function App() {
     if (!fornecedorCnpj) return;
     try {
       setConsultandoCnpj(true);
-      const res = await fetch(`${API_BASE_URL}/api/consultar-cnpj/${fornecedorCnpj.replace(/\D/g, '')}`);
-      if (res.ok) {
-        const data = await res.json();
-        setFornecedorNome(data.razaoSocial || fornecedorNome);
-        setOptanteSimples(data.optanteSimples);
-        if (data.situacaoCadastral) setSituacaoCadastral(data.situacaoCadastral);
-        if (data.municipio || data.uf) {
-          setFornecedorCidadeUf(`${data.municipio || ''}${data.uf ? `/${data.uf}` : ''}`.trim());
-        }
-        const cnpjNum = fornecedorCnpj.replace(/\D/g, '');
-        if (cnpjNum.length === 14) reconsultarSicaf(cnpjNum);
+      const data = await apiFetch<any>(`/api/consultar-cnpj/${fornecedorCnpj.replace(/\D/g, '')}`);
+      setFornecedorNome(data.razaoSocial || fornecedorNome);
+      setOptanteSimples(data.optanteSimples);
+      if (data.situacaoCadastral) setSituacaoCadastral(data.situacaoCadastral);
+      if (data.municipio || data.uf) {
+        setFornecedorCidadeUf(`${data.municipio || ''}${data.uf ? `/${data.uf}` : ''}`.trim());
       }
+      const cnpjNum = fornecedorCnpj.replace(/\D/g, '');
+      if (cnpjNum.length === 14) reconsultarSicaf(cnpjNum);
     } catch (e) {
       alert('Não foi possível consultar o CNPJ.');
     } finally {
@@ -419,34 +318,11 @@ export default function App() {
       formData.append('arquivo', file);
       formData.append('file', file);
 
-      const endpoint = isXml ? `${API_BASE_URL}/api/upload-xml` : `${API_BASE_URL}/api/upload-pdf`;
-      const res = await fetch(endpoint, {
+      const endpoint = isXml ? '/api/upload-xml' : '/api/upload-pdf';
+      const data = await apiFetch<ResultadoConsolidado>(endpoint, {
         method: 'POST',
         body: formData
       });
-
-      if (!res.ok) {
-        let errMsg = 'Falha ao processar arquivo.';
-        try {
-          const errData = await res.json();
-          errMsg = errData.error || errMsg;
-        } catch {
-          const txt = await res.text().catch(() => '');
-          if (txt.includes('502') || txt.includes('503') || txt.includes('Service Unavailable') || !txt) {
-            errMsg = 'O backend está inicializando (Cold Start do Render). Por favor, aguarde cerca de 30 segundos e envie novamente.';
-          } else {
-            errMsg = `Erro ${res.status}: ${txt.substring(0, 100)}`;
-          }
-        }
-        throw new Error(errMsg);
-      }
-
-      let data: ResultadoConsolidado;
-      try {
-        data = await res.json();
-      } catch {
-        throw new Error('O servidor respondeu de forma incompleta. Aguarde alguns segundos (o servidor pode estar acordando) e tente novamente.');
-      }
       setNumeroProcesso(data.numeroProcesso || '');
       setDocumentoHabil(data.documentoHabil || '');
       setNumeroEmpenho(data.numeroEmpenho || '');
@@ -470,7 +346,7 @@ export default function App() {
         if (data.localPrestacaoServico) {
           setLocalPrestacaoServico(data.localPrestacaoServico);
         } else {
-          setLocalPrestacaoServico(municipioMeuOrgao);
+          setLocalPrestacaoServico(uasg?.municipio || 'Vitória');
         }
         if (data.aliqIssAplicada !== undefined) {
           setAliquotaIssPersonalizada(data.aliqIssAplicada);
@@ -542,17 +418,10 @@ export default function App() {
       if (documentoHabil) formData.append('documentoHabil', documentoHabil);
       if (numeroEmpenho) formData.append('numeroEmpenho', numeroEmpenho);
 
-      const res = await fetch(`${API_BASE_URL}/api/upload-lote`, {
+      const data = await apiFetch<ProcessoConsolidadoData>('/api/upload-lote', {
         method: 'POST',
         body: formData
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Falha ao processar lote de arquivos.');
-      }
-
-      const data: ProcessoConsolidadoData = await res.json();
       if (numeroProcesso && !data.numeroProcesso) data.numeroProcesso = numeroProcesso;
       if (numeroEmpenho && !data.notaEmpenho) data.notaEmpenho = numeroEmpenho;
 
@@ -645,9 +514,24 @@ export default function App() {
     setItens(newItens);
   };
 
+  if (carregandoAuth) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: '#fff' }}>
+        <div style={{ textAlign: 'center' }}>
+          <Building2 size={36} color="#3b82f6" className="spin" style={{ margin: '0 auto 12px' }} />
+          <p style={{ fontSize: '0.9rem', color: '#94a3b8' }}>Carregando sessão...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!usuario) {
+    return <AuthPage />;
+  }
+
   return (
     <div className="app-container">
-      {/* Header Institucional */}
+      {/* Header Institucional com Identidade da UASG e Usuário Conectado */}
       <header className="app-header">
         <div className="header-brand">
           <div className="header-logo">
@@ -659,24 +543,112 @@ export default function App() {
           </div>
         </div>
 
-        <div className="header-actions">
+        <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Badge de UASG e Órgão */}
           <div 
             className="header-badge" 
-            style={{ background: 'rgba(37, 99, 235, 0.08)', borderColor: '#93c5fd', color: '#1d4ed8', cursor: 'pointer' }}
-            title={`Órgão Ativo: ${orgaoAtivo.nome} | UASG: ${orgaoAtivo.uasg || '---'} | CNPJ: ${orgaoAtivo.cnpj}`}
-            onClick={() => {
-              const el = document.getElementById('card-configuracao-orgao');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }}
+            style={{ background: 'rgba(37, 99, 235, 0.08)', borderColor: '#93c5fd', color: '#1d4ed8' }}
+            title={`Órgão Oficial: ${uasg?.nome || '—'}\nCNPJ: ${uasg?.cnpj || '—'}\nMunicípio: ${uasg?.municipio || '—'}`}
           >
             <Building2 size={14} color="#2563eb" />
-            <span>{orgaoAtivo.sigla || 'Órgão'}: UASG {orgaoAtivo.uasg || '---'}</span>
+            <span style={{ fontWeight: 700 }}>
+              {uasg?.sigla || 'UG'} · UASG {uasg?.uasg || '155012'}
+            </span>
           </div>
 
-          <div className="header-badge">
-            <ShieldCheck size={14} color="#10b981" />
-            <span>IN RFB nº 1.234/2012 & INSS</span>
+          {/* Seletor de troca de UASG para Superadmin */}
+          {usuario.role === 'superadmin' && listaUasgsSuperadmin.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <select
+                aria-label="Trocar UASG de trabalho"
+                value={uasg?.id || ''}
+                disabled={trocandoUasg}
+                onChange={(e) => handleTrocarUasgSuperadmin(Number(e.target.value))}
+                style={{
+                  background: '#1e293b',
+                  color: '#f8fafc',
+                  border: '1px solid #334155',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {listaUasgsSuperadmin.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    UASG {u.uasg} {u.sigla ? `— ${u.sigla}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Usuário Conectado e Perfil */}
+          <div 
+            className="header-badge"
+            style={{ background: '#f8fafc', borderColor: '#e2e8f0', color: '#1e293b', gap: '6px' }}
+            title={`E-mail: ${usuario.email}\nPerfil: ${usuario.role}`}
+          >
+            <User size={13} color="#2563eb" />
+            <span style={{ fontWeight: 600, fontSize: '0.78rem' }}>{usuario.nome}</span>
+            <span style={{
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              padding: '1px 6px',
+              borderRadius: '4px',
+              background: usuario.role === 'superadmin' ? '#f3e8ff' : '#e0f2fe',
+              color: usuario.role === 'superadmin' ? '#7e22ce' : '#0369a1'
+            }}>
+              {usuario.role === 'superadmin' ? 'Master' : 'Usuário'}
+            </span>
           </div>
+
+          {/* Ações de Conta */}
+          <button
+            type="button"
+            onClick={() => abrirModalSenha(false)}
+            style={{
+              background: 'transparent',
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              padding: '5px 8px',
+              fontSize: '0.72rem',
+              color: '#475569',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontWeight: 600
+            }}
+            title="Alterar sua senha de acesso"
+          >
+            <Key size={12} />
+            Alterar Senha
+          </button>
+
+          <button
+            type="button"
+            onClick={logout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #fecaca',
+              borderRadius: '6px',
+              padding: '5px 8px',
+              fontSize: '0.72rem',
+              color: '#dc2626',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontWeight: 600
+            }}
+            title="Sair do sistema"
+          >
+            <LogOut size={12} />
+            Sair
+          </button>
         </div>
       </header>
 
@@ -722,13 +694,26 @@ export default function App() {
           <span>Matriz de NCMs</span>
         </button>
 
-        <button 
-          className={`nav-tab ${activeTab === 'rauf' ? 'active' : ''}`}
-          onClick={() => setActiveTab('rauf')}
-        >
-          <Link2 size={18} />
-          <span>Integração Rauf</span>
-        </button>
+        {usuario.role === 'superadmin' && (
+          <button 
+            className={`nav-tab ${activeTab === 'rauf' ? 'active' : ''}`}
+            onClick={() => setActiveTab('rauf')}
+          >
+            <Link2 size={18} />
+            <span>Integração Rauf</span>
+          </button>
+        )}
+
+        {usuario.role === 'superadmin' && (
+          <button 
+            className={`nav-tab ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin')}
+            style={{ color: activeTab === 'admin' ? '#7e22ce' : undefined }}
+          >
+            <Shield size={18} color={activeTab === 'admin' ? '#7e22ce' : undefined} />
+            <span>Administração</span>
+          </button>
+        )}
       </nav>
 
       {/* Conteúdo Principal */}
@@ -907,145 +892,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Card de Configuração e Identidade do Órgão / Unidade Gestora (Multi-Tenant) */}
-                <div id="card-configuracao-orgao" className="card" style={{ background: '#f8fafc', border: '1px solid #cbd5e1', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
-                    <div>
-                      <strong style={{ fontSize: '0.88rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Building2 size={16} color="#2563eb" /> Identidade do Órgão / Unidade Gestora (Multi-Tenant):
-                      </strong>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        Identifica o tomador, define o <code>instituicao_id</code> no Rauf SaaS e orienta as retenções e conciliações documentais.
-                      </div>
-                    </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {instituicoesRauf.length > 0 && (
-                        <select
-                          className="form-input"
-                          style={{ padding: '4px 8px', fontSize: '0.8rem', fontWeight: 600, maxWidth: '280px' }}
-                          value={orgaoAtivo.id || ''}
-                          onChange={(e) => {
-                            const sel = instituicoesRauf.find(i => String(i.id) === e.target.value);
-                            if (sel) {
-                              handleSelecionarInstituicao({
-                                id: sel.id,
-                                nome: sel.nome,
-                                cnpj: sel.cnpj,
-                                uasg: sel.uasg,
-                                sigla: sel.sigla,
-                                municipio: sel.municipio || municipioMeuOrgao
-                              });
-                            }
-                          }}
-                        >
-                          <option value="">-- Selecionar Órgão do Rauf --</option>
-                          {instituicoesRauf.map(i => (
-                            <option key={i.id} value={i.id}>
-                              {i.sigla ? `[${i.sigla}] ` : ''}{i.nome} (UASG: {i.uasg || '---'})
-                            </option>
-                          ))}
-                        </select>
-                      )}
-
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => carregarInstituicoesRauf(true)}
-                        disabled={carregandoInstituicoes}
-                        style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        title="Sincronizar lista de órgãos do banco de dados do Rauf_App"
-                      >
-                        <RefreshCw size={12} className={carregandoInstituicoes ? 'spin' : ''} />
-                        {carregandoInstituicoes ? 'Sincronizando...' : 'Sincronizar Rauf'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {feedbackSincronizacao && (
-                    <div style={{
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      marginBottom: '8px',
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      background: feedbackSincronizacao.tipo === 'sucesso' ? '#ecfdf5' : feedbackSincronizacao.tipo === 'aviso' ? '#fffbeb' : '#fef2f2',
-                      color: feedbackSincronizacao.tipo === 'sucesso' ? '#065f46' : feedbackSincronizacao.tipo === 'aviso' ? '#92400e' : '#991b1b',
-                      border: feedbackSincronizacao.tipo === 'sucesso' ? '1px solid #a7f3d0' : feedbackSincronizacao.tipo === 'aviso' ? '1px solid #fde68a' : '1px solid #fecaca'
-                    }}>
-                      {feedbackSincronizacao.texto}
-                    </div>
-                  )}
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', paddingTop: '8px', borderTop: '1px solid #e2e8f0' }}>
-                    <div>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>UASG (6 DÍGITOS):</span>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
-                        value={orgaoAtivo.uasg || ''} 
-                        onChange={(e) => handleSelecionarInstituicao({ uasg: e.target.value.slice(0, 6) })} 
-                        placeholder="155007"
-                        maxLength={6}
-                      />
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>SIGLA / UG:</span>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontWeight: 700 }}
-                        value={orgaoAtivo.sigla || ''} 
-                        onChange={(e) => handleSelecionarInstituicao({ sigla: e.target.value.toUpperCase() })} 
-                        placeholder="HUCAM-UFES"
-                      />
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>CNPJ DO ÓRGÃO:</span>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontFamily: 'var(--font-mono)', fontWeight: 700 }}
-                        value={cnpjMeuEstabelecimento} 
-                        onChange={(e) => {
-                          handleSalvarCnpjConfigurado(e.target.value);
-                          handleSelecionarInstituicao({ cnpj: e.target.value });
-                        }} 
-                        placeholder="15.126.437/0006-58"
-                      />
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>CIDADE DO ÓRGÃO:</span>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontWeight: 700 }}
-                        value={municipioMeuOrgao} 
-                        onChange={(e) => {
-                          handleSalvarMunicipioConfigurado(e.target.value);
-                          handleSelecionarInstituicao({ municipio: e.target.value });
-                        }} 
-                        placeholder="Vitória"
-                      />
-                    </div>
-
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>NOME OFICIAL DO ÓRGÃO / RAZÃO SOCIAL:</span>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        style={{ padding: '4px 8px', fontSize: '0.82rem', fontWeight: 600, width: '100%' }}
-                        value={orgaoAtivo.nome || ''} 
-                        onChange={(e) => handleSelecionarInstituicao({ nome: e.target.value })} 
-                        placeholder="EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH"
-                      />
-                    </div>
-                  </div>
-                </div>
 
                 {/* Banner de Validação Automática de Belonging (Destinatário) */}
                 {destinatarioCnpj && (
@@ -1076,7 +923,7 @@ export default function App() {
                         {temDivergenciaDestinatario ? (
                           <>
                             Esta nota fiscal foi emitida para o CNPJ <strong>{destinatarioCnpj}</strong> ({destinatarioNome || 'Destinatário Desconhecido'}).
-                            O CNPJ configurado do seu estabelecimento é <strong>{cnpjMeuEstabelecimento}</strong>.
+                            O CNPJ configurado do seu estabelecimento é <strong>{uasg?.cnpj || '—'}</strong>.
                             <div style={{ fontWeight: 700, marginTop: '4px', color: '#b91c1c' }}>
                               ⚠️ A emissão do relatório foi BLOQUEADA por segurança fiscal.
                             </div>
@@ -1303,7 +1150,7 @@ export default function App() {
                           📍 Local de Execução / Prestação do Serviço:
                         </label>
                         <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                          Regra LC 116/2003: ISS só incide se for executado em <strong>{municipioMeuOrgao}</strong>
+                          Regra LC 116/2003: ISS só incide se for executado em <strong>{uasg?.municipio || 'Vitória'}</strong>
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1313,20 +1160,20 @@ export default function App() {
                           style={{ padding: '6px 10px', fontSize: '0.82rem', flex: 1, fontWeight: 600 }}
                           value={localPrestacaoServico} 
                           onChange={(e) => setLocalPrestacaoServico(e.target.value)} 
-                          placeholder={`Ex: ${municipioMeuOrgao}, Extrema, Belo Horizonte`}
+                          placeholder={`Ex: ${uasg?.municipio || 'Vitória'}, Extrema, Belo Horizonte`}
                         />
                         <button 
                           type="button" 
                           className="btn btn-outline" 
                           style={{ padding: '6px 10px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
-                          onClick={() => setLocalPrestacaoServico(municipioMeuOrgao)}
+                          onClick={() => setLocalPrestacaoServico(uasg?.municipio || 'Vitória')}
                         >
-                          Usar {municipioMeuOrgao}
+                          Usar {uasg?.municipio || 'Vitória'}
                         </button>
                       </div>
-                      {localPrestacaoServico && localPrestacaoServico.trim().toUpperCase() !== municipioMeuOrgao.trim().toUpperCase() && (
+                      {localPrestacaoServico && localPrestacaoServico.trim().toUpperCase() !== (uasg?.municipio || 'Vitória').trim().toUpperCase() && (
                         <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#b45309', fontWeight: 600 }}>
-                          ℹ️ Serviço executado fora de {municipioMeuOrgao} ({localPrestacaoServico}): Alíquota do ISS retido será 0,00% na fonte.
+                          ℹ️ Serviço executado fora de {uasg?.municipio || 'Vitória'} ({localPrestacaoServico}): Alíquota do ISS retido será 0,00% na fonte.
                         </div>
                       )}
                     </div>
@@ -1714,7 +1561,8 @@ export default function App() {
         )}
         {activeTab === 'anexo1' && <Anexo1Tab />}
         {activeTab === 'ncm' && <NcmMatrixTab />}
-        {activeTab === 'rauf' && <RaufIntegracaoTab />}
+        {activeTab === 'rauf' && usuario?.role === 'superadmin' && <RaufIntegracaoTab />}
+        {activeTab === 'admin' && usuario?.role === 'superadmin' && <AdminTab />}
       </main>
 
       {/* Central de Triagem e Análise Paginada de Lote (Opção A) */}
@@ -1733,6 +1581,9 @@ export default function App() {
           podeSalvarNoBanco={activeTab === 'analise'} // Se veio de upload de lote, permite salvar no banco
         />
       )}
+
+      {/* Modal de Alteração de Senha do Usuário */}
+      <ModalAlterarSenha />
     </div>
   );
 }

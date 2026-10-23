@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { type ResultadoConsolidado, ReportPreview, gerarNomeArquivoPdf } from './ReportPreview';
 import { ModalPromptProcesso } from './ModalPromptProcesso';
-import { API_BASE_URL } from '../config/api';
+import { apiFetch } from '../lib/apiFetch';
 
 export interface LoteTriagemModalProps {
   notasIniciais: ResultadoConsolidado[];
@@ -185,7 +185,7 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
         // Atualiza a nota no estado do lote
         handleAtualizarNota(indiceAlvo, notaComProcesso);
 
-        const res = await fetch(`${API_BASE_URL}/api/gerar-pdf`, {
+        const res = await apiFetch<Response>(`/api/gerar-pdf`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(notaComProcesso)
@@ -211,7 +211,7 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
 
         // Gravação automática no banco de dados ao baixar o PDF individual
         try {
-          await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+          await apiFetch('/api/notas/salvar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(notaComProcesso)
@@ -329,7 +329,7 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
           }
         };
 
-        const res = await fetch(`${API_BASE_URL}/api/processo/gerar-pdf-consolidado`, {
+        const res = await apiFetch<Response>(`/api/processo/gerar-pdf-consolidado`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -353,7 +353,7 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
         // Gravação automática de todas as notas do grupo consolidado no banco de dados
         try {
           for (const n of notasAtualizadas) {
-            await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+            await apiFetch('/api/notas/salvar', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(n)
@@ -395,12 +395,11 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
   const handleSalvarNotaIndividual = async (nota: ResultadoConsolidado) => {
     try {
       setSalvandoNota(true);
-      const res = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+      await apiFetch('/api/notas/salvar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nota)
       });
-      if (!res.ok) throw new Error('Erro ao salvar no banco');
       setMsgSucesso(`✓ Nota Fiscal ${nota.numeroNota || ''} gravada com sucesso no histórico PostgreSQL!`);
       setTimeout(() => setMsgSucesso(null), 5000);
     } catch (e: any) {
@@ -417,12 +416,12 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
       setSalvandoLote(true);
       let salvas = 0;
       for (const nota of notas) {
-        const res = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+        await apiFetch('/api/notas/salvar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(nota)
         });
-        if (res.ok) salvas++;
+        salvas++;
       }
       setMsgSucesso(`✅ ${salvas} de ${notas.length} notas foram gravadas com sucesso no histórico PostgreSQL!`);
       setTimeout(() => setMsgSucesso(null), 6000);

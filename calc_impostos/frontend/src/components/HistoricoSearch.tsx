@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, FileText, Download, RefreshCw, Calendar, Building, Layers } from 'lucide-react';
 import { gerarNomeArquivoPdf, type ResultadoConsolidado } from './ReportPreview';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './ProcessoConsolidadoModal';
-import { API_BASE_URL } from '../config/api';
+import { apiFetch } from '../lib/apiFetch';
 
 interface NotaSalvaResumo {
   id: number;
@@ -45,11 +45,8 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   const carregarNotas = async (queryStr: string = '') => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/notas/pesquisar?q=${encodeURIComponent(queryStr)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setNotas(data);
-      }
+      const data = await apiFetch<NotaSalvaResumo[]>(`/api/notas/pesquisar?q=${encodeURIComponent(queryStr)}`);
+      setNotas(data || []);
     } catch (e) {
       console.error('Erro ao buscar histórico:', e);
     } finally {
@@ -92,7 +89,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
       setConsolidando(true);
       const ids = Array.from(selectedIds);
       const promessas = ids.map(id => 
-        fetch(`${API_BASE_URL}/api/notas/${id}`).then(r => r.json())
+        apiFetch<ResultadoConsolidado>(`/api/notas/${id}`)
       );
       const notasCompletas: ResultadoConsolidado[] = await Promise.all(promessas);
 
@@ -181,11 +178,8 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   const handleReabrirNota = async (id: number) => {
     setLoadingId(id);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/notas/${id}`);
-      if (res.ok) {
-        const data: ResultadoConsolidado = await res.json();
-        onSelectNota(data);
-      }
+      const data = await apiFetch<ResultadoConsolidado>(`/api/notas/${id}`);
+      onSelectNota(data);
     } catch (e) {
       alert('Erro ao carregar os detalhes da nota salva.');
     } finally {
@@ -195,11 +189,8 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
 
   const handleDownloadPdfDirect = async (id: number, numeroNota: string, fornecedorNome?: string) => {
     try {
-      const resNota = await fetch(`${API_BASE_URL}/api/notas/${id}`);
-      if (!resNota.ok) return;
-      const dataFull: ResultadoConsolidado = await resNota.json();
-
-      const resPdf = await fetch(`${API_BASE_URL}/api/gerar-pdf`, {
+      const dataFull = await apiFetch<ResultadoConsolidado>(`/api/notas/${id}`);
+      const resPdf = await apiFetch<Response>(`/api/gerar-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataFull)

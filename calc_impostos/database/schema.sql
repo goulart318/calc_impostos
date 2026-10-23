@@ -1,5 +1,44 @@
 -- Esquema do Banco de Dados PostgreSQL para Sistema de Retenções Tributárias
 
+-- =========================================================================
+-- AUTENTICAÇÃO E MULTI-UASG: catálogo de UASGs e usuários do sistema
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS uasgs (
+  id SERIAL PRIMARY KEY,
+  uasg VARCHAR(6) UNIQUE NOT NULL,
+  sigla VARCHAR(30),
+  nome VARCHAR(255) NOT NULL,
+  cnpj VARCHAR(20),
+  municipio VARCHAR(100),
+  rauf_instituicao_id INTEGER NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- UASG inicial (dados já em uso no sistema)
+INSERT INTO uasgs (uasg, sigla, nome, cnpj, municipio, rauf_instituicao_id) VALUES
+('155012', 'HUCAM', 'Hospital Universitário Cassiano Antônio Moraes', '15126437000658', 'Vitória', 4)
+ON CONFLICT (uasg) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS usuarios_calc (
+  id SERIAL PRIMARY KEY,
+  nome VARCHAR(100) NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  senha_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'usuario', -- superadmin | usuario
+  uasg_origem_id INTEGER REFERENCES uasgs(id),  -- NULL apenas para o superadmin
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  forca_troca_senha BOOLEAN NOT NULL DEFAULT TRUE,
+  tentativas_falhas INTEGER NOT NULL DEFAULT 0,
+  bloqueado_ate TIMESTAMP NULL,
+  ultimo_login TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_usuarios_calc_uasg ON usuarios_calc(uasg_origem_id);
+
 CREATE TABLE IF NOT EXISTS ncm_regras (
   id SERIAL PRIMARY KEY,
   ncm_prefixo VARCHAR(10) UNIQUE NOT NULL,
@@ -159,6 +198,11 @@ CREATE TABLE IF NOT EXISTS memoria_tributaria_fornecedores (
 
 CREATE INDEX IF NOT EXISTS idx_memoria_fornecedor_cnpj ON memoria_tributaria_fornecedores(fornecedor_cnpj);
 CREATE INDEX IF NOT EXISTS idx_memoria_ncm_padrao ON memoria_tributaria_fornecedores(ncm_padrao);
+
+-- Multitenant: memória tributária isolada por UASG (legado pertence ao HUCAM)
+ALTER TABLE memoria_tributaria_fornecedores ADD COLUMN IF NOT EXISTS uasg VARCHAR(6);
+UPDATE memoria_tributaria_fornecedores SET uasg = '155012' WHERE uasg IS NULL;
+CREATE INDEX IF NOT EXISTS idx_memoria_uasg ON memoria_tributaria_fornecedores(uasg);
 
 -- Regras Iniciais para Medicamentos, Equipamentos, Combustíveis, Livros e Autopeças
 INSERT INTO ncm_regras (ncm_prefixo, descricao, descricao_categoria, codigo_receita, natureza_reinf, aliq_ir, aliq_csll, aliq_cofins, aliq_pis, condicao_aplicavel, fundamentacao_legal) VALUES

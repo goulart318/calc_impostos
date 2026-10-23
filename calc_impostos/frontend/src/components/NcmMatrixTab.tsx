@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Layers } from 'lucide-react';
-import { API_BASE_URL } from '../config/api';
+import { apiFetch } from '../lib/apiFetch';
 
 export const NcmMatrixTab: React.FC = () => {
   const [ncms, setNcms] = useState<any[]>([]);
@@ -23,9 +23,8 @@ export const NcmMatrixTab: React.FC = () => {
   ];
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/tabelas/ncm`)
-      .then(r => r.json())
-      .then(d => setNcms(d.length > 0 ? d : ncmsIniciais))
+    apiFetch<any[]>('/api/tabelas/ncm')
+      .then(d => setNcms(d && d.length > 0 ? d : ncmsIniciais))
       .catch(() => setNcms(ncmsIniciais));
   }, []);
 

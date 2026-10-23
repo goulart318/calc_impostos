@@ -1,4 +1,5 @@
 import { pool } from '../config/db';
+import { uasgDaSessao } from './requestContext';
 
 export interface MemoriaFornecedorInput {
   fornecedorCnpj: string;
@@ -57,6 +58,7 @@ export class SupplierMemoryService {
     if (!cnpj) return null;
 
     const ncm = this.normalizarNcm(ncmRaw);
+    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
 
     try {
       // 1) Busca regra exata com o NCM especificado
@@ -65,10 +67,11 @@ export class SupplierMemoryService {
           SELECT * FROM memoria_tributaria_fornecedores
           WHERE REPLACE(REPLACE(REPLACE(fornecedor_cnpj, '.', ''), '/', ''), '-', '') = $1
             AND ncm_padrao = $2
+            AND uasg = $3
           ORDER BY updated_at DESC
           LIMIT 1;
         `;
-        const resExata = await pool.query(queryExata, [cnpj, ncm]);
+        const resExata = await pool.query(queryExata, [cnpj, ncm, uasg]);
         if (resExata.rows.length > 0) {
           const r = resExata.rows[0];
           return this.mapearLinha(r);
@@ -80,10 +83,11 @@ export class SupplierMemoryService {
         SELECT * FROM memoria_tributaria_fornecedores
         WHERE REPLACE(REPLACE(REPLACE(fornecedor_cnpj, '.', ''), '/', ''), '-', '') = $1
           AND (ncm_padrao IS NULL OR ncm_padrao = '' OR ncm_padrao = 'GERAL')
+          AND uasg = $2
         ORDER BY updated_at DESC
         LIMIT 1;
       `;
-      const resGeral = await pool.query(queryGeral, [cnpj]);
+      const resGeral = await pool.query(queryGeral, [cnpj, uasg]);
       if (resGeral.rows.length > 0) {
         return this.mapearLinha(resGeral.rows[0]);
       }
@@ -101,15 +105,17 @@ export class SupplierMemoryService {
   public static async salvarOuAtualizarMemoria(input: MemoriaFornecedorInput): Promise<MemoriaFornecedorRegistro> {
     const cnpj = this.normalizarCnpj(input.fornecedorCnpj);
     const ncm = this.normalizarNcm(input.ncmPadrao) || null;
+    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
 
-    // Verifica se já existe registro equivalente
+    // Verifica se já existe registro equivalente para a mesma UASG
     const queryExistente = `
       SELECT id, total_aplicacoes FROM memoria_tributaria_fornecedores
       WHERE REPLACE(REPLACE(REPLACE(fornecedor_cnpj, '.', ''), '/', ''), '-', '') = $1
         AND (ncm_padrao = $2 OR ($2 IS NULL AND (ncm_padrao IS NULL OR ncm_padrao = '')))
+        AND uasg = $3
       LIMIT 1;
     `;
-    const resExistente = await pool.query(queryExistente, [cnpj, ncm]);
+    const resExistente = await pool.query(queryExistente, [cnpj, ncm, uasg]);
 
     if (resExistente.rows.length > 0) {
       const id = resExistente.rows[0].id;
@@ -158,8 +164,8 @@ export class SupplierMemoryService {
         INSERT INTO memoria_tributaria_fornecedores (
           fornecedor_cnpj, fornecedor_nome, ncm_padrao, descricao_padrao,
           codigo_receita_darf, natureza_reinf, aliq_ir, aliq_csll, aliq_cofins, aliq_pis,
-          aliq_inss, aliq_iss, condicao_aplicavel, fundamentacao, observacoes, total_aplicacoes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1)
+          aliq_inss, aliq_iss, condicao_aplicavel, fundamentacao, observacoes, total_aplicacoes, uasg
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1, $16)
         RETURNING *;
       `;
       const resInsert = await pool.query(insertQuery, [
@@ -177,7 +183,8 @@ export class SupplierMemoryService {
         input.aliqIss ?? 0,
         input.condicaoAplicavel || 'Regra Memorizada pelo Auditor',
         input.fundamentacao || 'Memória Tributária Ativa do Fornecedor',
-        input.observacoes || null
+        input.observacoes || null,
+        uasg
       ]);
       return this.mapearLinha(resInsert.rows[0]);
     }
@@ -189,14 +196,15 @@ export class SupplierMemoryService {
   public static async listarPorCnpj(cnpjRaw: string): Promise<MemoriaFornecedorRegistro[]> {
     const cnpj = this.normalizarCnpj(cnpjRaw);
     if (!cnpj) return [];
-
+    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
     try {
       const q = `
         SELECT * FROM memoria_tributaria_fornecedores
         WHERE REPLACE(REPLACE(REPLACE(fornecedor_cnpj, '.', ''), '/', ''), '-', '') = $1
+          AND uasg = $2
         ORDER BY updated_at DESC;
       `;
-      const res = await pool.query(q, [cnpj]);
+      const res = await pool.query(q, [cnpj, uasg]);
       return res.rows.map(r => this.mapearLinha(r));
     } catch (e: any) {
       console.warn('Erro ao listar memórias por CNPJ:', e.message);
@@ -208,12 +216,14 @@ export class SupplierMemoryService {
    * Lista todas as memórias salvas no sistema
    */
   public static async listarTodas(): Promise<MemoriaFornecedorRegistro[]> {
+    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
     try {
       const q = `
         SELECT * FROM memoria_tributaria_fornecedores
+        WHERE uasg = $1
         ORDER BY updated_at DESC;
       `;
-      const res = await pool.query(q);
+      const res = await pool.query(q, [uasg]);
       return res.rows.map(r => this.mapearLinha(r));
     } catch (e: any) {
       console.warn('Erro ao listar todas as memórias:', e.message);
@@ -225,9 +235,10 @@ export class SupplierMemoryService {
    * Remove uma regra memorizada por ID
    */
   public static async excluir(id: number): Promise<boolean> {
+    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
     try {
-      const q = `DELETE FROM memoria_tributaria_fornecedores WHERE id = $1;`;
-      const res = await pool.query(q, [id]);
+      const q = `DELETE FROM memoria_tributaria_fornecedores WHERE id = $1 AND uasg = $2;`;
+      const res = await pool.query(q, [id, uasg]);
       return (res.rowCount || 0) > 0;
     } catch (e: any) {
       console.warn('Erro ao excluir regra da memória:', e.message);

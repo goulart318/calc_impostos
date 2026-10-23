@@ -14,6 +14,10 @@ import { SupplierMemoryService } from './services/supplierMemoryService';
 import { SicafService, DadosSicafConsulta } from './services/sicafService';
 import { RaufIntegrationService } from './services/raufIntegrationService';
 import { RaufCredenciaisService, cadastroPelaTelaHabilitado, tokenAdminValido } from './services/raufCredenciaisService';
+import { AuthService } from './services/authService';
+import { aplicarIdentidadeOrgao, uasgDaSessao, contextoAtual } from './services/requestContext';
+import { autenticar, exigirSuperadmin, reentrarContexto } from './middleware/auth';
+import { authRouter, adminRouter } from './routes/authRoutes';
 
 dotenv.config();
 
@@ -23,6 +27,12 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+
+// Autenticação e administração (login e lista de UASGs são públicos; demais rotas exigem token)
+app.use('/api/auth', authRouter);
+app.use('/api/admin', adminRouter);
+// Todas as demais rotas /api/* exigem usuário autenticado (contexto multi-UASG via AsyncLocalStorage)
+app.use('/api', autenticar);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -35,12 +45,14 @@ const uploadSingleFile = (req: Request, res: Response, next: any) => {
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
       req.file = req.files[0];
     }
-    next();
+    reentrarContexto(req, () => next());
   });
 };
 
 // Inicializa o banco de dados
-initDatabase();
+initDatabase()
+  .then(() => AuthService.garantirMaster())
+  .catch((err: any) => console.warn('Aviso ao garantir superadmin master:', err?.message || err));
 
 /**
  * Cruza a nota fiscal analisada com o histórico no banco de dados.
@@ -54,6 +66,8 @@ async function cruzarComHistoricoEAutoPreencher(
   docHabilInformadoReq?: string
 ): Promise<ResultadoConsolidado> {
   try {
+    // Identidade do órgão sempre vem da UASG da sessão
+    aplicarIdentidadeOrgao(resultado);
     // 1. Consulta concomitante ao SICAF se ainda não preenchida
     if (!resultado.sicaf && resultado.fornecedorCnpj) {
       try {
@@ -288,7 +302,7 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
       }
     }
 
-    let municipioTomador = 'Vitória';
+    let municipioTomador = contextoAtual()?.uasg.municipio || 'Vitória';
     if (notaExtraida.destinatarioCnpj) {
       try {
         const infoTom = await CnpjService.consultarCnpj(notaExtraida.destinatarioCnpj);
@@ -343,7 +357,7 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
 });
 
 // Upload e Processamento em Lote de Múltiplas Notas (PDFs e XMLs)
-app.post('/api/upload-lote', upload.any(), async (req: Request, res: Response) => {
+app.post('/api/upload-lote', uploadSingleFile, async (req: Request, res: Response) => {
   try {
     const files = (req.files as Express.Multer.File[]) || [];
     if (!files || files.length === 0) {
@@ -608,7 +622,7 @@ app.post('/api/recalcular', async (req: Request, res: Response) => {
 
 app.post('/api/gerar-pdf', async (req: Request, res: Response) => {
   try {
-    const resultado: ResultadoConsolidado = req.body;
+    const resultado: ResultadoConsolidado = aplicarIdentidadeOrgao(req.body);
 
     // Garante que o SICAF esteja preenchido antes de gerar o relatório com anexo
     if (!resultado.sicaf && resultado.fornecedorCnpj) {
@@ -665,7 +679,8 @@ app.post('/api/processo/gerar-pdf-consolidado', async (req: Request, res: Respon
 app.get('/api/notas', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 100;'
+      'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at FROM notas_analisadas WHERE uasg = $1 ORDER BY created_at DESC LIMIT 100;',
+      [uasgDaSessao()]
     );
     res.json(result.rows);
   } catch (error: any) {
@@ -681,7 +696,7 @@ app.get('/api/notas', async (req: Request, res: Response) => {
 // Salvar / Atualizar Análise de Nota no PostgreSQL (Sem duplicidade)
 app.post('/api/notas/salvar', async (req: Request, res: Response) => {
   try {
-    const r: ResultadoConsolidado = req.body;
+    const r: ResultadoConsolidado = aplicarIdentidadeOrgao(req.body);
     const saveRes = await HistoryService.salvarOuAtualizarNota(r);
 
     res.json({
@@ -704,7 +719,7 @@ app.post('/api/notas/salvar', async (req: Request, res: Response) => {
 // Alias para compatibilidade
 app.post('/api/salvar-nota', async (req: Request, res: Response) => {
   try {
-    const r: ResultadoConsolidado = req.body;
+    const r: ResultadoConsolidado = aplicarIdentidadeOrgao(req.body);
     const saveRes = await HistoryService.salvarOuAtualizarNota(r);
     res.json({
       success: true,
@@ -723,24 +738,24 @@ app.post('/api/salvar-nota', async (req: Request, res: Response) => {
 app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
   try {
     const q = String(req.query.q || '').trim();
-    let queryText = 'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at FROM notas_analisadas ORDER BY created_at DESC LIMIT 50;';
-    let queryParams: any[] = [];
+    let queryText = 'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at FROM notas_analisadas WHERE uasg = $1 ORDER BY created_at DESC LIMIT 50;';
+    let queryParams: any[] = [uasgDaSessao()];
 
     if (q) {
       queryText = `
         SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at
         FROM notas_analisadas
-        WHERE fornecedor_cnpj ILIKE $1 
+        WHERE uasg = $2 AND (fornecedor_cnpj ILIKE $1 
            OR chave_acesso ILIKE $1 
            OR numero_nota ILIKE $1 
            OR fornecedor_nome ILIKE $1
            OR numero_processo ILIKE $1
            OR documento_habil ILIKE $1
-           OR numero_empenho ILIKE $1
+           OR numero_empenho ILIKE $1)
         ORDER BY created_at DESC 
         LIMIT 50;
       `;
-      queryParams = [`%${q}%`];
+      queryParams = [`%${q}%`, uasgDaSessao()];
     }
 
     const result = await pool.query(queryText, queryParams);
@@ -758,7 +773,7 @@ app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
 // Sincronizar manualmente uma nota para a tabela retencoes_calc_impostos
 app.post('/api/integracao/rauf/sincronizar', async (req: Request, res: Response) => {
   try {
-    const nota: ResultadoConsolidado = req.body;
+    const nota: ResultadoConsolidado = aplicarIdentidadeOrgao(req.body);
     const resultado = await RaufIntegrationService.inserirOuAtualizarRetencao(nota);
     res.json(resultado);
   } catch (err: any) {
@@ -774,7 +789,7 @@ app.get('/api/integracao/rauf/consultar', async (req: Request, res: Response) =>
     if (!processo || !docHabil) {
       return res.status(400).json({ error: 'Parâmetros processo e documentoHabil são obrigatórios.' });
     }
-    const registros = await RaufIntegrationService.consultarRetencaoPorChave(processo, docHabil, String(req.query.uasg || ''));
+    const registros = await RaufIntegrationService.consultarRetencaoPorChave(processo, docHabil, uasgDaSessao() || '');
     res.json(registros);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Erro ao consultar retenções do Rauf_App' });
@@ -854,7 +869,7 @@ app.delete('/api/integracao/rauf/credenciais/:uasg', async (req: Request, res: R
 });
 
 // Órgãos para os quais este servidor possui chave de integração do Rauf (seleção de identidade)
-app.get('/api/integracao/rauf/instituicoes', async (req: Request, res: Response) => {
+app.get('/api/integracao/rauf/instituicoes', exigirSuperadmin, async (req: Request, res: Response) => {
   try {
     const instituicoes = await RaufIntegrationService.listarInstituicoesRauf();
     res.json(instituicoes);
@@ -934,8 +949,9 @@ app.get('/api/dashboard/analytics', async (req: Request, res: Response) => {
              fornecedor_cnpj, fornecedor_nome, destinatario_cnpj, destinatario_nome, 
              optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at 
       FROM notas_analisadas 
+      WHERE uasg = $1
       ORDER BY created_at DESC;
-    `);
+    `, [uasgDaSessao()]);
 
     const rows = result.rows;
 
@@ -1071,7 +1087,7 @@ app.get('/api/dashboard/analytics', async (req: Request, res: Response) => {
 app.get('/api/notas/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(String(req.params.id), 10);
-    const result = await pool.query('SELECT * FROM notas_analisadas WHERE id = $1;', [id]);
+    const result = await pool.query('SELECT * FROM notas_analisadas WHERE id = $1 AND uasg = $2;', [id, uasgDaSessao()]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Análise não encontrada.' });
     }

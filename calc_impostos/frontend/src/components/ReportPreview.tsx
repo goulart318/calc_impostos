@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   Sparkles
 } from 'lucide-react';
-import { API_BASE_URL } from '../config/api';
+import { apiFetch } from '../lib/apiFetch';
 
 export interface ItemCalculado {
   numeroItem: number;
@@ -548,18 +548,11 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
         }))
       };
 
-      const res = await fetch(`${API_BASE_URL}/api/recalcular`, {
+      const resultadoNovo = await apiFetch<ResultadoConsolidado>(`/api/recalcular`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
-      if (!res.ok) {
-        const errJson = await res.json();
-        throw new Error(errJson.error || 'Falha ao recalcular retenções');
-      }
-
-      const resultadoNovo: ResultadoConsolidado = await res.json();
       setCurrentData(resultadoNovo);
       setDadosOriginais(resultadoNovo);
       setModificado(false);
@@ -595,7 +588,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
       setBaixandoPdf(true);
       const payloadEnvio = { ...currentData, numeroProcesso: proc };
 
-      const response = await fetch(`${API_BASE_URL}/api/gerar-pdf`, {
+      const response = await apiFetch<Response>(`/api/gerar-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payloadEnvio)
@@ -615,15 +608,13 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
       // Gravação automática no banco de dados ao gerar o relatório PDF
       try {
         setSalvando(true);
-        const saveRes = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+        await apiFetch('/api/notas/salvar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payloadEnvio)
         });
-        if (saveRes.ok) {
-          setSalvo(true);
-          setTimeout(() => setSalvo(false), 4000);
-        }
+        setSalvo(true);
+        setTimeout(() => setSalvo(false), 4000);
       } catch (errSave) {
         console.warn('Gravação automática após download falhou:', errSave);
       } finally {
@@ -651,23 +642,11 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
         numeroProcesso: currentData.numeroProcesso || null,
         numeroEmpenho: currentData.numeroEmpenho || null
       };
-      const response = await fetch(`${API_BASE_URL}/api/notas/salvar`, {
+      await apiFetch('/api/notas/salvar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payloadParaSalvar)
       });
-
-      if (!response.ok) {
-        let errMsg = 'Erro ao salvar no PostgreSQL';
-        try {
-          const errJson = await response.json();
-          errMsg = errJson.error || errMsg;
-        } catch {
-          const txt = await response.text().catch(() => '');
-          errMsg = `Erro ${response.status}: ${txt.substring(0, 120)}`;
-        }
-        throw new Error(errMsg);
-      }
 
       setSalvo(true);
       setTimeout(() => setSalvo(false), 4000);
@@ -709,13 +688,11 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
         observacoes: `Memorizado pelo auditor via análise da NF #${currentData.numeroNota || 'S/N'}`
       };
 
-      const res = await fetch(`${API_BASE_URL}/api/fornecedores/memoria`, {
+      await apiFetch('/api/fornecedores/memoria', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payloadMemoria)
       });
-
-      if (!res.ok) throw new Error('Falha ao salvar regra na memória');
 
       setMemorizadoSucesso(true);
       setTimeout(() => setMemorizadoSucesso(false), 4000);

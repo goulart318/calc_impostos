@@ -1,6 +1,7 @@
 import { pool } from '../config/db';
 import { ResultadoConsolidado } from './taxEngine';
 import { RaufIntegrationService } from './raufIntegrationService';
+import { uasgDaSessao } from './requestContext';
 
 export interface NotaHistoricoRegistro {
   id: number;
@@ -43,16 +44,18 @@ export class HistoryService {
     fornecedorCnpj?: string;
     numeroNota?: string;
     tipoDocumento?: string;
+    uasg?: string;
   }): string[] {
     const chaves: string[] = [];
+    const uasg = (n.uasg || uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
     if (n.chaveAcesso && n.chaveAcesso.length >= 44) {
-      chaves.push(`chave:${n.chaveAcesso.trim()}`);
+      chaves.push(`uasg:${uasg}:chave:${n.chaveAcesso.trim()}`);
     }
     const cnpj = this.normalizarCnpj(n.fornecedorCnpj);
     const nota = this.normalizarNumeroNota(n.numeroNota);
     const tipo = n.tipoDocumento || 'NFE';
     if (cnpj && nota) {
-      chaves.push(`cnpj_nota:${tipo}:${cnpj}:${nota}`);
+      chaves.push(`uasg:${uasg}:cnpj_nota:${tipo}:${cnpj}:${nota}`);
     }
     return chaves;
   }
@@ -72,6 +75,7 @@ export class HistoryService {
     const numNota = (filtro.numeroNota || '').trim();
     const numNotaLimpo = this.normalizarNumeroNota(numNota);
     const tipo = filtro.tipoDocumento || 'NFE';
+    const uasg = (uasgDaSessao() || '155012').replace(/\D/g, '').padStart(6, '0');
 
     // 1. Tenta consulta no PostgreSQL
     try {
@@ -81,10 +85,10 @@ export class HistoryService {
                   destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto, valor_liquido,
                   total_retido, numero_processo, numero_empenho, dados_json, created_at, updated_at
            FROM notas_analisadas
-           WHERE chave_acesso = $1
+           WHERE chave_acesso = $1 AND uasg = $2
            ORDER BY updated_at DESC, created_at DESC
            LIMIT 1;`,
-          [chave]
+          [chave, uasg]
         );
 
         if (resChave.rows.length > 0) {
@@ -100,6 +104,7 @@ export class HistoryService {
                   total_retido, numero_processo, numero_empenho, dados_json, created_at, updated_at
            FROM notas_analisadas
            WHERE tipo_documento = $1
+             AND uasg = $6
              AND regexp_replace(fornecedor_cnpj, '\\D', '', 'g') = $2
              AND (
                regexp_replace(numero_nota, '\\D', '', 'g') = $3
@@ -108,7 +113,7 @@ export class HistoryService {
              )
            ORDER BY updated_at DESC, created_at DESC
            LIMIT 1;`,
-          [tipo, cnpj, numNota.replace(/\D/g, ''), numNotaLimpo, numNota]
+          [tipo, cnpj, numNota.replace(/\D/g, ''), numNotaLimpo, numNota, uasg]
         );
 
         if (resCnpjNota.rows.length > 0) {
