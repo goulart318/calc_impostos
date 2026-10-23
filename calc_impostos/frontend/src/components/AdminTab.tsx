@@ -407,37 +407,38 @@ export const AdminTab: React.FC = () => {
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {/* Campo de Busca Rápida */}
-              <div className="relative w-full sm:w-72">
+              {/* Campo de Busca Rápida */}
+              <div className="relative w-full sm:w-80">
                 <Input
                   value={buscaUsuario}
                   onChange={(e) => setBuscaUsuario(e.target.value)}
                   placeholder="Filtrar por nome, e-mail..."
-                  className="pl-10 h-11 bg-slate-50 border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus-visible:ring-blue-500"
-                  style={{ paddingLeft: '38px' }}
+                  className="pl-12 h-11 bg-slate-50 border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus-visible:ring-blue-500"
+                  style={{ paddingLeft: '44px' }}
                 />
-                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3">
+                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
                   <SearchIcon className="size-4" />
                 </div>
               </div>
 
               {/* Botões de Ação */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Button
                   variant="outline"
                   onClick={carregarUsuarios}
                   disabled={carregandoUsuarios}
-                  className="h-11 px-4 rounded-xl border-slate-300 text-slate-700 hover:bg-slate-100 text-sm cursor-pointer"
+                  className="h-11 px-4 rounded-xl border-slate-300 text-slate-700 hover:bg-slate-100 text-sm cursor-pointer inline-flex items-center gap-2"
                   title="Atualizar lista"
                 >
-                  <RefreshCwIcon className={`size-4 me-2 ${carregandoUsuarios ? 'animate-spin' : ''}`} />
-                  Atualizar
+                  <RefreshCwIcon className={`size-4 ${carregandoUsuarios ? 'animate-spin' : ''}`} />
+                  <span>Atualizar</span>
                 </Button>
                 <Button
                   onClick={() => setModalNovoUsuario(true)}
-                  className="h-11 px-5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm shadow-md shadow-blue-600/20 flex items-center gap-2 cursor-pointer"
+                  className="h-11 px-5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm shadow-md shadow-blue-600/20 inline-flex items-center gap-2 cursor-pointer"
                 >
                   <UserPlusIcon className="size-4" />
-                  Novo Usuário
+                  <span>Novo Usuário</span>
                 </Button>
               </div>
             </div>
@@ -448,13 +449,13 @@ export const AdminTab: React.FC = () => {
             <table className="w-full text-left text-sm border-collapse">
               <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-700 uppercase font-bold text-xs tracking-wider">
                 <tr>
-                  <th className="py-3.5 px-4">Nome Completo</th>
-                  <th className="py-3.5 px-4">E-mail Institucional</th>
-                  <th className="py-3.5 px-4">Perfil</th>
-                  <th className="py-3.5 px-4">UASG de Origem</th>
-                  <th className="py-3.5 px-4">Último Acesso</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4 text-right">Ações</th>
+                  <th className="py-4 px-5">Nome Completo</th>
+                  <th className="py-4 px-5">E-mail Institucional</th>
+                  <th className="py-4 px-5">Perfil</th>
+                  <th className="py-4 px-5">UASG de Origem</th>
+                  <th className="py-4 px-5">Último Acesso</th>
+                  <th className="py-4 px-5">Status</th>
+                  <th className="py-4 px-5 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -469,16 +470,33 @@ export const AdminTab: React.FC = () => {
                 ) : (
                   usuariosFiltrados.map((u) => (
                     <tr key={u.id} className="hover:bg-blue-50/40 transition-colors">
-                      <td className="py-4 px-4 font-semibold text-slate-900">
-                        {u.nome}
-                        {u.id === usuarioLogado?.id && (
-                          <span className="ms-2 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">
-                            Você
-                          </span>
-                        )}
+                      <td className="py-4 px-5 font-semibold text-slate-900">
+                        <div className="flex items-center gap-3">
+                          <div className="size-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-bold text-xs flex items-center justify-center shadow-sm shrink-0">
+                            {u.nome.split(' ').filter(Boolean).slice(0, 2).map((n: string) => n[0].toUpperCase()).join('') || 'U'}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-900">{u.nome}</span>
+                              {u.id === usuarioLogado?.id && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">
+                                  Você
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 font-normal sm:hidden">
+                              {u.email}
+                            </div>
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-4 px-4 font-mono text-xs text-slate-600">{u.email}</td>
-                      <td className="py-4 px-4">
+                      <td className="py-4 px-5">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-mono text-slate-700">
+                          <MailIcon className="size-3.5 text-slate-400 shrink-0" />
+                          <span>{u.email}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-5">
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                             u.role === 'superadmin'
@@ -495,20 +513,22 @@ export const AdminTab: React.FC = () => {
                           )}
                         </span>
                       </td>
-                      <td className="py-4 px-4">
+                      <td className="py-4 px-5">
                         {u.role === 'superadmin' ? (
-                          <span className="text-purple-700 font-medium text-xs">
-                            Todas (Acesso Livre)
+                          <span className="inline-flex items-center gap-1.5 text-purple-700 font-medium text-xs bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100">
+                            <BuildingIcon className="size-3.5 text-purple-500" /> Todas (Acesso Livre)
                           </span>
                         ) : u.uasg_origem ? (
-                          <span className="font-medium text-slate-800">
-                            {u.uasg_sigla ? `${u.uasg_sigla} (UASG ${u.uasg_origem})` : `UASG ${u.uasg_origem}`}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-800 text-xs">
+                              {u.uasg_sigla ? `${u.uasg_sigla} (UASG ${u.uasg_origem})` : `UASG ${u.uasg_origem}`}
+                            </span>
+                          </div>
                         ) : (
-                          <span className="text-slate-400 italic">—</span>
+                          <span className="text-slate-400 italic text-xs">—</span>
                         )}
                       </td>
-                      <td className="py-4 px-4 text-xs text-slate-500 font-mono">
+                      <td className="py-4 px-5 text-xs text-slate-500 font-mono">
                         {u.ultimo_login
                           ? new Date(u.ultimo_login).toLocaleString('pt-BR', {
                               dateStyle: 'short',
@@ -516,7 +536,7 @@ export const AdminTab: React.FC = () => {
                             })
                           : 'Nunca acessou'}
                       </td>
-                      <td className="py-4 px-4">
+                      <td className="py-4 px-5">
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                             u.ativo
@@ -532,27 +552,29 @@ export const AdminTab: React.FC = () => {
                           {u.ativo ? 'Ativo' : 'Inativo'}
                         </span>
                       </td>
-                      <td className="py-4 px-4 text-right space-x-2 whitespace-nowrap">
-                        <button
-                          onClick={() => handleResetarSenha(u)}
-                          title="Gerar nova senha temporária de acesso"
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors inline-flex items-center gap-1.5 border border-slate-200 cursor-pointer"
-                        >
-                          <KeyIcon className="size-3.5 text-slate-500" />
-                          Redefinir Senha
-                        </button>
-                        {u.email !== 'ulisses.goularte@ebserh.gov.br' && u.id !== usuarioLogado?.id && (
+                      <td className="py-4 px-5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => handleToggleAtivo(u)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border cursor-pointer ${
-                              u.ativo
-                                ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
-                                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
-                            }`}
+                            onClick={() => handleResetarSenha(u)}
+                            title="Gerar nova senha temporária de acesso"
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors inline-flex items-center gap-1.5 border border-slate-200 cursor-pointer"
                           >
-                            {u.ativo ? 'Desativar' : 'Reativar'}
+                            <KeyIcon className="size-3.5 text-slate-500" />
+                            <span>Redefinir Senha</span>
                           </button>
-                        )}
+                          {u.email !== 'ulisses.goularte@ebserh.gov.br' && u.id !== usuarioLogado?.id && (
+                            <button
+                              onClick={() => handleToggleAtivo(u)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border cursor-pointer ${
+                                u.ativo
+                                  ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                              }`}
+                            >
+                              {u.ativo ? 'Desativar' : 'Reativar'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -584,46 +606,46 @@ export const AdminTab: React.FC = () => {
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {/* Campo de Busca Rápida */}
-              <div className="relative w-full sm:w-72">
+              <div className="relative w-full sm:w-80">
                 <Input
                   value={buscaUasg}
                   onChange={(e) => setBuscaUasg(e.target.value)}
                   placeholder="Filtrar por código, sigla ou nome..."
-                  className="pl-10 h-11 bg-slate-50 border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus-visible:ring-blue-500"
-                  style={{ paddingLeft: '38px' }}
+                  className="pl-12 h-11 bg-slate-50 border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus-visible:ring-blue-500"
+                  style={{ paddingLeft: '44px' }}
                 />
-                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3">
+                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
                   <SearchIcon className="size-4" />
                 </div>
               </div>
 
               {/* Botões de Ação */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Button
                   variant="outline"
                   onClick={carregarUasgs}
                   disabled={carregandoUasgs}
-                  className="h-11 px-4 rounded-xl border-slate-300 text-slate-700 hover:bg-slate-100 text-sm cursor-pointer"
+                  className="h-11 px-4 rounded-xl border-slate-300 text-slate-700 hover:bg-slate-100 text-sm cursor-pointer inline-flex items-center gap-2"
                   title="Atualizar catálogo"
                 >
-                  <RefreshCwIcon className={`size-4 me-2 ${carregandoUasgs ? 'animate-spin' : ''}`} />
-                  Atualizar
+                  <RefreshCwIcon className={`size-4 ${carregandoUasgs ? 'animate-spin' : ''}`} />
+                  <span>Atualizar</span>
                 </Button>
                 <Button
                   variant="outline"
                   onClick={handleImportarRauf}
                   disabled={sincronizandoRauf}
-                  className="h-11 px-4 rounded-xl border-blue-300 text-blue-700 hover:bg-blue-50 text-sm font-medium cursor-pointer"
+                  className="h-11 px-4 rounded-xl border-blue-300 text-blue-700 hover:bg-blue-50 text-sm font-medium cursor-pointer inline-flex items-center gap-2"
                 >
-                  <CloudDownloadIcon className={`size-4 me-2 ${sincronizandoRauf ? 'animate-spin' : ''}`} />
-                  {sincronizandoRauf ? 'Sincronizando...' : 'Importar do Rauf'}
+                  <CloudDownloadIcon className={`size-4 ${sincronizandoRauf ? 'animate-spin' : ''}`} />
+                  <span>{sincronizandoRauf ? 'Sincronizando...' : 'Importar do Rauf'}</span>
                 </Button>
                 <Button
                   onClick={() => setModalNovaUasg(true)}
-                  className="h-11 px-5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm shadow-md shadow-blue-600/20 flex items-center gap-2 cursor-pointer"
+                  className="h-11 px-5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm shadow-md shadow-blue-600/20 inline-flex items-center gap-2 cursor-pointer"
                 >
                   <PlusIcon className="size-4" />
-                  Nova UASG
+                  <span>Nova UASG</span>
                 </Button>
               </div>
             </div>
@@ -743,8 +765,8 @@ export const AdminTab: React.FC = () => {
                     value={nomeNovoUser}
                     onChange={(e) => setNomeNovoUser(e.target.value)}
                     placeholder="Ex: Carlos Eduardo de Oliveira"
-                    className="pl-11 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
-                    style={{ paddingLeft: '42px' }}
+                    className="pl-12 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
+                    style={{ paddingLeft: '44px' }}
                     required
                   />
                   <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
@@ -765,8 +787,8 @@ export const AdminTab: React.FC = () => {
                       value={emailNovoUser}
                       onChange={(e) => setEmailNovoUser(e.target.value)}
                       placeholder="usuario@ebserh.gov.br"
-                      className="pl-11 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
-                      style={{ paddingLeft: '42px' }}
+                      className="pl-12 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm"
+                      style={{ paddingLeft: '44px' }}
                       required
                     />
                     <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
@@ -839,8 +861,8 @@ export const AdminTab: React.FC = () => {
                     value={senhaNovoUser}
                     onChange={(e) => setSenhaNovoUser(e.target.value)}
                     placeholder="Deixe em branco para gerar aleatoriamente"
-                    className="pl-11 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 font-mono text-sm focus-visible:ring-blue-500"
-                    style={{ paddingLeft: '42px' }}
+                    className="pl-12 h-11 bg-slate-800/90 border-slate-700 rounded-xl text-white placeholder:text-slate-500 font-mono text-sm focus-visible:ring-blue-500"
+                    style={{ paddingLeft: '44px' }}
                   />
                   <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-3.5">
                     <LockIcon className="size-4" aria-hidden="true" />
