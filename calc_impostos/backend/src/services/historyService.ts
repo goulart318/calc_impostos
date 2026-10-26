@@ -76,20 +76,43 @@ export class HistoryService {
 
   /**
    * Busca no banco de dados se a nota fiscal já passou por análise anterior
-   * Utiliza a chave de acesso ou combinação (CNPJ do emitente + Número da Nota + Tipo)
+   * Utiliza o ID do registro (quando já existente), chave de acesso ou combinação (CNPJ do emitente + Número da Nota + Tipo)
    */
   public static async buscarNotaHistorico(filtro: {
+    id?: number;
     chaveAcesso?: string;
     numeroNota?: string;
     fornecedorCnpj?: string;
     tipoDocumento?: string;
   }): Promise<NotaHistoricoRegistro | null> {
+    const uasg = exigirUasgDaSessao();
+
+    // 0. Busca prioritária por ID se fornecido
+    const idBusca = filtro.id ? Number(filtro.id) : undefined;
+    if (idBusca && !isNaN(idBusca) && idBusca > 0) {
+      try {
+        const resId = await pool.query(
+          `SELECT id, tipo_documento, numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome,
+                  destinatario_cnpj, destinatario_nome, optante_simples, valor_bruto, valor_liquido,
+                  total_retido, numero_processo, numero_empenho, documento_habil, uasg, dados_json, created_at, updated_at
+           FROM notas_analisadas
+           WHERE id = $1 AND uasg = $2
+           LIMIT 1;`,
+          [idBusca, uasg]
+        );
+        if (resId.rows.length > 0) {
+          return this.mapearRegistro(resId.rows[0]);
+        }
+      } catch (err: any) {
+        console.warn('HistoryService: Consulta PostgreSQL por ID indisponível:', err?.message || err);
+      }
+    }
+
     const chave = (filtro.chaveAcesso || '').replace(/\D/g, '');
     const cnpj = this.normalizarCnpj(filtro.fornecedorCnpj);
     const numNota = (filtro.numeroNota || '').trim();
     const numNotaLimpo = this.normalizarNumeroNota(numNota);
     const tipo = filtro.tipoDocumento || 'NFE';
-    const uasg = exigirUasgDaSessao();
 
     // 1. Tenta consulta no PostgreSQL
     try {
@@ -153,7 +176,7 @@ export class HistoryService {
 
   /**
    * Salva ou atualiza a análise de uma nota fiscal evitando qualquer duplicidade.
-   * Se a nota já existir, faz UPDATE preservando e mesclando o número do processo e nota de empenho.
+   * Se a nota já existir, faz UPDATE atualizando dados e mesclando Processo SEI, Documento Hábil e Empenho.
    * Registra auditoria do usuário que analisou a nota.
    * Prioridade absoluta da UASG da sessão autenticada.
    */
@@ -169,21 +192,31 @@ export class HistoryService {
     resultado.uasg = uasgEfetiva;
 
     const notaExistente = await this.buscarNotaHistorico({
+      id: (resultado as any).id,
       chaveAcesso: resultado.chaveAcesso,
       numeroNota: resultado.numeroNota,
       fornecedorCnpj: resultado.fornecedorCnpj,
       tipoDocumento: resultado.tipoDocumento
     });
 
-    // Mescla dados de processo: se a requisição atual não trouxe, preserva o do histórico anterior
-    const processoFinal = (resultado.numeroProcesso || '').trim() || (notaExistente?.numeroProcesso || '').trim() || null;
-    const empenhoFinal = (resultado.numeroEmpenho || '').trim() || (notaExistente?.numeroEmpenho || '').trim() || null;
-    const docHabilFinal = (resultado.documentoHabil || '').trim() || (notaExistente?.documentoHabil || '').trim() || null;
+    // Se o valor foi informado na requisição atual (mesmo string preenchida ou alterada), usa-o;
+    // Se for undefined ou vazio na requisição, preserva o valor que já estava gravado no histórico
+    const processoFinal = (resultado.numeroProcesso !== undefined && resultado.numeroProcesso !== null && String(resultado.numeroProcesso).trim() !== '')
+      ? String(resultado.numeroProcesso).trim()
+      : ((notaExistente?.numeroProcesso || '').trim() || null);
 
-    // Atualiza o próprio objeto resultado com os dados mesclados
-    if (processoFinal) resultado.numeroProcesso = processoFinal;
-    if (empenhoFinal) resultado.numeroEmpenho = empenhoFinal;
-    if (docHabilFinal) resultado.documentoHabil = docHabilFinal;
+    const empenhoFinal = (resultado.numeroEmpenho !== undefined && resultado.numeroEmpenho !== null && String(resultado.numeroEmpenho).trim() !== '')
+      ? String(resultado.numeroEmpenho).trim().toUpperCase()
+      : ((notaExistente?.numeroEmpenho || '').trim() || null);
+
+    const docHabilFinal = (resultado.documentoHabil !== undefined && resultado.documentoHabil !== null && String(resultado.documentoHabil).trim() !== '')
+      ? String(resultado.documentoHabil).trim()
+      : ((notaExistente?.documentoHabil || '').trim() || null);
+
+    // Atualiza o próprio objeto resultado com os dados consolidados
+    resultado.numeroProcesso = processoFinal || undefined;
+    resultado.numeroEmpenho = empenhoFinal || undefined;
+    resultado.documentoHabil = docHabilFinal || undefined;
 
     const ctx = contextoAtual();
     const usuarioId = ctx?.usuario?.id || null;
@@ -210,9 +243,9 @@ export class HistoryService {
             valor_liquido = $10,
             total_retido = $11,
             dados_json = $12,
-            numero_processo = COALESCE($13, numero_processo),
-            numero_empenho = COALESCE($14, numero_empenho),
-            documento_habil = COALESCE($15, documento_habil),
+            numero_processo = $13,
+            numero_empenho = $14,
+            documento_habil = $15,
             usuario_id = COALESCE($16, usuario_id),
             usuario_email = COALESCE($17, usuario_email),
             updated_at = CURRENT_TIMESTAMP
@@ -329,6 +362,119 @@ export class HistoryService {
       numeroProcesso: processoFinal || undefined,
       numeroEmpenho: empenhoFinal || undefined,
       documentoHabil: docHabilFinal || undefined
+    };
+  }
+
+  /**
+   * Atualização direta e prática dos dados básicos do processo (SEI, Documento Hábil / NS Liquidação, Nota de Empenho)
+   * sem necessidade de reprocessar cálculos fiscais.
+   */
+  public static async atualizarDadosProcesso(
+    id: number,
+    dados: {
+      numeroProcesso?: string | null;
+      documentoHabil?: string | null;
+      numeroEmpenho?: string | null;
+    }
+  ): Promise<{
+    id: number;
+    numeroProcesso?: string | null;
+    documentoHabil?: string | null;
+    numeroEmpenho?: string | null;
+  }> {
+    const uasg = exigirUasgDaSessao();
+    
+    // 1. Busca a nota existente para obter o dados_json atual
+    const res = await pool.query(
+      `SELECT id, dados_json, numero_processo, documento_habil, numero_empenho, tipo_documento,
+              numero_nota, chave_acesso, fornecedor_cnpj, fornecedor_nome, destinatario_cnpj,
+              destinatario_nome, optante_simples, valor_bruto, valor_liquido, total_retido, created_at
+       FROM notas_analisadas
+       WHERE id = $1 AND uasg = $2;`,
+      [id, uasg]
+    );
+
+    if (res.rows.length === 0) {
+      throw new Error(`Análise nº ${id} não encontrada para a UASG ${uasg}.`);
+    }
+
+    const row = res.rows[0];
+    const dadosJson = row.dados_json || {};
+
+    const processoFinal = dados.numeroProcesso !== undefined 
+      ? (dados.numeroProcesso ? String(dados.numeroProcesso).trim() : null) 
+      : row.numero_processo;
+      
+    const docHabilFinal = dados.documentoHabil !== undefined 
+      ? (dados.documentoHabil ? String(dados.documentoHabil).trim() : null) 
+      : row.documento_habil;
+      
+    const empenhoFinal = dados.numeroEmpenho !== undefined 
+      ? (dados.numeroEmpenho ? String(dados.numeroEmpenho).trim().toUpperCase() : null) 
+      : row.numero_empenho;
+
+    // Atualiza dentro do JSON também para integridade completa
+    dadosJson.numeroProcesso = processoFinal || undefined;
+    dadosJson.documentoHabil = docHabilFinal || undefined;
+    dadosJson.numeroEmpenho = empenhoFinal || undefined;
+
+    await pool.query(
+      `UPDATE notas_analisadas SET
+        numero_processo = $1,
+        documento_habil = $2,
+        numero_empenho = $3,
+        dados_json = $4,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $5 AND uasg = $6;`,
+      [processoFinal, docHabilFinal, empenhoFinal, JSON.stringify(dadosJson), id, uasg]
+    );
+
+    // Sincroniza em cache de memória
+    const regMemoria: NotaHistoricoRegistro = {
+      id,
+      tipoDocumento: row.tipo_documento,
+      numeroNota: row.numero_nota,
+      chaveAcesso: row.chave_acesso,
+      fornecedorCnpj: row.fornecedor_cnpj,
+      fornecedorNome: row.fornecedor_nome,
+      destinatarioCnpj: row.destinatario_cnpj,
+      destinatarioNome: row.destinatario_nome,
+      optanteSimples: row.optante_simples,
+      valorBruto: parseFloat(row.valor_bruto) || 0,
+      valorLiquido: parseFloat(row.valor_liquido) || 0,
+      totalRetido: parseFloat(row.total_retido) || 0,
+      numeroProcesso: processoFinal || undefined,
+      numeroEmpenho: empenhoFinal || undefined,
+      documentoHabil: docHabilFinal || undefined,
+      uasg,
+      dadosJson,
+      createdAt: row.created_at,
+      updatedAt: new Date()
+    };
+    const mapaUasg = this.obterMapaUasg(uasg);
+    const chaves = this.gerarChavesCache(regMemoria);
+    for (const k of chaves) {
+      mapaUasg.set(k, regMemoria);
+    }
+
+    // Dispara sincronização com Rauf App
+    try {
+      const resultadoComChaves = {
+        ...dadosJson,
+        numeroProcesso: processoFinal || dadosJson.numeroProcesso,
+        documentoHabil: docHabilFinal || dadosJson.documentoHabil,
+        numeroEmpenho: empenhoFinal || dadosJson.numeroEmpenho
+      };
+      await RaufIntegrationService.inserirOuAtualizarRetencao(resultadoComChaves);
+    } catch (eRauf: any) {
+      console.warn('Aviso na sincronização de retenções com Rauf_App:', eRauf?.message || eRauf);
+    }
+
+    return {
+      id,
+      numeroProcesso: processoFinal,
+      documentoHabil: docHabilFinal,
+      numeroEmpenho: empenhoFinal
     };
   }
 

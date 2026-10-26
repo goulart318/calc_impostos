@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Download, RefreshCw, Calendar, Building, Layers } from 'lucide-react';
+import { Search, FileText, Download, RefreshCw, Calendar, Building, Layers, Edit3, CheckCircle2, X } from 'lucide-react';
 import { gerarNomeArquivoPdf, type ResultadoConsolidado } from './ReportPreview';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './ProcessoConsolidadoModal';
 import { apiFetch } from '../lib/apiFetch';
@@ -37,6 +37,14 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [consolidando, setConsolidando] = useState(false);
   const [processoModalData, setProcessoModalData] = useState<ProcessoConsolidadoData | null>(null);
+
+  // Edição rápida de Processo / NS / Empenho
+  const [notaParaEditar, setNotaParaEditar] = useState<NotaSalvaResumo | null>(null);
+  const [editDocHabil, setEditDocHabil] = useState('');
+  const [editProcesso, setEditProcesso] = useState('');
+  const [editEmpenho, setEditEmpenho] = useState('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [toastSucesso, setToastSucesso] = useState<string | null>(null);
 
   const formatBRL = (val: number) => {
     return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -212,6 +220,58 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
       }
     } catch (e) {
       alert('Erro ao gerar PDF do histórico.');
+    }
+  };
+
+  const handleAbrirEdicao = (n: NotaSalvaResumo) => {
+    setNotaParaEditar(n);
+    const dj = n.dados_json || {};
+    setEditDocHabil(n.documento_habil || dj.documentoHabil || '');
+    setEditProcesso(n.numero_processo || dj.numeroProcesso || '');
+    setEditEmpenho(n.numero_empenho || dj.numeroEmpenho || '');
+  };
+
+  const handleSalvarEdicaoBasica = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notaParaEditar) return;
+    setSalvandoEdicao(true);
+    try {
+      const res = await apiFetch<any>(`/api/notas/${notaParaEditar.id}/dados-processo`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentoHabil: editDocHabil.trim() || null,
+          numeroProcesso: editProcesso.trim() || null,
+          numeroEmpenho: editEmpenho.trim() || null
+        })
+      });
+
+      // Atualiza a nota na lista local sem recarregar a tela
+      setNotas(prev => prev.map(item => {
+        if (item.id === notaParaEditar.id) {
+          return {
+            ...item,
+            documento_habil: res.documentoHabil || undefined,
+            numero_processo: res.numeroProcesso || undefined,
+            numero_empenho: res.numeroEmpenho || undefined,
+            dados_json: {
+              ...(item.dados_json || {}),
+              documentoHabil: res.documentoHabil || undefined,
+              numeroProcesso: res.numeroProcesso || undefined,
+              numeroEmpenho: res.numeroEmpenho || undefined
+            }
+          };
+        }
+        return item;
+      }));
+
+      setToastSucesso(`Lançamento da Nota Nº ${notaParaEditar.numero_nota} atualizado com sucesso no banco!`);
+      setTimeout(() => setToastSucesso(null), 4000);
+      setNotaParaEditar(null);
+    } catch (err: any) {
+      alert('Erro ao atualizar dados do lançamento: ' + err.message);
+    } finally {
+      setSalvandoEdicao(false);
     }
   };
 
@@ -537,16 +597,38 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
                       <td style={{ textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{formatBRL(n.valor_liquido)}</td>
 
                       <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                          <button
+                            className="btn-outline"
+                            onClick={() => handleAbrirEdicao(n)}
+                            title="Editar Documento Hábil (NS Liquidação), Processo SEI e Empenho rapidamente"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '6px 10px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              borderColor: '#3b82f6',
+                              color: '#1d4ed8',
+                              background: '#eff6ff',
+                              borderRadius: '6px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Edit3 size={13} />
+                            <span>Editar NS / SEI</span>
+                          </button>
+
                           <button
                             className="btn-secondary"
                             onClick={() => handleReabrirNota(n.id)}
                             disabled={loadingId === n.id}
                             title="Reabrir análise para ajustes e recálculo"
-                            style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                            style={{ padding: '6px 10px', fontSize: '0.78rem' }}
                           >
                             {loadingId === n.id ? <RefreshCw size={14} className="spin" /> : <FileText size={14} />}
-                            <span>Reabrir & Ajustar</span>
+                            <span>Reabrir</span>
                           </button>
 
                           <button
@@ -576,6 +658,170 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
           onClose={() => setProcessoModalData(null)}
           podeSalvarNoBanco={false} // As notas já estão no banco!
         />
+      )}
+
+      {/* Toast de Confirmação */}
+      {toastSucesso && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: '#16a34a',
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '0.9rem',
+          fontWeight: 700,
+          zIndex: 9999,
+          animation: 'fadeIn 0.2s ease-in'
+        }}>
+          <CheckCircle2 size={18} />
+          <span>{toastSucesso}</span>
+        </div>
+      )}
+
+      {/* Modal de Edição Rápida de Lançamento */}
+      {notaParaEditar && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            width: '100%',
+            maxWidth: '520px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            overflow: 'hidden',
+            border: '1px solid var(--border)'
+          }}>
+            {/* Header do Modal */}
+            <div style={{
+              background: 'linear-gradient(135deg, #1e293b, #0f172a)',
+              color: '#ffffff',
+              padding: '18px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Edit3 size={18} color="#60a5fa" />
+                  <span>Editar Lançamento — Nota {notaParaEditar.numero_nota}</span>
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                  {notaParaEditar.fornecedor_nome} • {notaParaEditar.tipo_documento === 'NFE' ? 'NF-e Mercadoria' : 'NFS-e Serviço'}
+                </span>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setNotaParaEditar(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                title="Fechar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Formulário */}
+            <form onSubmit={handleSalvarEdicaoBasica} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '12px',
+                fontSize: '0.82rem',
+                color: '#475569',
+                lineHeight: 1.4
+              }}>
+                💡 <strong>Edição Prática:</strong> Insira ou altere os dados administrativos deste lançamento. As alterações serão salvas imediatamente no banco de dados e refletidas no histórico e nos relatórios.
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#1e293b', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Documento Hábil - Liquidação (NS)</span>
+                  <span style={{ color: '#2563eb', fontWeight: 600 }}>Chave SIAFI / Integração</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editDocHabil}
+                  onChange={(e) => setEditDocHabil(e.target.value)}
+                  placeholder="Ex: 2026NS000123"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', padding: '8px 12px' }}
+                  autoFocus
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Número da Nota de Sistema (NS) de liquidação gerada no SIAFI/SIAFEM.
+                </span>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#1e293b' }}>
+                  Número do Processo SEI
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editProcesso}
+                  onChange={(e) => setEditProcesso(e.target.value)}
+                  placeholder="Ex: 23525.016917/2026-50"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', padding: '8px 12px' }}
+                />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#1e293b' }}>
+                  Nota de Empenho (NE)
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editEmpenho}
+                  onChange={(e) => setEditEmpenho(e.target.value.toUpperCase())}
+                  placeholder="Ex: 2026NE000123"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', padding: '8px 12px' }}
+                />
+              </div>
+
+              {/* Botões do Rodapé */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => setNotaParaEditar(null)}
+                  disabled={salvandoEdicao}
+                  style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={salvandoEdicao}
+                  style={{ padding: '8px 20px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {salvandoEdicao ? <RefreshCw size={15} className="spin" /> : <CheckCircle2 size={15} />}
+                  <span>{salvandoEdicao ? 'Gravando no Banco...' : 'Salvar no Banco de Dados'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

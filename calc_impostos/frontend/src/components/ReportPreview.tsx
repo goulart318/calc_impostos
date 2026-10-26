@@ -208,6 +208,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
   const [baixandoPdf, setBaixandoPdf] = useState(false);
   const [memorizando, setMemorizando] = useState(false);
   const [memorizadoSucesso, setMemorizadoSucesso] = useState(false);
+  const [editandoDadosProcesso, setEditandoDadosProcesso] = useState(false);
 
 
   const itemParaEditavel = (item: ItemCalculado, idx: number): ItemEditavel => {
@@ -251,6 +252,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
     data.numeroNota, 
     data.chaveAcesso, 
     data.numeroProcesso,
+    data.documentoHabil,
     data.numeroEmpenho,
     data.fornecedorCnpj, 
     data.totalBruto, 
@@ -639,16 +641,30 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
       setSalvando(true);
       const payloadParaSalvar = {
         ...currentData,
-        numeroProcesso: currentData.numeroProcesso || null,
-        numeroEmpenho: currentData.numeroEmpenho || null
+        numeroProcesso: currentData.numeroProcesso ? String(currentData.numeroProcesso).trim() : null,
+        documentoHabil: currentData.documentoHabil ? String(currentData.documentoHabil).trim() : null,
+        numeroEmpenho: currentData.numeroEmpenho ? String(currentData.numeroEmpenho).trim().toUpperCase() : null
       };
-      await apiFetch('/api/notas/salvar', {
+      const res = await apiFetch<any>('/api/notas/salvar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payloadParaSalvar)
       });
 
+      if (res && res.notaId) {
+        const atualizado = {
+          ...currentData,
+          id: res.notaId,
+          numeroProcesso: res.numeroProcesso || payloadParaSalvar.numeroProcesso || undefined,
+          documentoHabil: res.documentoHabil || payloadParaSalvar.documentoHabil || undefined,
+          numeroEmpenho: res.numeroEmpenho || payloadParaSalvar.numeroEmpenho || undefined
+        };
+        setCurrentData(atualizado);
+        if (onUpdateData) onUpdateData(atualizado);
+      }
+
       setSalvo(true);
+      setEditandoDadosProcesso(false);
       setTimeout(() => setSalvo(false), 4000);
     } catch (err: any) {
       alert('Erro ao salvar no PostgreSQL: ' + err.message);
@@ -1017,7 +1033,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
 
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>PROCESSO SEI Nº</div>
-              {modoEdicao ? (
+              {(modoEdicao || editandoDadosProcesso) ? (
                 <input
                   type="text"
                   className="form-input"
@@ -1030,18 +1046,53 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
                     if (onUpdateData) onUpdateData(atualizado);
                   }}
                   placeholder="Ex: 23068.012345/2026-99"
-                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px' }}
+                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px', borderColor: editandoDadosProcesso ? '#3b82f6' : undefined }}
                 />
               ) : (
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.numeroProcesso ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                <div 
+                  onClick={() => setEditandoDadosProcesso(true)}
+                  style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: 700, 
+                    color: currentData.numeroProcesso ? 'var(--text-primary)' : 'var(--text-muted)', 
+                    fontFamily: 'var(--font-mono)',
+                    cursor: 'pointer'
+                  }}
+                  title="Clique para alterar Processo SEI"
+                >
                   {currentData.numeroProcesso || 'Não informado'}
                 </div>
               )}
             </div>
 
             <div>
-              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>DOC. HÁBIL - LIQUIDAÇÃO</div>
-              {modoEdicao ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>DOC. HÁBIL - LIQUIDAÇÃO</div>
+                {!modoEdicao && (
+                  <button
+                    type="button"
+                    onClick={() => setEditandoDadosProcesso(!editandoDadosProcesso)}
+                    style={{
+                      background: editandoDadosProcesso ? '#eff6ff' : 'transparent',
+                      border: editandoDadosProcesso ? '1px solid #bfdbfe' : 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      color: '#2563eb',
+                      padding: '1px 5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      fontSize: '0.68rem',
+                      fontWeight: 700
+                    }}
+                    title={editandoDadosProcesso ? "Concluir edição rápida" : "Editar NS da Liquidação, Processo ou Empenho"}
+                  >
+                    <Edit3 size={11} />
+                    <span>{editandoDadosProcesso ? 'OK' : 'Editar'}</span>
+                  </button>
+                )}
+              </div>
+              {(modoEdicao || editandoDadosProcesso) ? (
                 <input
                   type="text"
                   className="form-input"
@@ -1054,10 +1105,20 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
                     if (onUpdateData) onUpdateData(atualizado);
                   }}
                   placeholder="Ex: 2026NS000123"
-                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px' }}
+                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px', borderColor: editandoDadosProcesso ? '#3b82f6' : undefined }}
                 />
               ) : (
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.documentoHabil ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                <div 
+                  onClick={() => setEditandoDadosProcesso(true)}
+                  style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: 700, 
+                    color: currentData.documentoHabil ? 'var(--text-primary)' : 'var(--text-muted)', 
+                    fontFamily: 'var(--font-mono)',
+                    cursor: 'pointer'
+                  }}
+                  title="Clique para inserir ou alterar NS da Liquidação"
+                >
                   {currentData.documentoHabil || 'Não informado'}
                 </div>
               )}
@@ -1065,7 +1126,7 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
 
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)' }}>NOTA DE EMPENHO</div>
-              {modoEdicao ? (
+              {(modoEdicao || editandoDadosProcesso) ? (
                 <input
                   type="text"
                   className="form-input"
@@ -1078,10 +1139,20 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
                     if (onUpdateData) onUpdateData(atualizado);
                   }}
                   placeholder="Ex: 2026NE000123"
-                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px' }}
+                  style={{ fontSize: '0.8rem', padding: '3px 6px', fontFamily: 'var(--font-mono)', width: '100%', marginTop: '2px', borderColor: editandoDadosProcesso ? '#3b82f6' : undefined }}
                 />
               ) : (
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: currentData.numeroEmpenho ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                <div 
+                  onClick={() => setEditandoDadosProcesso(true)}
+                  style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: 700, 
+                    color: currentData.numeroEmpenho ? 'var(--text-primary)' : 'var(--text-muted)', 
+                    fontFamily: 'var(--font-mono)',
+                    cursor: 'pointer'
+                  }}
+                  title="Clique para alterar Nota de Empenho"
+                >
                   {currentData.numeroEmpenho || 'Não informada'}
                 </div>
               )}
