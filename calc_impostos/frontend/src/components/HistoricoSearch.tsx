@@ -237,7 +237,7 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
     setSalvandoEdicao(true);
     try {
       const res = await apiFetch<any>(`/api/notas/${notaParaEditar.id}/dados-processo`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           documentoHabil: editDocHabil.trim() || null,

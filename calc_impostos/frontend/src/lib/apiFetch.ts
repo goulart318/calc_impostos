@@ -71,7 +71,9 @@ export async function apiFetch<T = any>(
   if (!contentType.includes('application/json')) {
     if (!response.ok) {
       const text = await response.text();
-      throw new ApiError(text || `Erro HTTP ${response.status}`, response.status);
+      const matchPre = /<pre>(.*?)<\/pre>/is.exec(text);
+      const clean = matchPre ? matchPre[1] : text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      throw new ApiError(clean || `Erro HTTP ${response.status}`, response.status);
     }
     return response as unknown as T;
   }

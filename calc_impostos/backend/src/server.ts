@@ -808,7 +808,7 @@ app.post('/api/salvar-nota', async (req: Request, res: Response) => {
 });
 
 // Atualização rápida e prática de dados básicos do processo (SEI, Documento Hábil / NS Liquidação, Nota de Empenho)
-app.patch('/api/notas/:id/dados-processo', async (req: Request, res: Response) => {
+const handlerAtualizarDadosProcesso = async (req: Request, res: Response) => {
   try {
     const id = parseInt(String(req.params.id), 10);
     if (!id || isNaN(id)) {
@@ -830,32 +830,11 @@ app.patch('/api/notas/:id/dados-processo', async (req: Request, res: Response) =
     console.error('Erro ao atualizar dados do processo:', error);
     res.status(500).json({ error: error.message || 'Erro ao atualizar dados do processo.' });
   }
-});
+};
 
-// Suporte a PUT como alias para PATCH
-app.put('/api/notas/:id/dados-processo', async (req: Request, res: Response) => {
-  try {
-    const id = parseInt(String(req.params.id), 10);
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ error: 'ID do lançamento inválido.' });
-    }
-    const { numeroProcesso, documentoHabil, numeroEmpenho } = req.body;
-    const atualizado = await HistoryService.atualizarDadosProcesso(id, {
-      numeroProcesso,
-      documentoHabil,
-      numeroEmpenho
-    });
-
-    res.json({
-      success: true,
-      message: 'Dados do lançamento atualizados com sucesso no banco de dados!',
-      ...atualizado
-    });
-  } catch (error: any) {
-    console.error('Erro ao atualizar dados do processo:', error);
-    res.status(500).json({ error: error.message || 'Erro ao atualizar dados do processo.' });
-  }
-});
+app.patch('/api/notas/:id/dados-processo', handlerAtualizarDadosProcesso);
+app.put('/api/notas/:id/dados-processo', handlerAtualizarDadosProcesso);
+app.post('/api/notas/:id/dados-processo', handlerAtualizarDadosProcesso);
 
 // Pesquisar notas salvos por CNPJ, Chave de Acesso, Número da Nota, Processo, Documento Hábil ou Empenho
 app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
