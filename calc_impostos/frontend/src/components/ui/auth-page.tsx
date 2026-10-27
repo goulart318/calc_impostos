@@ -1,19 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from './button';
-import { Input } from './input';
-import {
-  AtSignIcon,
-  LockIcon,
-  Building2Icon,
-  ShieldCheckIcon,
-  EyeIcon,
-  EyeOffIcon,
-  Loader2Icon,
-  AlertCircleIcon,
-  CheckCircle2Icon
-} from 'lucide-react';
+import { Building2Icon, ShieldCheckIcon, FileSearchIcon, LayersIcon } from 'lucide-react';
+import { SignInPage, GlassInputWrapper } from './sign-in';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch } from '@/lib/apiFetch';
+import heroImage from '@/assets/login-hero.jpg';
 
 interface UasgItem {
   id: number;
@@ -30,7 +20,6 @@ export function AuthPage() {
   const [uasgId, setUasgId] = useState<string>('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [mostrarSenha, setMostrarSenha] = useState(false);
 
   const [submetendo, setSubmetendo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -88,242 +77,94 @@ export function AuthPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen w-full bg-[#0a0f1d] text-slate-100 flex flex-col lg:grid lg:grid-cols-2 relative">
-      {/* Coluna Esquerda: Branding Institucional (Exibida em telas grandes) */}
-      <div className="hidden lg:flex relative flex-col justify-between p-12 bg-gradient-to-br from-slate-950 via-[#0b1329] to-[#0a0f1d] border-r border-slate-800/80 overflow-hidden">
-        {/* Padrão geométrico suave de fundo em SVG estático (sem carga de GPU) */}
-        <div className="absolute inset-0 opacity-15 pointer-events-none">
-          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
-            <defs>
-              <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="0.8" />
-              </pattern>
-              <radialGradient id="grad-glow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid-pattern)" />
-            <circle cx="20%" cy="30%" r="280" fill="url(#grad-glow)" />
-          </svg>
-        </div>
+  const campoUasg = (
+    <div>
+      <label htmlFor="uasg-select" className="text-sm font-medium text-slate-400">
+        Unidade Gestora (UASG)
+      </label>
+      <GlassInputWrapper>
+        <select
+          id="uasg-select"
+          value={uasgId}
+          onChange={(e) => setUasgId(e.target.value)}
+          disabled={carregandoUasgs || submetendo}
+          className="w-full bg-transparent text-sm text-white p-4 rounded-2xl focus:outline-none disabled:opacity-60 cursor-pointer"
+        >
+          {carregandoUasgs ? (
+            <option value="" className="bg-slate-900">Carregando Unidades Gestoras...</option>
+          ) : uasgs.length === 0 ? (
+            <option value="" className="bg-slate-900">Nenhuma UASG ativa disponível</option>
+          ) : (
+            uasgs.map((u) => (
+              <option key={u.id} value={u.id} className="bg-slate-900 text-white">
+                {u.sigla ? `${u.sigla} (UASG ${u.uasg})` : `UASG ${u.uasg}`} — {u.nome}
+              </option>
+            ))
+          )}
+        </select>
+      </GlassInputWrapper>
+      <p className="mt-1.5 text-[11px] leading-snug text-slate-500">
+        Usuários convencionais são vinculados à sua UASG de atuação cadastrada.
+      </p>
+    </div>
+  );
 
-        {/* Topo: Logo e Nome do Sistema */}
-        <div className="relative z-10 flex items-center gap-3.5">
+  return (
+    <SignInPage
+      brand={
+        <div className="flex items-center gap-3.5">
           <div className="p-3 rounded-2xl bg-blue-600 text-white shadow-xl shadow-blue-600/30 ring-1 ring-blue-400/40">
-            <Building2Icon className="size-7" />
+            <Building2Icon className="size-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white leading-tight">Retenções Tributárias</h1>
-            <p className="text-xs text-blue-400 font-medium tracking-wide uppercase">Matriz Fiscal & Liquidações SIAFI</p>
-          </div>
-        </div>
-
-        {/* Centro / Base: Destaques de Compliance */}
-        <div className="relative z-10 space-y-6 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/25">
-            <ShieldCheckIcon className="size-4 text-blue-400" />
-            Conformidade com a IN RFB nº 1.234/2012 e LC nº 116/2003
-          </div>
-
-          <div className="space-y-3">
-            <blockquote className="text-lg text-slate-200 font-light leading-relaxed">
-              &ldquo;Sistema automatizado para análise de notas fiscais (NF-e de compras/materiais e NFS-e de serviços), aplicação automática das regras de retenção tributária federal (IN RFB nº 1.234/2012 por NCM ou código de serviço), previdenciária (IN RFB nº 2.110/2022 / CPRB) e geração de relatório individualizado detalhado para inserção no SEI..&rdquo;
-            </blockquote>
-            <p className="text-xs font-mono text-slate-400">
-              
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-              <div className="flex items-center gap-2 font-semibold text-slate-200 mb-1">
-                <CheckCircle2Icon className="size-4 text-emerald-400" />
-                Multi-Tenant Real
-              </div>
-              <p className="text-slate-400 text-[11px] leading-snug">
-                Isolamento estrito de notas, memórias tributárias e histórico por UASG.
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-              <div className="flex items-center gap-2 font-semibold text-slate-200 mb-1">
-                <CheckCircle2Icon className="size-4 text-blue-400" />
-                
-              </div>
-              <p className="text-slate-400 text-[11px] leading-snug">
-               
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Rodapé institucional */}
-        <div className="relative z-10 text-xs text-slate-500 font-mono">
-          Ambiente Corporativo Seguro •
-        </div>
-      </div>
-
-      {/* Coluna Direita: Formulário de Autenticação Estável e Amplo */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-14 relative bg-[#0a0f1d]">
-        <div className="w-full max-w-xl mx-auto p-8 sm:p-10 rounded-3xl bg-slate-900/90 border border-slate-700/80 shadow-2xl shadow-black/80 space-y-7">
-          {/* Header Mobile com Identidade */}
-          <div className="flex items-center gap-3.5 lg:hidden pb-4 border-b border-slate-800">
-            <div className="p-3 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
-              <Building2Icon className="size-6" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">Retenções Tributárias</h2>
-              <p className="text-xs text-blue-400 font-medium">Matriz Fiscal & Liquidações SIAFI</p>
-            </div>
-          </div>
-
-          {/* Título do Card */}
-          <div className="space-y-1.5">
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              Acesse sua conta
-            </h2>
-            <p className="text-sm text-slate-300">
-              Insira suas credenciais institucionais para acessar o painel de retenções fiscais.
-            </p>
-          </div>
-
-          {/* Mensagem de Erro (se houver) */}
-          {erro && (
-            <div className="p-4 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-sm flex items-start gap-3 shadow-sm animate-fadeIn">
-              <AlertCircleIcon className="size-5 text-red-400 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-red-200 leading-snug">{erro}</p>
-                <p className="text-xs text-red-300/80 leading-snug">
-                  Verifique se o e-mail e a senha digitados estão corretos. Usuários comuns são autenticados diretamente em sua UASG cadastrada.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Formulário com Dimensões Confortáveis */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Seletor de UASG */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="uasg-select" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Unidade Gestora (UASG)
-                </label>
-                <span className="text-[11px] text-blue-400 font-medium">
-                  Identificação do Órgão
-                </span>
-              </div>
-              <div className="relative">
-                <select
-                  id="uasg-select"
-                  value={uasgId}
-                  onChange={(e) => setUasgId(e.target.value)}
-                  disabled={carregandoUasgs || submetendo}
-                  className="w-full h-13 px-4 rounded-xl border border-slate-700 bg-slate-950/90 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:opacity-60 cursor-pointer font-medium"
-                >
-                  {carregandoUasgs ? (
-                    <option value="">Carregando Unidades Gestoras...</option>
-                  ) : uasgs.length === 0 ? (
-                    <option value="">Nenhuma UASG ativa disponível</option>
-                  ) : (
-                    uasgs.map((u) => (
-                      <option key={u.id} value={u.id} className="bg-slate-900 text-white py-2">
-                        {u.sigla ? `${u.sigla} (UASG ${u.uasg})` : `UASG ${u.uasg}`} — {u.nome}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-              <p className="text-[11px] text-slate-400 leading-snug">
-                * Usuários convencionais são vinculados compulsoriamente à sua UASG de atuação cadastrada.
-              </p>
-            </div>
-
-            {/* E-mail Institucional */}
-            <div className="space-y-2">
-              <label htmlFor="email-input" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                E-mail Institucional
-              </label>
-              <div className="relative">
-                <Input
-                  id="email-input"
-                  placeholder="usuario@ebserh.gov.br"
-                  className="pl-12 h-13 bg-slate-950/90 border-slate-700 rounded-xl text-white text-base placeholder:text-slate-500 focus-visible:ring-blue-500 transition-all"
-                  style={{ paddingLeft: '48px' }}
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={submetendo}
-                  required
-                />
-                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-4">
-                  <AtSignIcon className="size-5" aria-hidden="true" />
-                </div>
-              </div>
-            </div>
-
-            {/* Senha */}
-            <div className="space-y-2">
-              <label htmlFor="password-input" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                Senha de Acesso
-              </label>
-              <div className="relative">
-                <Input
-                  id="password-input"
-                  placeholder="••••••••••••"
-                  className="pl-12 pr-12 h-13 bg-slate-950/90 border-slate-700 rounded-xl text-white text-base placeholder:text-slate-500 focus-visible:ring-blue-500 transition-all font-mono"
-                  style={{ paddingLeft: '48px', paddingRight: '48px' }}
-                  type={mostrarSenha ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
-                  disabled={submetendo}
-                  required
-                />
-                <div className="text-slate-400 pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center pl-4">
-                  <LockIcon className="size-5" aria-hidden="true" />
-                </div>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setMostrarSenha(!mostrarSenha)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                  title={mostrarSenha ? 'Ocultar senha' : 'Ver senha'}
-                >
-                  {mostrarSenha ? <EyeOffIcon className="size-5" /> : <EyeIcon className="size-5" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Botão de Login Grande e Confortável */}
-            <Button
-              type="submit"
-              disabled={submetendo || carregandoUasgs}
-              className="w-full h-13 bg-blue-600 hover:bg-blue-500 text-white font-bold text-base rounded-xl shadow-xl shadow-blue-600/30 transition-all mt-3 cursor-pointer flex items-center justify-center gap-2"
-            >
-              {submetendo ? (
-                <>
-                  <Loader2Icon className="size-5 animate-spin me-2" />
-                  Autenticando credenciais...
-                </>
-              ) : (
-                'Entrar na Plataforma'
-              )}
-            </Button>
-          </form>
-
-          {/* Rodapé do Form */}
-          <div className="pt-5 border-t border-slate-800 text-center space-y-1.5">
-            <p className="text-xs text-slate-400">
-              Acesso exclusivo a servidores e auditores autorizados da EBSERH e instituições integradas.
-            </p>
-            <p className="text-[11px] text-slate-500 font-mono">
-              v1.2.0 • Sistema Integrado de Retenções Tributárias (SIAFI / SEI)
+            <p className="text-lg font-bold tracking-tight text-white leading-tight">Retenções Tributárias</p>
+            <p className="text-[11px] text-blue-400 font-medium tracking-wide uppercase">
+              Matriz Fiscal &amp; Liquidações SIAFI
             </p>
           </div>
         </div>
-      </div>
-    </div>
+      }
+      title={<span className="font-light text-white tracking-tighter">Acesse sua conta</span>}
+      description="Insira suas credenciais institucionais para acessar o painel de retenções fiscais."
+      heroImageSrc={heroImage}
+      highlights={[
+        {
+          icon: <ShieldCheckIcon className="size-5" />,
+          title: 'IN RFB nº 1.234/2012',
+          text: 'Retenções federais por NCM e código de serviço, com fundamentação legal.',
+        },
+        {
+          icon: <FileSearchIcon className="size-5" />,
+          title: 'NF-e e NFS-e',
+          text: 'Leitura automática de XML e PDF e relatório individualizado para o SEI.',
+        },
+        {
+          icon: <LayersIcon className="size-5" />,
+          title: 'Isolamento por UASG',
+          text: 'Notas, memória tributária e histórico separados por unidade gestora.',
+        },
+      ]}
+      extraFields={campoUasg}
+      email={email}
+      password={senha}
+      onEmailChange={setEmail}
+      onPasswordChange={setSenha}
+      onSignIn={handleSubmit}
+      loading={submetendo}
+      submitDisabled={carregandoUasgs}
+      error={erro}
+      submitLabel="Entrar na Plataforma"
+      loadingLabel="Autenticando credenciais..."
+      footer={
+        <div className="border-t border-slate-800 pt-5 text-center space-y-1.5">
+          <p className="text-xs text-slate-400">
+            Acesso exclusivo a servidores e auditores autorizados da EBSERH e instituições integradas.
+          </p>
+          <p className="text-[11px] text-slate-500 font-mono">
+            v1.2.0 • Sistema Integrado de Retenções Tributárias (SIAFI / SEI)
+          </p>
+        </div>
+      }
+    />
   );
 }

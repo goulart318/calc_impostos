@@ -73,6 +73,87 @@ export class PdfParser {
       .trim();
   }
 
+  private static parseValoresItemDanfe(qtdStr: string | undefined, restoLinha: string | undefined): { valorUnitario: number; valorTotal: number } {
+    if (!restoLinha) return { valorUnitario: 0, valorTotal: 0 };
+    const limpo = restoLinha.trim();
+    const qtd = parseFloat((qtdStr || '1').replace(',', '.')) || 1;
+
+    // Caso valores colados sem espaço: ex: 330,00990,00 ou 1.800,001.800,00 ou 330,001.320,00
+    const mColados = limpo.match(/^([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/);
+    if (mColados) {
+      const vUnit = parseFloat(mColados[1].replace(/\./g, '').replace(',', '.'));
+      const vTot = parseFloat(mColados[2].replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(vTot) && vTot > 0) {
+        return { valorUnitario: !isNaN(vUnit) && vUnit > 0 ? vUnit : vTot / qtd, valorTotal: vTot };
+      }
+    }
+
+    // Caso valores com espaço ou pontuação regular
+    const tokens = limpo.split(/\s+/).map(t => parseFloat(t.replace(/\./g, '').replace(',', '.'))).filter(n => !isNaN(n) && n > 0);
+    if (tokens.length >= 2) {
+      return { valorUnitario: tokens[0], valorTotal: tokens[1] };
+    } else if (tokens.length === 1) {
+      return { valorUnitario: tokens[0] / qtd, valorTotal: tokens[0] };
+    }
+
+    return { valorUnitario: 0, valorTotal: 0 };
+  }
+
+  private static extrairDescricaoItemDanfe(trechoTextoAntes: string): string {
+    const linhas = trechoTextoAntes.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+    const descrPartes: string[] = [];
+
+    for (let i = linhas.length - 1; i >= 0; i--) {
+      const l = linhas[i];
+      const up = l.toUpperCase();
+
+      if (
+        up.startsWith('VALOR APROXIMADO') ||
+        /^R\$\s*[\d\.,]+$/i.test(l) ||
+        up.startsWith('PRODUTO:') ||
+        up.startsWith('VALID:') ||
+        up.startsWith('ANVISA:') ||
+        up.startsWith('LOTE') ||
+        up.startsWith('S/N:') ||
+        up.startsWith('CÓD.') ||
+        up.startsWith('COD.') ||
+        up.startsWith('DADOS') ||
+        up.startsWith('FOLHA:') ||
+        up.startsWith('Nº 00') ||
+        up.startsWith('SÉRIE') ||
+        up.startsWith('DANFE') ||
+        up.startsWith('NATUREZA DA OPERAÇÃO') ||
+        up.startsWith('PROTOCOLO') ||
+        up.startsWith('INSCRIÇÃO') ||
+        up.startsWith('CNPJ') ||
+        up.startsWith('CHAVE') ||
+        up.startsWith('CONSULTA') ||
+        up.startsWith('WWW.') ||
+        up.startsWith('BASE CÁLCULO') ||
+        up.startsWith('VALOR TOTAL') ||
+        up.startsWith('VALOR DO') ||
+        up.startsWith('QUANTIDADE') ||
+        up.startsWith('FRETE') ||
+        up.startsWith('RAZÃO SOCIAL') ||
+        up.startsWith('ENDEREÇO') ||
+        up.startsWith('MUNICÍPIO') ||
+        up.startsWith('UF') ||
+        /^\d{1,4}$/.test(l) ||
+        /^[A-Z0-9_\-]{8,25}$/.test(l)
+      ) {
+        if (descrPartes.length > 0) {
+          break;
+        }
+        continue;
+      }
+
+      descrPartes.unshift(l);
+      if (descrPartes.length >= 2) break;
+    }
+
+    return descrPartes.join(' ').trim();
+  }
+
   public static async parsePdf(pdfBuffer: Buffer): Promise<NotaFiscalExtraida & {
     destaqueIr?: number;
     destaqueInss?: number;
@@ -86,9 +167,122 @@ export class PdfParser {
     aliqIssNfseDestaque?: number;
   }> {
     let text = '';
+    const itensExtraidosColunaNcm: {
+      ncm: string;
+      cst: string;
+      descricao?: string;
+      valorBruto?: number;
+      valorUnitario?: number;
+      quantidade?: number;
+    }[] = [];
+
     try {
       const parseFn = typeof pdfParse === 'function' ? pdfParse : (pdfParse as any).default || pdfParse;
-      const data = await parseFn(pdfBuffer);
+      const data = await parseFn(pdfBuffer, {
+        pagerender: async (pageData: any) => {
+          const textContent = await pageData.getTextContent();
+          let lastY: any, pageText = '';
+          const items: { str: string; x: number; y: number }[] = [];
+
+          for (const item of textContent.items) {
+            if (lastY === item.transform[5] || !lastY) {
+              pageText += ' ' + item.str;
+            } else {
+              pageText += '\n' + item.str;
+            }
+            lastY = item.transform[5];
+
+            const str = (item.str || '').trim();
+            if (str.length > 0) {
+              items.push({
+                str,
+                x: Math.round(item.transform[4]),
+                y: Math.round(item.transform[5])
+              });
+            }
+          }
+
+          // Busca formal da coluna NCM/SH no cabeçalho da tabela de produtos do DANFE
+          const ncmHeader = items.find(it => /^NCM(\/SH)?$/i.test(it.str) || it.str.toUpperCase() === 'NCM/SH');
+          if (ncmHeader) {
+            const xNcm = ncmHeader.x;
+
+            items.sort((a, b) => b.y - a.y || a.x - b.x);
+            const lines: { y: number; items: typeof items }[] = [];
+            let currY: number | null = null;
+            let currLine: typeof items = [];
+
+            for (const it of items) {
+              if (currY === null || Math.abs(it.y - currY) <= 4) {
+                currLine.push(it);
+                currY = it.y;
+              } else {
+                lines.push({ y: currY, items: currLine });
+                currLine = [it];
+                currY = it.y;
+              }
+            }
+            if (currLine.length > 0) lines.push({ y: currY, items: currLine });
+
+            for (let li = 0; li < lines.length; li++) {
+              const line = lines[li];
+              if (line.items.some(it => /^NCM(\/SH)?$/i.test(it.str))) continue;
+
+              // Encontra o NCM alinhado sob a coluna NCM/SH da tabela
+              const itemNcm = line.items.find(it => Math.abs(it.x - xNcm) <= 25 && /^\d{8}$/.test(it.str));
+              if (!itemNcm) continue;
+
+              const ncm = itemNcm.str;
+              const itemCst = line.items.find(it => it.x > itemNcm.x && it.x < itemNcm.x + 55 && /^\d{2,3}$/.test(it.str));
+              const itemCfop = line.items.find(it => it.x > itemNcm.x + 30 && it.x < itemNcm.x + 90 && /^[12567]\d{3}$/.test(it.str));
+              const itemQtd = line.items.find(it => it.x > itemNcm.x + 80 && it.x < itemNcm.x + 130 && /^\d+$/.test(it.str));
+
+              const valoresItems = line.items.filter(it => it.x > itemNcm.x + 100 && /^[0-9\.]+,\d{2}$/.test(it.str));
+              let valorUnitario = 0;
+              let valorTotal = 0;
+              if (valoresItems.length >= 2) {
+                valorUnitario = parseFloat(valoresItems[0].str.replace(/\./g, '').replace(',', '.'));
+                valorTotal = parseFloat(valoresItems[1].str.replace(/\./g, '').replace(',', '.'));
+              } else if (valoresItems.length === 1) {
+                valorTotal = parseFloat(valoresItems[0].str.replace(/\./g, '').replace(',', '.'));
+              }
+
+              let descrPartes: string[] = [];
+              const descrMesmaLinha = line.items.filter(it => it.x < xNcm - 15 && it.x > 120 && !/^[A-Z0-9_\-]{10,25}$/.test(it.str)).map(it => it.str).join(' ').trim();
+              if (descrMesmaLinha) descrPartes.push(descrMesmaLinha);
+
+              for (let k = li + 1; k < Math.min(lines.length, li + 5); k++) {
+                const lNext = lines[k];
+                if (lNext.items.some(it => Math.abs(it.x - xNcm) <= 25 && /^\d{8}$/.test(it.str))) break;
+                const textoExtra = lNext.items.filter(it => it.x < xNcm - 15 && it.x > 120).map(it => it.str).join(' ').trim();
+                if (
+                  textoExtra &&
+                  !textoExtra.startsWith('Lote') &&
+                  !textoExtra.startsWith('Valid') &&
+                  !textoExtra.startsWith('Anvisa') &&
+                  !textoExtra.startsWith('Produto:') &&
+                  !textoExtra.startsWith('Valor') &&
+                  !textoExtra.startsWith('R$')
+                ) {
+                  descrPartes.push(textoExtra);
+                }
+              }
+
+              itensExtraidosColunaNcm.push({
+                ncm,
+                cst: itemCst ? (itemCst.str.length === 3 ? itemCst.str.substring(1) : itemCst.str) : '40',
+                quantidade: itemQtd ? parseFloat(itemQtd.str) : 1,
+                valorUnitario,
+                valorBruto: valorTotal,
+                descricao: descrPartes.join(' ').trim()
+              });
+            }
+          }
+
+          return pageText + '\n';
+        }
+      });
+
       if (data && data.text && data.text.length > 50) {
         text = data.text;
       }
@@ -273,7 +467,16 @@ export class PdfParser {
         if (recebemosMatch && recebemosMatch[1]) {
           fornecedorNome = recebemosMatch[1].trim();
         } else {
-          fornecedorNome = 'Prestador / Fornecedor Identificado no Documento';
+          const matchTopoDanfe = text.match(/S[EÉ]RIE[:\s]+\d+\s+([A-Z0-9\s\.\-&]{4,70}?)(?=\r?\n\s*(?:Avenida|Av\.|Rua|Al\.|Rodovia|Estrada|Praça|Complemento|CEP|Fone|DANFE))/i);
+          if (matchTopoDanfe && matchTopoDanfe[1]) {
+            const cand = matchTopoDanfe[1].trim();
+            if (cand.length >= 4 && !cand.toUpperCase().includes('DANFE')) {
+              fornecedorNome = this.formatarNomeEmpresa(cand);
+            }
+          }
+          if (!fornecedorNome) {
+            fornecedorNome = 'Prestador / Fornecedor Identificado no Documento';
+          }
         }
       }
     }
@@ -535,15 +738,26 @@ export class PdfParser {
 
       itens.push(itemServico);
     } else {
-      const ncmsEncontrados: { ncm: string; cst: string; descricao?: string }[] = [];
+      const ncmsEncontrados: {
+        ncm: string;
+        cst: string;
+        descricao?: string;
+        valorBruto?: number;
+        valorUnitario?: number;
+        quantidade?: number;
+      }[] = [];
 
-      let secaoProdutos = text;
-      const regexHeaderProd = /DADOS\s+DO(?:S)?\s+PRODUTO(?:S)?/gi;
-      const indicesHeaders: number[] = [];
-      let mHeader;
-      while ((mHeader = regexHeaderProd.exec(text)) !== null) {
-        indicesHeaders.push(mHeader.index);
-      }
+      // 1. PRIORIDADE MÁXIMA: Itens extraídos diretamente procurando a coluna NCM/SH nas páginas da DANFE
+      if (itensExtraidosColunaNcm.length > 0) {
+        ncmsEncontrados.push(...itensExtraidosColunaNcm);
+      } else {
+        let secaoProdutos = text;
+        const regexHeaderProd = /DADOS\s+DO(?:S)?\s+PRODUTO(?:S)?/gi;
+        const indicesHeaders: number[] = [];
+        let mHeader;
+        while ((mHeader = regexHeaderProd.exec(text)) !== null) {
+          indicesHeaders.push(mHeader.index);
+        }
 
       if (indicesHeaders.length > 0) {
         const blocos: string[] = [];
@@ -562,20 +776,35 @@ export class PdfParser {
         secaoProdutos = blocos.join('\n\n--- PAGINA ---\n\n');
       }
 
+      // Máscara da chave de acesso e de protocolos longos para evitar casamentos falsos de NCM
+      let textoVarreduraItens = secaoProdutos;
+      const chaves44 = textoVarreduraItens.match(/\b\d{44}\b/g) || [];
+      for (const ch of chaves44) {
+        textoVarreduraItens = textoVarreduraItens.split(ch).join(' '.repeat(44));
+      }
+      const protocolosLongos = textoVarreduraItens.match(/\b\d{15}\b/g) || [];
+      for (const pr of protocolosLongos) {
+        textoVarreduraItens = textoVarreduraItens.split(pr).join(' '.repeat(15));
+      }
+
       // 1) Busca primária estruturada: NCM de 8 dígitos seguido de CST (2 a 3 dígitos ou 1/00), CFOP (1/2/5/6/7xxx) e Unidade (2 a 4 letras)
-      // Esse é o padrão exato de DANFEs nacionais (evita falsos positivos com registros ANVISA de 11 dígitos ou códigos internos)
-      const regexItemEstruturado = /(\d{8})\s*([0-9]\/[0-9]{2}|\d{2,3})\s*([12567]\d{3})\s*([A-Za-z]{2,4})?/g;
+      // Exige fronteira de palavra \b ou quebra de linha antes do NCM para nunca casar dentro de sequências numéricas maiores
+      const regexItemEstruturado = /(?:^|\n|\b)(\d{8})\s*([0-9]\/[0-9]{2}|\d{2,3})\s*([12567]\d{3})\s*([A-Za-z]{2,4})?(?:[\t ]*(\d+(?:[\.,]\d+)?))?(?:[\t ]*([\d\.,]+?))?(?:[\t ]*([\d\.,]+(?:\s+[\d\.,]+)*))?(?=\r?\n|$)/g;
       let matchEstruturado;
-      while ((matchEstruturado = regexItemEstruturado.exec(secaoProdutos)) !== null) {
+      while ((matchEstruturado = regexItemEstruturado.exec(textoVarreduraItens)) !== null) {
         const candidatoNcm = matchEstruturado[1];
         const candidatoCst = matchEstruturado[2];
         if (this.ehNcmValido(candidatoNcm)) {
-          let descrItem = '';
+          const idxItem = matchEstruturado.index;
+          const qtdStr = matchEstruturado[5];
+          const restoValores = ((matchEstruturado[6] || '') + (matchEstruturado[7] || '')).trim();
+
+          const valores = this.parseValoresItemDanfe(qtdStr, restoValores);
 
           // 1. Tenta capturar descrição colada na mesma linha antes do NCM (ex: "AJ-501 VALVULA MEC.AO90213911...")
-          const idxItem = matchEstruturado.index;
-          const inicioLinha = Math.max(0, secaoProdutos.lastIndexOf('\n', idxItem) + 1);
-          const pedacoLinhaAntes = secaoProdutos.substring(inicioLinha, idxItem).trim();
+          let descrItem = '';
+          const inicioLinha = Math.max(0, textoVarreduraItens.lastIndexOf('\n', idxItem) + 1);
+          const pedacoLinhaAntes = textoVarreduraItens.substring(inicioLinha, idxItem).trim();
           if (pedacoLinhaAntes.length > 3) {
             const limpoMesmaLinha = pedacoLinhaAntes.replace(/^[\d\-_]{4,25}\s*/, '').trim();
             if (limpoMesmaLinha.length >= 3 && !limpoMesmaLinha.startsWith('COD.') && !limpoMesmaLinha.startsWith('DADOS')) {
@@ -583,81 +812,28 @@ export class PdfParser {
             }
           }
 
-          // 2. Se não encontrou na mesma linha, busca nas linhas imediatamente anteriores (ex: tabela SILIMED / Advanced)
+          // 2. Se não encontrou na mesma linha, busca nas linhas imediatamente anteriores pelo método inteligente
           if (!descrItem) {
-            const inicioJanela = Math.max(0, idxItem - 500);
-            const trechoAnt = secaoProdutos.substring(inicioJanela, idxItem);
-            const linhasAnt = trechoAnt.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
-
-            for (let li = linhasAnt.length - 1; li >= 0; li--) {
-              const l = linhasAnt[li];
-              const up = l.toUpperCase();
-              if (
-                !up.startsWith('DADOS') && 
-                !up.startsWith('CÓDIGO') && 
-                !up.startsWith('COD.') &&
-                !up.startsWith('DESCRI') && 
-                !up.startsWith('PRODUTO') &&
-                !up.startsWith('VALOR') &&
-                !up.startsWith('UNIT') &&
-                !up.startsWith('TOTAL') &&
-                !up.startsWith('DESC') &&
-                !up.startsWith('B.CÁLC') &&
-                !up.startsWith('B.CALC') &&
-                !up.startsWith('ICMS') &&
-                !up.startsWith('IPI') &&
-                !up.startsWith('ALÍQ') &&
-                !up.startsWith('ALIQ') &&
-                !up.startsWith('REG.') &&
-                !up.startsWith('SERIE') &&
-                !up.startsWith('LOTE') &&
-                !up.startsWith('DT.') &&
-                !up.startsWith('AL.') &&
-                !up.startsWith('ENTO') &&
-                !up.startsWith('ORROG') &&
-                !up.startsWith('ONV') &&
-                !up.includes('Nº DE SERIE') &&
-                !up.includes('LOTE:') &&
-                !up.includes('LOTE DO') &&
-                !up.includes('FAB:') &&
-                !up.includes('VAL:') &&
-                !up.includes('VALIDADE') &&
-                !up.includes('QUANT:') &&
-                !up.includes('QUANT.') &&
-                !up.startsWith('L./') &&
-                !up.includes('L./Q.') &&
-                !up.includes('PFCP') &&
-                !up.includes('VFCP') &&
-                !up.includes('PICMS') &&
-                !up.includes('VICMS') &&
-                !up.includes('...') &&
-                !/^\d+$/.test(l) &&
-                !up.includes('NCM') &&
-                !up.includes('CST') &&
-                !up.includes('CFOP') &&
-                l.length > 3
-              ) {
-                const limpa = l.replace(/^[\d\-_]{4,25}\s*/, '').trim();
-                if (limpa.length >= 3) {
-                  descrItem = limpa;
-                  break;
-                }
-              }
-            }
+            const inicioJanela = Math.max(0, idxItem - 600);
+            const trechoAnt = textoVarreduraItens.substring(inicioJanela, idxItem);
+            descrItem = this.extrairDescricaoItemDanfe(trechoAnt);
           }
 
           const cstLimpo = candidatoCst.includes('/') ? candidatoCst.split('/')[1] : (candidatoCst.length >= 2 ? candidatoCst.substring(candidatoCst.length - 2) : candidatoCst);
           ncmsEncontrados.push({
             ncm: candidatoNcm,
             cst: cstLimpo,
-            descricao: descrItem || undefined
+            descricao: descrItem || undefined,
+            valorBruto: valores.valorTotal > 0 ? valores.valorTotal : undefined,
+            valorUnitario: valores.valorUnitario > 0 ? valores.valorUnitario : undefined,
+            quantidade: qtdStr ? parseFloat(qtdStr.replace(',', '.')) : undefined
           });
         }
       }
 
       // 2) Busca detalhada por linha na seção de produtos (se não encontrou pela estrutura combinada)
       if (ncmsEncontrados.length === 0) {
-        const linhasSecao = secaoProdutos.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+        const linhasSecao = textoVarreduraItens.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
         let descrCandidata = '';
         for (let i = 0; i < linhasSecao.length; i++) {
           const linha = linhasSecao[i];
@@ -700,11 +876,12 @@ export class PdfParser {
       if (ncmsEncontrados.length === 0) {
         const regexLinhaItem = /(?:^|\s)([0-9]{4}\.?[0-9]{2}\.?[0-9]{2})\s+([0-9]{2,3})\s+([0-9]{4})\s+([A-Za-z]{2,4})\s+([\d\.,]+)\s+([\d\.,]+)/gm;
         let matchLinha;
-        while ((matchLinha = regexLinhaItem.exec(secaoProdutos)) !== null) {
+        while ((matchLinha = regexLinhaItem.exec(textoVarreduraItens)) !== null) {
           const ncmLimpo = matchLinha[1].replace(/\D/g, '');
           const cstLimpo = matchLinha[2].substring(0, 2);
+          const vBruto = parseFloat(matchLinha[6].replace(/\./g, '').replace(',', '.'));
           if (this.ehNcmValido(ncmLimpo) && !ncmsEncontrados.some(x => x.ncm === ncmLimpo)) {
-            ncmsEncontrados.push({ ncm: ncmLimpo, cst: cstLimpo });
+            ncmsEncontrados.push({ ncm: ncmLimpo, cst: cstLimpo, valorBruto: !isNaN(vBruto) ? vBruto : undefined });
           }
         }
       }
@@ -712,7 +889,7 @@ export class PdfParser {
       if (ncmsEncontrados.length === 0) {
         const regexFormatado = /\b(\d{4}\.\d{2}\.\d{2})\b/g;
         let matchFmt;
-        while ((matchFmt = regexFormatado.exec(secaoProdutos)) !== null) {
+        while ((matchFmt = regexFormatado.exec(textoVarreduraItens)) !== null) {
           const limpo = matchFmt[1].replace(/\D/g, '');
           if (this.ehNcmValido(limpo)) {
             if (!ncmsEncontrados.some(x => x.ncm === limpo)) {
@@ -725,7 +902,7 @@ export class PdfParser {
       if (ncmsEncontrados.length === 0) {
         const regexOitoDigitos = /\b(\d{8})\b/g;
         let matchOito;
-        while ((matchOito = regexOitoDigitos.exec(secaoProdutos)) !== null) {
+        while ((matchOito = regexOitoDigitos.exec(textoVarreduraItens)) !== null) {
           const limpo = matchOito[1];
           if (this.ehNcmValido(limpo)) {
             if (!ncmsEncontrados.some(x => x.ncm === limpo)) {
@@ -734,6 +911,7 @@ export class PdfParser {
           }
         }
       }
+    }
 
       // Detecção de retenções federais expressas nas Informações Complementares da NF-e
       // Exemplo: "IMPOSTOS RETIDOS NA FONTE: PIS R$ 21,61 0,65% ,COFINS R$ 99,75 3,00% ,CSLL R$ 33,25 1,00% ,IRRF R$ 39,90 1,20%"
@@ -773,14 +951,27 @@ export class PdfParser {
       else if (descrCateter) descrDefault = descrCateter[1].trim();
 
       if (ncmsEncontrados.length > 0) {
+        // Se a soma dos valores brutos individuais for coerente com o total da nota (ou total for 0)
+        const somaBrutosItens = Number(ncmsEncontrados.reduce((acc, it) => acc + (it.valorBruto || 0), 0).toFixed(2));
+        const temValoresIndividuaisValidos = somaBrutosItens > 0 && (valorTotal === 0 || Math.abs(somaBrutosItens - valorTotal) <= 1.0);
+
+        if (valorTotal === 0 && somaBrutosItens > 0) {
+          valorTotal = somaBrutosItens;
+        }
+
         const valorUnitarioSubtotal = valorTotal > 0 ? (valorTotal / ncmsEncontrados.length) : 0;
+
         ncmsEncontrados.forEach((itemNcm, idx) => {
+          const valorFinalItem = (temValoresIndividuaisValidos && itemNcm.valorBruto && itemNcm.valorBruto > 0)
+            ? itemNcm.valorBruto
+            : (itemNcm.valorBruto && itemNcm.valorBruto > 0 && valorTotal === 0 ? itemNcm.valorBruto : Number(valorUnitarioSubtotal.toFixed(2)));
+
           const itemAdicionar: ItemAnaliseInput = {
             numeroItem: idx + 1,
             descricao: itemNcm.descricao || descrDefault,
             ncm: itemNcm.ncm,
             cst: itemNcm.cst || '01',
-            valorBruto: Number(valorUnitarioSubtotal.toFixed(2))
+            valorBruto: valorFinalItem
           };
 
           // Se a nota fiscal traz retenção federal na fonte expressa pelo fornecedor (órgão público tomador)
