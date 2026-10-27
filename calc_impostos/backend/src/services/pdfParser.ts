@@ -73,30 +73,64 @@ export class PdfParser {
       .trim();
   }
 
-  private static parseValoresItemDanfe(qtdStr: string | undefined, restoLinha: string | undefined): { valorUnitario: number; valorTotal: number } {
-    if (!restoLinha) return { valorUnitario: 0, valorTotal: 0 };
-    const limpo = restoLinha.trim();
-    const qtd = parseFloat((qtdStr || '1').replace(',', '.')) || 1;
+  private static parseValoresItemDanfe(restoLinha: string | undefined, valorTotalNota?: number): { quantidade: number; valorUnitario: number; valorTotal: number } {
+    let valorUnitario = 0;
+    let valorTotal = 0;
+    let qtd = 1;
 
-    // Caso valores colados sem espaço: ex: 330,00990,00 ou 1.800,001.800,00 ou 330,001.320,00
-    const mColados = limpo.match(/^([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/);
-    if (mColados) {
-      const vUnit = parseFloat(mColados[1].replace(/\./g, '').replace(',', '.'));
-      const vTot = parseFloat(mColados[2].replace(/\./g, '').replace(',', '.'));
-      if (!isNaN(vTot) && vTot > 0) {
-        return { valorUnitario: !isNaN(vUnit) && vUnit > 0 ? vUnit : vTot / qtd, valorTotal: vTot };
+    if (!restoLinha) return { quantidade: qtd, valorUnitario, valorTotal };
+    let limpo = restoLinha.trim();
+
+    // Se inicia com quantidade inteira ou decimal seguida de espaço: ex: "3 330,00990,00" ou "1 1.800,001.800,00"
+    const mQtdEspaco = limpo.match(/^(\d+(?:[\.,]\d+)?)\s+(.*)$/);
+    if (mQtdEspaco) {
+      qtd = parseFloat(mQtdEspaco[1].replace(/\./g, '').replace(',', '.')) || 1;
+      limpo = mQtdEspaco[2].trim();
+    }
+
+    // 1. Caso 4 decimais colados: 3.000,00000,66001.980,00...
+    const mColados4Dec = limpo.match(/^([0-9]{1,3}(?:\.[0-9]{3})*,\d{4})([0-9]{1,3}(?:\.[0-9]{3})*,\d{4})([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/);
+    if (mColados4Dec) {
+      qtd = parseFloat(mColados4Dec[1].replace(/\./g, '').replace(',', '.'));
+      valorUnitario = parseFloat(mColados4Dec[2].replace(/\./g, '').replace(',', '.'));
+      valorTotal = parseFloat(mColados4Dec[3].replace(/\./g, '').replace(',', '.'));
+      return { quantidade: qtd, valorUnitario, valorTotal };
+    }
+
+    // 2. Caso 2 decimais colados: 330,00990,00 ou 1.800,001.800,00
+    const mColados2Dec = limpo.match(/^([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/);
+    if (mColados2Dec) {
+      valorUnitario = parseFloat(mColados2Dec[1].replace(/\./g, '').replace(',', '.'));
+      valorTotal = parseFloat(mColados2Dec[2].replace(/\./g, '').replace(',', '.'));
+      return { quantidade: qtd, valorUnitario, valorTotal };
+    }
+
+    // 3. Tokens separados por espaço
+    const tokens = limpo.split(/\s+/).map(t => {
+      const v = parseFloat(t.replace(/\./g, '').replace(',', '.'));
+      return isNaN(v) ? null : v;
+    }).filter((v): v is number => v !== null && v > 0);
+
+    if (tokens.length >= 2) {
+      valorUnitario = tokens[0];
+      valorTotal = tokens[1];
+      return { quantidade: qtd, valorUnitario, valorTotal };
+    } else if (tokens.length === 1) {
+      valorTotal = tokens[0];
+      valorUnitario = valorTotal / qtd;
+      return { quantidade: qtd, valorUnitario, valorTotal };
+    }
+
+    // 4. Se não achou e o valor total da nota estiver presente na string:
+    if (valorTotalNota && valorTotalNota > 0) {
+      const vNotaFormatado = valorTotalNota.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (limpo.includes(vNotaFormatado)) {
+        valorTotal = valorTotalNota;
+        if (qtd > 0) valorUnitario = valorTotal / qtd;
       }
     }
 
-    // Caso valores com espaço ou pontuação regular
-    const tokens = limpo.split(/\s+/).map(t => parseFloat(t.replace(/\./g, '').replace(',', '.'))).filter(n => !isNaN(n) && n > 0);
-    if (tokens.length >= 2) {
-      return { valorUnitario: tokens[0], valorTotal: tokens[1] };
-    } else if (tokens.length === 1) {
-      return { valorUnitario: tokens[0] / qtd, valorTotal: tokens[0] };
-    }
-
-    return { valorUnitario: 0, valorTotal: 0 };
+    return { quantidade: qtd, valorUnitario, valorTotal };
   }
 
   private static extrairDescricaoItemDanfe(trechoTextoAntes: string): string {
@@ -114,6 +148,13 @@ export class PdfParser {
         up.startsWith('VALID:') ||
         up.startsWith('ANVISA:') ||
         up.startsWith('LOTE') ||
+        up.includes('LOTE:') ||
+        up.includes('DT VAL:') ||
+        up.includes('DT. VAL') ||
+        up.includes('PFCP') ||
+        up.includes('VFCP') ||
+        up.includes('PICMS') ||
+        up.includes('VICMS') ||
         up.startsWith('S/N:') ||
         up.startsWith('CÓD.') ||
         up.startsWith('COD.') ||
@@ -138,6 +179,16 @@ export class PdfParser {
         up.startsWith('ENDEREÇO') ||
         up.startsWith('MUNICÍPIO') ||
         up.startsWith('UF') ||
+        up.startsWith('VALOR') ||
+        up.startsWith('UNIT') ||
+        up.startsWith('TOTAL') ||
+        up.startsWith('DESC') ||
+        up.startsWith('B.CÁLC') ||
+        up.startsWith('ICMS') ||
+        up.startsWith('IPI') ||
+        up.startsWith('ALÍQ') ||
+        up.includes('CÓDIGO PRODUTO') ||
+        up.includes('DESCRIÇÃO DO PRODUTO') ||
         /^\d{1,4}$/.test(l) ||
         /^[A-Z0-9_\-]{8,25}$/.test(l)
       ) {
@@ -147,7 +198,8 @@ export class PdfParser {
         continue;
       }
 
-      descrPartes.unshift(l);
+      const limpa = l.replace(/^[\d\-_]{4,25}\s*/, '').trim();
+      descrPartes.unshift(limpa || l);
       if (descrPartes.length >= 2) break;
     }
 
@@ -167,121 +219,10 @@ export class PdfParser {
     aliqIssNfseDestaque?: number;
   }> {
     let text = '';
-    const itensExtraidosColunaNcm: {
-      ncm: string;
-      cst: string;
-      descricao?: string;
-      valorBruto?: number;
-      valorUnitario?: number;
-      quantidade?: number;
-    }[] = [];
 
     try {
       const parseFn = typeof pdfParse === 'function' ? pdfParse : (pdfParse as any).default || pdfParse;
-      const data = await parseFn(pdfBuffer, {
-        pagerender: async (pageData: any) => {
-          const textContent = await pageData.getTextContent();
-          let lastY: any, pageText = '';
-          const items: { str: string; x: number; y: number }[] = [];
-
-          for (const item of textContent.items) {
-            if (lastY === item.transform[5] || !lastY) {
-              pageText += ' ' + item.str;
-            } else {
-              pageText += '\n' + item.str;
-            }
-            lastY = item.transform[5];
-
-            const str = (item.str || '').trim();
-            if (str.length > 0) {
-              items.push({
-                str,
-                x: Math.round(item.transform[4]),
-                y: Math.round(item.transform[5])
-              });
-            }
-          }
-
-          // Busca formal da coluna NCM/SH no cabeçalho da tabela de produtos do DANFE
-          const ncmHeader = items.find(it => /^NCM(\/SH)?$/i.test(it.str) || it.str.toUpperCase() === 'NCM/SH');
-          if (ncmHeader) {
-            const xNcm = ncmHeader.x;
-
-            items.sort((a, b) => b.y - a.y || a.x - b.x);
-            const lines: { y: number; items: typeof items }[] = [];
-            let currY: number | null = null;
-            let currLine: typeof items = [];
-
-            for (const it of items) {
-              if (currY === null || Math.abs(it.y - currY) <= 4) {
-                currLine.push(it);
-                currY = it.y;
-              } else {
-                lines.push({ y: currY, items: currLine });
-                currLine = [it];
-                currY = it.y;
-              }
-            }
-            if (currLine.length > 0) lines.push({ y: currY, items: currLine });
-
-            for (let li = 0; li < lines.length; li++) {
-              const line = lines[li];
-              if (line.items.some(it => /^NCM(\/SH)?$/i.test(it.str))) continue;
-
-              // Encontra o NCM alinhado sob a coluna NCM/SH da tabela
-              const itemNcm = line.items.find(it => Math.abs(it.x - xNcm) <= 25 && /^\d{8}$/.test(it.str));
-              if (!itemNcm) continue;
-
-              const ncm = itemNcm.str;
-              const itemCst = line.items.find(it => it.x > itemNcm.x && it.x < itemNcm.x + 55 && /^\d{2,3}$/.test(it.str));
-              const itemCfop = line.items.find(it => it.x > itemNcm.x + 30 && it.x < itemNcm.x + 90 && /^[12567]\d{3}$/.test(it.str));
-              const itemQtd = line.items.find(it => it.x > itemNcm.x + 80 && it.x < itemNcm.x + 130 && /^\d+$/.test(it.str));
-
-              const valoresItems = line.items.filter(it => it.x > itemNcm.x + 100 && /^[0-9\.]+,\d{2}$/.test(it.str));
-              let valorUnitario = 0;
-              let valorTotal = 0;
-              if (valoresItems.length >= 2) {
-                valorUnitario = parseFloat(valoresItems[0].str.replace(/\./g, '').replace(',', '.'));
-                valorTotal = parseFloat(valoresItems[1].str.replace(/\./g, '').replace(',', '.'));
-              } else if (valoresItems.length === 1) {
-                valorTotal = parseFloat(valoresItems[0].str.replace(/\./g, '').replace(',', '.'));
-              }
-
-              let descrPartes: string[] = [];
-              const descrMesmaLinha = line.items.filter(it => it.x < xNcm - 15 && it.x > 120 && !/^[A-Z0-9_\-]{10,25}$/.test(it.str)).map(it => it.str).join(' ').trim();
-              if (descrMesmaLinha) descrPartes.push(descrMesmaLinha);
-
-              for (let k = li + 1; k < Math.min(lines.length, li + 5); k++) {
-                const lNext = lines[k];
-                if (lNext.items.some(it => Math.abs(it.x - xNcm) <= 25 && /^\d{8}$/.test(it.str))) break;
-                const textoExtra = lNext.items.filter(it => it.x < xNcm - 15 && it.x > 120).map(it => it.str).join(' ').trim();
-                if (
-                  textoExtra &&
-                  !textoExtra.startsWith('Lote') &&
-                  !textoExtra.startsWith('Valid') &&
-                  !textoExtra.startsWith('Anvisa') &&
-                  !textoExtra.startsWith('Produto:') &&
-                  !textoExtra.startsWith('Valor') &&
-                  !textoExtra.startsWith('R$')
-                ) {
-                  descrPartes.push(textoExtra);
-                }
-              }
-
-              itensExtraidosColunaNcm.push({
-                ncm,
-                cst: itemCst ? (itemCst.str.length === 3 ? itemCst.str.substring(1) : itemCst.str) : '40',
-                quantidade: itemQtd ? parseFloat(itemQtd.str) : 1,
-                valorUnitario,
-                valorBruto: valorTotal,
-                descricao: descrPartes.join(' ').trim()
-              });
-            }
-          }
-
-          return pageText + '\n';
-        }
-      });
+      const data = await parseFn(pdfBuffer);
 
       if (data && data.text && data.text.length > 50) {
         text = data.text;
@@ -527,8 +468,8 @@ export class PdfParser {
       /VALOR\s+L[ÍI]QUIDO[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       /VALOR\s+TOTAL[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ] : [
-      // 1. PRIORIDADE MÁXIMA: "V. TOTAL DA NOTA" ou "VALOR TOTAL DA NOTA" (DANFE oficial)
-      /(?:V\.?\s*TOTAL\s*DA\s*NOTA|VALOR\s*TOTAL\s*DA\s*NOTA)\s*[:\.]?\s*[\r\n]*\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      // 1. PRIORIDADE MÁXIMA: "V. TOTAL DA NOTA" ou "VALOR TOTAL DA NOTA" ou "VALOR TOTAL DA NF" (DANFE oficial)
+      /(?:V\.?\s*TOTAL\s*DA\s*(?:NOTA|NF|NF-E)|VALOR\s*TOTAL\s*DA\s*(?:NOTA|NF|NF-E))\s*[:\.]?\s*[\r\n]*\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       // 2. Canhoto de recebimento do DANFE: "EMISSÃO: 07/10/2026 VALOR TOTAL: R$ 435,00 DESTINATÁRIO"
       /VALOR\s*TOTAL\s*:?\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*(?:DESTINAT[ÁA]RIO|EMISS[ÃA]O|$)/i,
       // 3. Fatura / Duplicata
@@ -536,9 +477,9 @@ export class PdfParser {
       // 4. Valor Líquido
       /VALOR\s+L[ÍI]QUIDO[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       // 5. Genérico "VALOR TOTAL" (sem casar "DOS PRODUTOS")
-      /VALOR\s*TOTAL(?!\s*DOS?\s*PRODUTOS)[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
-      // 6. ÚLTIMO RECURSO (somente se não constar V. TOTAL DA NOTA): V. TOTAL DOS PRODUTOS
-      /(?:V\.?\s*TOTAL\s*DOS\s*PRODUTOS|VALOR\s*TOTAL\s*DOS\s*PRODUTOS)\s*[:\.]?\s*[\r\n]*\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
+      /VALOR\s*TOTAL(?!\s*(?:DOS?\s*)?PRODUTOS)[^\d\n]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
+      // 6. ÚLTIMO RECURSO (somente se não constar V. TOTAL DA NOTA): V. TOTAL DOS PRODUTOS ou VALOR TOTAL PRODUTOS
+      /(?:V\.?\s*TOTAL\s*(?:DOS\s*)?PRODUTOS|VALOR\s*TOTAL\s*(?:DOS\s*)?PRODUTOS)\s*[:\.]?\s*[\r\n]*\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ];
 
     for (const pv of padroesValorNota) {
@@ -747,17 +688,13 @@ export class PdfParser {
         quantidade?: number;
       }[] = [];
 
-      // 1. PRIORIDADE MÁXIMA: Itens extraídos diretamente procurando a coluna NCM/SH nas páginas da DANFE
-      if (itensExtraidosColunaNcm.length > 0) {
-        ncmsEncontrados.push(...itensExtraidosColunaNcm);
-      } else {
-        let secaoProdutos = text;
-        const regexHeaderProd = /DADOS\s+DO(?:S)?\s+PRODUTO(?:S)?/gi;
-        const indicesHeaders: number[] = [];
-        let mHeader;
-        while ((mHeader = regexHeaderProd.exec(text)) !== null) {
-          indicesHeaders.push(mHeader.index);
-        }
+      let secaoProdutos = text;
+      const regexHeaderProd = /DADOS\s+DO(?:S)?\s+PRODUTO(?:S)?/gi;
+      const indicesHeaders: number[] = [];
+      let mHeader;
+      while ((mHeader = regexHeaderProd.exec(text)) !== null) {
+        indicesHeaders.push(mHeader.index);
+      }
 
       if (indicesHeaders.length > 0) {
         const blocos: string[] = [];
@@ -789,17 +726,16 @@ export class PdfParser {
 
       // 1) Busca primária estruturada: NCM de 8 dígitos seguido de CST (2 a 3 dígitos ou 1/00), CFOP (1/2/5/6/7xxx) e Unidade (2 a 4 letras)
       // Exige fronteira de palavra \b ou quebra de linha antes do NCM para nunca casar dentro de sequências numéricas maiores
-      const regexItemEstruturado = /(?:^|\n|\b)(\d{8})\s*([0-9]\/[0-9]{2}|\d{2,3})\s*([12567]\d{3})\s*([A-Za-z]{2,4})?(?:[\t ]*(\d+(?:[\.,]\d+)?))?(?:[\t ]*([\d\.,]+?))?(?:[\t ]*([\d\.,]+(?:\s+[\d\.,]+)*))?(?=\r?\n|$)/g;
+      const regexItemEstruturado = /(?:^|\n|\b)(\d{8})\s*([0-9]\/[0-9]{2}|\d{2,3})\s*([12567]\d{3})\s*([A-Za-z]{2,4})?[\t ]*([^\r\n]*)/g;
       let matchEstruturado;
       while ((matchEstruturado = regexItemEstruturado.exec(textoVarreduraItens)) !== null) {
         const candidatoNcm = matchEstruturado[1];
         const candidatoCst = matchEstruturado[2];
         if (this.ehNcmValido(candidatoNcm)) {
           const idxItem = matchEstruturado.index;
-          const qtdStr = matchEstruturado[5];
-          const restoValores = ((matchEstruturado[6] || '') + (matchEstruturado[7] || '')).trim();
+          const restoLinha = matchEstruturado[5];
 
-          const valores = this.parseValoresItemDanfe(qtdStr, restoValores);
+          const valores = this.parseValoresItemDanfe(restoLinha, valorTotal);
 
           // 1. Tenta capturar descrição colada na mesma linha antes do NCM (ex: "AJ-501 VALVULA MEC.AO90213911...")
           let descrItem = '';
@@ -826,7 +762,7 @@ export class PdfParser {
             descricao: descrItem || undefined,
             valorBruto: valores.valorTotal > 0 ? valores.valorTotal : undefined,
             valorUnitario: valores.valorUnitario > 0 ? valores.valorUnitario : undefined,
-            quantidade: qtdStr ? parseFloat(qtdStr.replace(',', '.')) : undefined
+            quantidade: valores.quantidade > 0 ? valores.quantidade : undefined
           });
         }
       }
@@ -911,7 +847,6 @@ export class PdfParser {
           }
         }
       }
-    }
 
       // Detecção de retenções federais expressas nas Informações Complementares da NF-e
       // Exemplo: "IMPOSTOS RETIDOS NA FONTE: PIS R$ 21,61 0,65% ,COFINS R$ 99,75 3,00% ,CSLL R$ 33,25 1,00% ,IRRF R$ 39,90 1,20%"
