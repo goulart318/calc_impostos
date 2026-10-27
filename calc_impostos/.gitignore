@@ -23,3 +23,7 @@ backend/.env
 # Sistema Operacional
 .DS_Store
 Thumbs.db
+
+# Modelos e notas fiscais de teste
+modelos/*
+!modelos/.gitkeep

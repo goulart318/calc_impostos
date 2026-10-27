@@ -1,0 +1,29 @@
+# Dependências
+node_modules/
+**/node_modules/
+
+# Builds
+dist/
+**/dist/
+
+# Variáveis de ambiente
+.env
+**/.env
+
+# Arquivos temporários e logs
+*.log
+*.tmp
+paginas_detalhadas.txt
+**/*.tsbuildinfo
+
+# Modelos de teste e notas fiscais
+calc_impostos/modelos/*
+!calc_impostos/modelos/.gitkeep
+modelos/*
+!modelos/.gitkeep
+
+# IDE e Sistema Operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
