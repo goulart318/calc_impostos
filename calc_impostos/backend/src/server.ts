@@ -402,9 +402,10 @@ async function processarNotaExtraidaUnica(
     localPrestacaoServico: reqBody?.localPrestacaoServico || notaExtraida.localPrestacaoServico,
     municipioTomador: reqBody?.municipioTomador || municipioTomador,
     valorInssDestacado: parseFloat(String(reqBody?.valorInssDestacado)) || notaExtraida.destaqueInss || 0,
-    valorMateriaisInss: parseFloat(String(reqBody?.valorMateriaisInss)) || (notaExtraida.percentualReducaoIssNfse ? Number((notaExtraida.valorTotal * (notaExtraida.percentualReducaoIssNfse / 100)).toFixed(2)) : 0),
+    valorMateriaisInss: parseFloat(String(reqBody?.valorMateriaisInss)) || notaExtraida.deducaoMateriaisNfse || 0,
     valorContaVinculada: parseFloat(String(reqBody?.valorContaVinculada)) || 0,
-    retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : Boolean(reqBody?.retencaoInss),
+    retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) || Boolean(notaExtraida.deducaoMateriaisNfse && notaExtraida.deducaoMateriaisNfse > 0) ? true : Boolean(reqBody?.retencaoInss),
+    optanteCprb: reqBody?.optanteCprb === 'true' || reqBody?.optanteCprb === true,
     sicaf: sicafInfoNota
   };
 

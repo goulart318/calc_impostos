@@ -543,6 +543,9 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
         valorMateriaisInss: currentData.totalMateriaisInssDeducao,
         valorContaVinculada: currentData.totalContaVinculada,
         aliqIss: currentData.aliqIssAplicada,
+        valorInssDestacado: currentData.totalInss || currentData.auditoriaInss?.valorInssDestacado,
+        retencaoInss: Boolean(currentData.totalInss && currentData.totalInss > 0) || Boolean(currentData.totalMateriaisInssDeducao && currentData.totalMateriaisInssDeducao > 0),
+        optanteCprb: (currentData as any).optanteCprb,
         itens: itensEditados.map(item => ({
           numeroItem: item.numeroItem,
           descricao: item.descricao,
@@ -1782,12 +1785,12 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
                     <strong>INSS</strong> — Retenção Previdenciária
                     {currentData.auditoriaInss?.correspondeAliquotaOficial && (
                       <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
-                        ✓ 11% CONFERE
+                        {currentData.totalMateriaisInssDeducao ? `✓ ${currentData.auditoriaInss.aliquotaOficialEsperada}% CONFERE (BASE DEDUZIDA)` : `✓ ${currentData.auditoriaInss.aliquotaOficialEsperada}% CONFERE`}
                       </span>
                     )}
                     {currentData.auditoriaInss && !currentData.auditoriaInss.correspondeAliquotaOficial && (
                       <span style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
-                        ⚠️ ALÍQUOTA EFETIVA {currentData.auditoriaInss.aliquotaEfetivaSobreTotal}%
+                        ⚠️ DIVERGÊNCIA IDENTIFICADA
                       </span>
                     )}
                   </div>
@@ -1808,7 +1811,18 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
                     </div>
                   )}
                 </td>
-                <td>{currentData.totalBruto > 0 ? `${((currentData.totalInss / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
+                <td>
+                  {currentData.totalInss > 0 ? (
+                    <div>
+                      <span style={{ fontWeight: 700 }}>{`${(currentData.auditoriaInss?.aliquotaOficialEsperada || 11).toFixed(2)}%`}</span>
+                      {Boolean(currentData.totalMateriaisInssDeducao && currentData.totalMateriaisInssDeducao > 0) && (
+                        <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                          (s/ BC {formatBRL(currentData.baseCalculoInssTotal || 0)})
+                        </div>
+                      )}
+                    </div>
+                  ) : '0,00%'}
+                </td>
                 <td>IN RFB nº 2.110/2022 / CPRB</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalInss)}</td>
               </tr>
@@ -1851,7 +1865,20 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
                     );
                   })()}
                 </td>
-                <td>{currentData.totalBruto > 0 ? `${((currentData.totalIss / currentData.totalBruto) * 100).toFixed(2)}%` : '0,00%'}</td>
+                <td>
+                  {currentData.totalIss > 0 ? (
+                    <div>
+                      <span style={{ fontWeight: 700 }}>
+                        {`${(currentData.aliqIssAplicada !== undefined ? currentData.aliqIssAplicada : 5.0).toFixed(2)}%`}
+                      </span>
+                      {Boolean(currentData.percentualReducaoIssAplicado && currentData.percentualReducaoIssAplicado > 0) && (
+                        <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                          (s/ BC {formatBRL(currentData.baseCalculoIssTotal || 0)})
+                        </div>
+                      )}
+                    </div>
+                  ) : '0,00%'}
+                </td>
                 <td>Lei Municipal nº 6.075/2003 c/c LC 116</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(currentData.totalIss)}</td>
               </tr>

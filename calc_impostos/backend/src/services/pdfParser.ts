@@ -489,6 +489,13 @@ export class PdfParser {
     let destinatarioNome = '';
 
     if (ehServico) {
+      // 1. Prioridade no Padrão Nacional NFS-e: Bloco EMITENTE DA NFS-e com CNPJ seguido da Razão Social
+      const matchEmitenteDanfse = text.match(/EMITENTE\s*DA\s*NFS-e[\s\S]{0,400}?\b(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\b[\s\S]{0,80}?\n\s*([A-Z0-9À-ÿ\s\.\-&]{4,80}(?:LTDA|EPP|S\/A|ME|EIRELI|CONSTRU[ÇC][ÕO]ES|SERVI[ÇC]OS|ENGENHARIA|COMERCIO))/i);
+      if (matchEmitenteDanfse) {
+        fornecedorCnpj = matchEmitenteDanfse[1];
+        fornecedorNome = this.formatarNomeEmpresa(matchEmitenteDanfse[2]);
+      }
+
       // Reconhece todas as variações de Prestador / Emitente e Tomador (Destinatário)
       const idxPrestador = text.search(/EMITENTE\s*(?:DA\s*NFS-e)?|PRESTADOR\s*(?:DO\s*SERVI[ÇC]O|DE\s*SERVI[ÇC]OS|\/\s*FORNECEDOR)?|IDENTIFICA[ÇC][ÃA]O\s*DO\s*PRESTADOR/i);
       const idxTomador = text.search(/TOMADOR\s*(?:DO\s*SERVI[ÇC]O|DE\s*SERVI[ÇC]OS|\/\s*ADQUIRENTE)?|IDENTIFICA[ÇC][ÃA]O\s*DO\s*TOMADOR/i);
@@ -496,7 +503,7 @@ export class PdfParser {
       // Regex de captura de nome empresarial / razão social
       const regexNomeRazao = /(?:Nome\s*\/?\s*Nome\s*Empresarial|Nome\s*\/?\s*Raz[ãa]o\s*Social|Raz[ãa]o\s*Social)\s*[:\n\r]+\s*([^\n\r]{3,120})/i;
 
-      if (idxPrestador !== -1) {
+      if (!fornecedorCnpj && idxPrestador !== -1) {
         const fimTrechoPrest = idxTomador !== -1 && idxTomador > idxPrestador ? idxTomador : idxPrestador + 700;
         const trechoPrestador = text.substring(idxPrestador, fimTrechoPrest);
 
@@ -504,11 +511,16 @@ export class PdfParser {
 
         const matchNomePrest = trechoPrestador.match(regexNomeRazao);
         if (matchNomePrest && matchNomePrest[1]) {
-          fornecedorNome = this.formatarNomeEmpresa(matchNomePrest[1]);
-        } else {
-          const matchGenericoPrest = trechoPrestador.match(/(COMER[^\n]{4,60}|CETAN[^\n]{4,60}|[A-Z0-9\s\.\-&]{5,60}LTDA|[A-Z0-9\s\.\-&]{5,60}EPP|[A-Z0-9\s\.\-&]{5,60}S\/A)/i);
-          if (matchGenericoPrest && matchGenericoPrest[0]) {
-            fornecedorNome = this.formatarNomeEmpresa(matchGenericoPrest[0]);
+          const candPrest = this.formatarNomeEmpresa(matchNomePrest[1]);
+          if (!/^(?:Endere[çc]o|E-mail|Telefone|CNPJ|Indicador|NIF)/i.test(candPrest)) {
+            fornecedorNome = candPrest;
+          }
+        }
+        if (!fornecedorNome) {
+          const matchGenericoPrest = trechoPrestador.match(/([A-Z0-9À-ÿ\s\.\-&]{4,60}(?:LTDA|EPP|S\/A|ME|EIRELI|SERVI[ÇC]OS|CONSTRU[ÇC][ÕO]ES))/i) ||
+                                     text.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b[\s\S]{0,80}?\n\s*([A-Z0-9À-ÿ\s\.\-&]{4,60}(?:LTDA|EPP|S\/A|ME|EIRELI|CONSTRU[ÇC][ÕO]ES))/i);
+          if (matchGenericoPrest && matchGenericoPrest[1]) {
+            fornecedorNome = this.formatarNomeEmpresa(matchGenericoPrest[1]);
           }
         }
       }
@@ -521,9 +533,13 @@ export class PdfParser {
 
         const matchNomeTom = trechoTomador.match(regexNomeRazao);
         if (matchNomeTom && matchNomeTom[1]) {
-          destinatarioNome = this.formatarNomeEmpresa(matchNomeTom[1]);
-        } else {
-          const matchGenericoTom = trechoTomador.match(/(EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES[^\n]*|EBSERH[^\n]*)/i);
+          const candTom = this.formatarNomeEmpresa(matchNomeTom[1]);
+          if (!/^(?:Endere[çc]o|E-mail|Telefone|CNPJ|Indicador)/i.test(candTom)) {
+            destinatarioNome = candTom;
+          }
+        }
+        if (!destinatarioNome) {
+          const matchGenericoTom = text.match(/(?:HOSPITAL\s*UNIVERSIT[ÁA]RIO[^\n\r]{0,80}|EMPRESA BRASILEIRA DE SERVI[ÇC]OS HOSPITALARES[^\n\r]{0,80}|EBSERH[^\n\r]{0,80})/i);
           if (matchGenericoTom && matchGenericoTom[0]) {
             destinatarioNome = this.formatarNomeEmpresa(matchGenericoTom[0]);
           }
@@ -651,8 +667,19 @@ export class PdfParser {
 
     // 5. VALORES E RETENÇÕES DESTAQUE NA NFS-E
     let valorTotal = 0;
+
+    // Prioridade máxima e absoluta na NFS-e: Valor da Operação / Serviço (Valor Bruto antes das retenções)
+    if (ehServico) {
+      const matchVlrOpAntes = text.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*[\r\n]+\s*VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O/i);
+      const matchVlrOpDepois = text.match(/VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O[\s\S]{0,80}?R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i);
+      if (matchVlrOpAntes) {
+        valorTotal = parseFloat(matchVlrOpAntes[1].replace(/\./g, '').replace(',', '.'));
+      } else if (matchVlrOpDepois) {
+        valorTotal = parseFloat(matchVlrOpDepois[1].replace(/\./g, '').replace(',', '.'));
+      }
+    }
+
     const padroesValorNota = ehServico ? [
-      /(?:VALOR\s*TOTAL\s*DA\s*NFS-E|VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O)[\s\S]*?R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       /Vl\.?\s*do\s*Servi[çc]o\s*:?\s*R?\$?\s*([\d\.,]+)/i,
       /Valor\s+do\s+Servi[çc]o\s*:?\s*R?\$?\s*([\d\.,]+)/i,
       /VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O\s*:?\s*R?\$?\s*([\d\.,]+)/i,
@@ -676,14 +703,16 @@ export class PdfParser {
       /(?:V\.?\s*TOTAL\s*(?:DOS\s*)?PRODUTOS|VALOR\s*TOTAL\s*(?:DOS\s*)?PRODUTOS)\s*[:\.]?\s*[\r\n]*\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i
     ];
 
-    for (const pv of padroesValorNota) {
-      const match = text.match(pv);
-      if (match && match[1]) {
-        const vClean = match[1].replace(/\./g, '').replace(',', '.');
-        const vNum = parseFloat(vClean);
-        if (!isNaN(vNum) && vNum > 0) {
-          valorTotal = vNum;
-          break;
+    if (!valorTotal) {
+      for (const pv of padroesValorNota) {
+        const match = text.match(pv);
+        if (match && match[1]) {
+          const vClean = match[1].replace(/\./g, '').replace(',', '.');
+          const vNum = parseFloat(vClean);
+          if (!isNaN(vNum) && vNum > 0) {
+            valorTotal = vNum;
+            break;
+          }
         }
       }
     }
@@ -739,18 +768,30 @@ export class PdfParser {
     let codigoServicoNfse = '6190';
     let aliqIssNfseDestaque: number | undefined = undefined;
     let localPrestacaoServico: string | undefined = undefined;
+    let deducaoMateriaisNfse = 0;
 
     if (ehServico) {
       const matchIr = text.match(/IRRF[^\d]*R?\$?\s*([\d\.,]+)/i);
       if (matchIr) destaqueIr = parseFloat(matchIr[1].replace(/\./g, '').replace(',', '.'));
 
-      // Rigor no INSS: Verifica se no campo da Contribuição Previdenciária consta '-' ou Vazio ou '0,00'
-      const matchInssStrict = text.match(/Contribuição\s*Previdenciária\s*[-–—]\s*Retida\s*[\r\n]+\s*(?:R\$\s*)?([R\$\d\.,-]+)/i);
-      if (matchInssStrict && matchInssStrict[1]) {
-        const valStr = matchInssStrict[1].trim();
-        if (valStr !== '-' && !valStr.includes('-') && valStr !== '0,00' && valStr !== '0') {
-          const vNum = parseFloat(valStr.replace(/[^\d,\.]/g, '').replace(/\./g, '').replace(',', '.'));
-          if (!isNaN(vNum) && vNum > 0) destaqueInss = vNum;
+      // 1. INSS: Verifica primeiro no campo próprio (antes ou depois do rótulo)
+      const matchInssAntes = text.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*[\r\n]+\s*Contrib(?:uição|\.)?\s*Previdenciária\s*[-–—]\s*Retida/i);
+      const matchInssDesc = text.match(/B\.?\s*C[ÁA]LCULO\s*INSS:[^\d]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})[^\d]*X[^\d]*[0-9,]+%[^\d]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i);
+
+      if (matchInssAntes) {
+        destaqueInss = parseFloat(matchInssAntes[1].replace(/\./g, '').replace(',', '.'));
+      } else if (matchInssDesc) {
+        destaqueInss = parseFloat(matchInssDesc[2].replace(/\./g, '').replace(',', '.'));
+      }
+
+      if (destaqueInss === 0) {
+        const matchInssStrict = text.match(/Contribuição\s*Previdenciária\s*[-–—]\s*Retida\s*[\r\n]+\s*(?:R\$\s*)?([R\$\d\.,-]+)/i);
+        if (matchInssStrict && matchInssStrict[1]) {
+          const valStr = matchInssStrict[1].trim();
+          if (valStr !== '-' && !valStr.includes('-') && valStr !== '0,00' && valStr !== '0') {
+            const vNum = parseFloat(valStr.replace(/[^\d,\.]/g, '').replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(vNum) && vNum > 0) destaqueInss = vNum;
+          }
         }
       }
 
@@ -761,6 +802,13 @@ export class PdfParser {
           const vNum = parseFloat(matchInssCp[1].replace(/\./g, '').replace(',', '.'));
           if (!isNaN(vNum) && vNum > 0) destaqueInss = vNum;
         }
+      }
+
+      // Dedução de materiais e equipamentos expressa na descrição do serviço
+      const matchMatDesc = text.match(/VLR\s*MAT\.?\s*APLICADO[^\d%]*\([^\)]+\)[^\d]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i) ||
+                           text.match(/DEDU[ÇC][ÃA]O\s*(?:DE\s*)?MATERIAIS[^\d]*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i);
+      if (matchMatDesc) {
+        deducaoMateriaisNfse = parseFloat(matchMatDesc[1].replace(/\./g, '').replace(',', '.'));
       }
 
       // Modelo com PIS/COFINS/CSLL detalhados individualmente ("Vl. PIS", "Vl. COFINS", "Vl. CSLL")
@@ -793,7 +841,8 @@ export class PdfParser {
         trechoIssqn = text.substring(idxIssqnSecao, fimIssqn);
       }
 
-      const matchBcIss = trechoIssqn.match(/BC\s*ISSQN[^\d]*R?\$?\s*([\d\.,]+)/i) ||
+      const matchBcIss = trechoIssqn.match(/BC\s*ISSQN[\s\r\n]+(?:R\$\s*)?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i) ||
+                         trechoIssqn.match(/BC\s*ISSQN[^\d]*R?\$?\s*([\d\.,]+)/i) ||
                          trechoIssqn.match(/Base\s*de\s*C[áa]lculo[^\d]*R?\$?\s*([\d\.,]+)/i);
       if (matchBcIss) {
         bcIssqnNfse = parseFloat(matchBcIss[1].replace(/\./g, '').replace(',', '.'));
@@ -802,9 +851,14 @@ export class PdfParser {
         }
       }
 
-      const matchIssApurado = trechoIssqn.match(/ISSQN\s*Apurado[^\d]*R?\$?\s*([\d\.,]+)/i) ||
-                              trechoIssqn.match(/Vl\.?\s*ISSQN[^\d]*R?\$?\s*([\d\.,]+)/i);
-      if (matchIssApurado) destaqueIss = parseFloat(matchIssApurado[1].replace(/\./g, '').replace(',', '.'));
+      const matchIssApuradoAntes = trechoIssqn.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*[\r\n]+\s*ISSQN\s*Apurado/i);
+      if (matchIssApuradoAntes) {
+        destaqueIss = parseFloat(matchIssApuradoAntes[1].replace(/\./g, '').replace(',', '.'));
+      } else {
+        const matchIssApurado = trechoIssqn.match(/ISSQN\s*Apurado[^\d]*R?\$?\s*([\d\.,]+)/i) ||
+                                trechoIssqn.match(/Vl\.?\s*ISSQN[^\d]*R?\$?\s*([\d\.,]+)/i);
+        if (matchIssApurado) destaqueIss = parseFloat(matchIssApurado[1].replace(/\./g, '').replace(',', '.'));
+      }
 
       if (upperText.includes('RETENÇÃO DO ISSQN\nNÃO RETIDO') || upperText.includes('NÃO RETIDO')) {
         issqnRetidoTomador = false; // Se constar explicitamente "Não Retido", marca como false
@@ -820,10 +874,15 @@ export class PdfParser {
       }
 
       // Local da prestação do serviço (Município onde o serviço foi executado)
-      const matchLocalPrest = text.match(/(?:Local\s*da\s*Presta[çc][ãa]o|LocaldaPresta[çc][ãa]o)[^\n]*\n\s*([^\n\r/]{3,60})/i) ||
-                              text.match(/(?:Munic[íi]pio\s*de\s*Incid[êe]ncia\s*do\s*ISSQN)[^\n]*\n\s*([^\n\r/]{3,60})/i);
-      if (matchLocalPrest && matchLocalPrest[1]) {
-        localPrestacaoServico = matchLocalPrest[1].trim();
+      const matchLocalPrestCid = text.match(/(?:Local\s*da\s*Presta[çc][ãa]o|TRIBUTA[ÇC][ÃA]O\s*MUNICIPAL)[\s\S]{0,160}?\n\s*([A-Za-zÀ-ÿ ]{3,40}?)\s*\/\s*([A-Z]{2})\s*(?:\/|$|\s*-)/i);
+      if (matchLocalPrestCid && !matchLocalPrestCid[1].toUpperCase().includes('SERVIÇO PRESTADO')) {
+        localPrestacaoServico = matchLocalPrestCid[1].trim();
+      } else {
+        const matchLocalPrest = text.match(/(?:Local\s*da\s*Presta[çc][ãa]o|LocaldaPresta[çc][ãa]o)[^\n]*\n\s*([^\n\r/]{3,60})/i) ||
+                                text.match(/(?:Munic[íi]pio\s*de\s*Incid[êe]ncia\s*do\s*ISSQN)[^\n]*\n\s*([^\n\r/]{3,60})/i);
+        if (matchLocalPrest && matchLocalPrest[1] && !matchLocalPrest[1].toUpperCase().includes('SERVIÇO PRESTADO')) {
+          localPrestacaoServico = matchLocalPrest[1].trim();
+        }
       }
 
       // Código do Serviço: prioriza o Código de Tributação Nacional (XX.XX.XX) quando presente
@@ -1231,29 +1290,16 @@ export class PdfParser {
       issqnRetidoTomador,
       codigoServicoNfse,
       localPrestacaoServico,
-      aliqIssNfseDestaque
+      aliqIssNfseDestaque,
+      deducaoMateriaisNfse
     };
   }
 
-  public static async parseMultiplasNotas(pdfBuffer: Buffer): Promise<Array<NotaFiscalExtraida & {
-    destaqueIr?: number;
-    destaqueInss?: number;
-    destaqueSocial?: number;
-    destaqueIss?: number;
-    bcIssqnNfse?: number;
-    percentualReducaoIssNfse?: number;
-    issqnRetidoTomador?: boolean;
-    codigoServicoNfse?: string;
-    localPrestacaoServico?: string;
-    aliqIssNfseDestaque?: number;
-    numeroPaginaOrigem?: number;
-    totalPaginasDocumento?: number;
-    totalNotasNoPdf?: number;
-  }>> {
+  public static async parseMultiplasNotas(pdfBuffer: Buffer): Promise<Array<NotaFiscalExtraida>> {
     const paginas = await this.extrairPaginasTexto(pdfBuffer);
     const grupos = this.agruparPaginasPorDocumentoFiscal(paginas);
 
-    const resultados: Array<any> = [];
+    const resultados: Array<NotaFiscalExtraida> = [];
     for (const g of grupos) {
       const extraida = this.parseTexto(g.texto);
       extraida.numeroPaginaOrigem = g.paginasIndices[0];
@@ -1264,24 +1310,11 @@ export class PdfParser {
     return resultados;
   }
 
-  public static async parsePdf(pdfBuffer: Buffer): Promise<NotaFiscalExtraida & {
-    destaqueIr?: number;
-    destaqueInss?: number;
-    destaqueSocial?: number;
-    destaqueIss?: number;
-    bcIssqnNfse?: number;
-    percentualReducaoIssNfse?: number;
-    issqnRetidoTomador?: boolean;
-    codigoServicoNfse?: string;
-    localPrestacaoServico?: string;
-    aliqIssNfseDestaque?: number;
-    totalNotasNoPdf?: number;
-    todasNotasNoPdf?: Array<any>;
-  }> {
+  public static async parsePdf(pdfBuffer: Buffer): Promise<NotaFiscalExtraida> {
     const notas = await this.parseMultiplasNotas(pdfBuffer);
     const primeiraNota = notas[0] || this.parseTexto('');
-    (primeiraNota as any).totalNotasNoPdf = notas.length;
-    (primeiraNota as any).todasNotasNoPdf = notas;
+    primeiraNota.totalNotasNoPdf = notas.length;
+    primeiraNota.todasNotasNoPdf = notas;
     return primeiraNota;
   }
 }

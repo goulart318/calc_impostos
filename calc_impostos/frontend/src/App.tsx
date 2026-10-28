@@ -234,10 +234,17 @@ export default function App() {
         valorInssDestacado,
         valorMateriaisInss,
         valorContaVinculada,
-        dataEmissao: new Date().toISOString().split('T')[0],
         itens: itens.map(item => ({
           ...item,
-          valorBruto: parseFloat(String(item.valorBruto)) || 0
+          valorBruto: parseFloat(String(item.valorBruto)) || 0,
+          codigoServico: item.manualCodigoDarf || item.condicaoEspecial || item.codigoServico,
+          condicaoEspecial: item.manualCodigoDarf || item.condicaoEspecial,
+          manualCodigoDarf: item.manualCodigoDarf || (item.condicaoEspecial && item.condicaoEspecial !== 'AUTO' ? item.condicaoEspecial : undefined),
+          manualNaturezaReinf: item.manualNaturezaReinf,
+          manualAliqIr: item.manualAliqIr,
+          manualAliqCsll: item.manualAliqCsll,
+          manualAliqPis: item.manualAliqPis,
+          manualAliqCofins: item.manualAliqCofins
         })),
         optanteCprb
       };
@@ -385,7 +392,16 @@ export default function App() {
         cst: it.cst || '01',
         codigoServico: it.codigoServico,
         valorBruto: it.valorBruto,
-        condicaoEspecial: it.codigoReceitaDarf || undefined
+        condicaoEspecial: it.codigoReceitaDarf || undefined,
+        manualCodigoDarf: it.codigoReceitaDarf,
+        manualNaturezaReinf: it.naturezaRendimentoReinf,
+        manualAliqIr: it.aliqIr,
+        manualAliqCsll: it.aliqCsll,
+        manualAliqPis: it.aliqPis,
+        manualAliqCofins: it.aliqCofins,
+        manualAliqInss: it.aliqInss,
+        manualAliqIss: it.aliqIss,
+        manualFundamentacao: it.fundamentacaoLegal
       })));
 
       if ((data as any).multiplasNotas && (data as any).todasNotas && (data as any).todasNotas.length > 1) {
@@ -1595,7 +1611,16 @@ export default function App() {
                             cst: it.cst || '01',
                             codigoServico: it.codigoServico,
                             valorBruto: it.valorBruto,
-                            condicaoEspecial: it.codigoReceitaDarf || undefined
+                            condicaoEspecial: it.codigoReceitaDarf || undefined,
+                            manualCodigoDarf: it.codigoReceitaDarf,
+                            manualNaturezaReinf: it.naturezaRendimentoReinf,
+                            manualAliqIr: it.aliqIr,
+                            manualAliqCsll: it.aliqCsll,
+                            manualAliqPis: it.aliqPis,
+                            manualAliqCofins: it.aliqCofins,
+                            manualAliqInss: it.aliqInss,
+                            manualAliqIss: it.aliqIss,
+                            manualFundamentacao: it.fundamentacaoLegal
                           })));
                         }
                       }}

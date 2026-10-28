@@ -15,6 +15,21 @@ export interface NotaFiscalExtraida {
   valorTotal: number;
   itens: ItemAnaliseInput[];
   validacaoChave?: ValidacaoChaveAcesso;
+  destaqueIr?: number;
+  destaqueInss?: number;
+  destaqueSocial?: number;
+  destaqueIss?: number;
+  bcIssqnNfse?: number;
+  percentualReducaoIssNfse?: number;
+  issqnRetidoTomador?: boolean;
+  codigoServicoNfse?: string;
+  localPrestacaoServico?: string;
+  aliqIssNfseDestaque?: number;
+  deducaoMateriaisNfse?: number;
+  numeroPaginaOrigem?: number;
+  totalPaginasDocumento?: number;
+  totalNotasNoPdf?: number;
+  todasNotasNoPdf?: Array<any>;
 }
 
 export class NfeParser {

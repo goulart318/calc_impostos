@@ -752,14 +752,20 @@ export class TaxEngine {
       const deduMateriaisInssItem = i === 0 ? totalMateriaisInssDeducao : 0;
 
       if (ehServico) {
-        if (params.valorInssDestacado && params.valorInssDestacado > 0 && !params.retencaoInss) {
-          valorInss = params.valorInssDestacado;
-          aliqInss = valorBruto > 0 ? Number(((valorInss / valorBruto) * 100).toFixed(2)) : 0;
-          fundSet.add('Art. 111 e 112 da IN RFB nº 2.110/2022 (INSS / Contribuição Previdenciária Retida)');
-        } else if (params.retencaoInss || itemInput.codigoServico?.includes('MAO_OBRA') || itemInput.codigoServico?.includes('07.02') || itemInput.codigoServico?.includes('7.02')) {
-          baseCalculoInss = Math.max(0, valorBruto - deduMateriaisInssItem);
+        if (params.retencaoInss || (params.valorInssDestacado && params.valorInssDestacado > 0) || itemInput.codigoServico?.includes('MAO_OBRA') || itemInput.codigoServico?.includes('07.02') || itemInput.codigoServico?.includes('7.02')) {
           aliqInss = params.optanteCprb ? 3.50 : (params.aliqInss || 11.00);
-          valorInss = Number(((baseCalculoInss * aliqInss) / 100).toFixed(2));
+          baseCalculoInss = Math.max(0, valorBruto - deduMateriaisInssItem);
+
+          if (i === 0 && params.valorInssDestacado && params.valorInssDestacado > 0) {
+            const calcBase = Number(((baseCalculoInss * aliqInss) / 100).toFixed(2));
+            if (Math.abs(calcBase - params.valorInssDestacado) <= 0.05) {
+              valorInss = params.valorInssDestacado;
+            } else {
+              valorInss = params.valorInssDestacado;
+            }
+          } else {
+            valorInss = Number(((baseCalculoInss * aliqInss) / 100).toFixed(2));
+          }
 
           const fundInss = params.optanteCprb 
             ? 'Art. 9º-A da Lei nº 12.546/2011 c/c Lei nº 14.973/2024 (CPRB - 3,5%)' 
@@ -940,11 +946,14 @@ export class TaxEngine {
     if (ehServico && (totalInss > 0 || params.retencaoInss || (params.valorInssDestacado && params.valorInssDestacado > 0))) {
       const aliqEsperada = params.optanteCprb ? 3.50 : 11.00;
       const valorEsperadoIntegral = Number(((totalBruto * aliqEsperada) / 100).toFixed(2));
+      const valorEsperadoBaseDeduzida = totalMateriaisInssDeducao > 0 
+        ? Number(((Math.max(0, totalBruto - totalMateriaisInssDeducao) * aliqEsperada) / 100).toFixed(2))
+        : valorEsperadoIntegral;
       const aliqEfetiva = totalBruto > 0 ? Number(((totalInss / totalBruto) * 100).toFixed(2)) : 0;
       
       // Margem de tolerância de arredondamento de centavos (R$ 0,05)
-      const diferencaCentavos = Math.abs(totalInss - valorEsperadoIntegral);
-      const confereIntegral = diferencaCentavos <= 0.05;
+      const confereIntegral = Math.abs(totalInss - valorEsperadoIntegral) <= 0.05;
+      const confereBaseDeduzida = totalMateriaisInssDeducao > 0 && Math.abs(totalInss - valorEsperadoBaseDeduzida) <= 0.05;
 
       let tipoApuracao: 'CONFERE_11_PORCENTO' | 'DIVERGENCIA_BASE_OU_ALIQUOTA' | 'ISENTO_OU_NAO_DESTACADO' = 'CONFERE_11_PORCENTO';
       let mensagemAlerta: string | undefined = undefined;
@@ -952,23 +961,26 @@ export class TaxEngine {
       if (confereIntegral) {
         tipoApuracao = 'CONFERE_11_PORCENTO';
         mensagemAlerta = `✓ Conferência realizada: O valor destacado de INSS (R$ ${totalInss.toFixed(2)}) corresponde exatamente à alíquota oficial integral de ${aliqEsperada}% sobre o total da nota fiscal (R$ ${totalBruto.toFixed(2)}).`;
+      } else if (confereBaseDeduzida) {
+        tipoApuracao = 'CONFERE_11_PORCENTO';
+        mensagemAlerta = `✓ Conferência realizada: O valor destacado de INSS (R$ ${totalInss.toFixed(2)}) corresponde com exatidão à alíquota oficial de ${aliqEsperada}% sobre a Base de Cálculo após abatimento de materiais (BC R$ ${(totalBruto - totalMateriaisInssDeducao).toFixed(2)}, dedução de materiais R$ ${totalMateriaisInssDeducao.toFixed(2)} conf. Art. 120 e 121 da IN RFB nº 2.110/2022).`;
       } else {
         tipoApuracao = 'DIVERGENCIA_BASE_OU_ALIQUOTA';
         if (totalMateriaisInssDeducao > 0) {
-          mensagemAlerta = `⚠️ Atenção Fiscal: O valor de INSS retido (R$ ${totalInss.toFixed(2)} • alíq. efetiva ${aliqEfetiva}%) é menor que 11% integral (R$ ${valorEsperadoIntegral.toFixed(2)}) devido à Dedução de Materiais/Equipamentos da Base de Cálculo (R$ ${totalMateriaisInssDeducao.toFixed(2)} conf. Art. 120 e 121 da IN RFB nº 2.110/2022).`;
+          mensagemAlerta = `⚠️ Atenção Fiscal: O valor de INSS retido (R$ ${totalInss.toFixed(2)}) difere do esperado à alíquota oficial de ${aliqEsperada}% sobre a base após dedução de materiais (Esperado: R$ ${valorEsperadoBaseDeduzida.toFixed(2)}).`;
         } else if (params.optanteCprb) {
           mensagemAlerta = `ℹ️ Empresa Optante pela CPRB: Alíquota de INSS apurada a 3,5% conforme Art. 9º-A da Lei nº 12.546/2011 (R$ ${totalInss.toFixed(2)}).`;
         } else {
-          mensagemAlerta = `⚠️ Alerta de Divergência no INSS: O valor destacado na nota fiscal (R$ ${totalInss.toFixed(2)}) NÃO corresponde à alíquota de 11% integral do total da nota (R$ ${valorEsperadoIntegral.toFixed(2)}). Alíquota efetiva apurada: ${aliqEfetiva}%. Verifique se há dedução de materiais/equipamentos da base de cálculo, contrato com cessão parcial de mão de obra ou enquadramento em CPRB.`;
+          mensagemAlerta = `⚠️ Alerta de Divergência no INSS: O valor destacado na nota fiscal (R$ ${totalInss.toFixed(2)}) NÃO corresponde à alíquota de 11% integral do total da nota (R$ ${valorEsperadoIntegral.toFixed(2)}). Verifique se há dedução de materiais/equipamentos da base de cálculo, contrato com cessão parcial de mão de obra ou enquadramento em CPRB.`;
         }
       }
 
       auditoriaInss = {
         aliquotaOficialEsperada: aliqEsperada,
         aliquotaEfetivaSobreTotal: aliqEfetiva,
-        valorInssEsperadoTotal: valorEsperadoIntegral,
+        valorInssEsperadoTotal: totalMateriaisInssDeducao > 0 ? valorEsperadoBaseDeduzida : valorEsperadoIntegral,
         valorInssDestacado: totalInss,
-        correspondeAliquotaOficial: confereIntegral,
+        correspondeAliquotaOficial: confereIntegral || confereBaseDeduzida,
         tipoApuracao,
         mensagemAlerta
       };
