@@ -388,12 +388,16 @@ export default function App() {
         condicaoEspecial: it.codigoReceitaDarf || undefined
       })));
 
-      if (data.jaAnalisadaAntes) {
+      if ((data as any).multiplasNotas && (data as any).todasNotas && (data as any).todasNotas.length > 1) {
+        setLoteTriagemNotas((data as any).todasNotas);
+        const listaNfs = (data as any).todasNotas.map((n: any) => n.numeroNota).filter(Boolean).join(', ');
+        setMensagemSucesso(`✓ O arquivo PDF contém ${(data as any).totalNotasNoArquivo} notas fiscais distintas (NFs ${listaNfs}). Exibindo a NF ${data.numeroNota || '1'} (o lote completo com todas as notas também está pronto na Central de Triagem).`);
+      } else if (data.jaAnalisadaAntes) {
         setMensagemSucesso(`✓ Cruzamento do Histórico: Nota já analisada anteriormente (${data.dataAnaliseAnterior || 'no histórico'}). Processo SEI (${data.numeroProcesso || 'SEI'}) preenchido automaticamente!`);
       } else {
         setMensagemSucesso(`✓ Nota Fiscal ${data.numeroNota || 'processada'} carregada e analisada com sucesso!`);
       }
-      setTimeout(() => setMensagemSucesso(null), 8000);
+      setTimeout(() => setMensagemSucesso(null), 10000);
 
       // Rola suavemente até o resumo/relatório
       setTimeout(() => {

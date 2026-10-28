@@ -298,39 +298,51 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
   }
 });
 
-// Upload e Parser de PDF (DANFE ou NFS-e)
-app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Nenhum arquivo PDF enviado.' });
-    }
+// Helper compartilhado para processamento tributário, consulta de dados e conciliação de uma nota extraída
+async function processarNotaExtraidaUnica(
+  notaExtraida: any,
+  reqBody: any,
+  cnpjCache?: Map<string, any>,
+  sicafCache?: Map<string, DadosSicafConsulta>
+): Promise<ResultadoConsolidado> {
+  let optanteSimples = false;
+  let optanteSimei = false;
+  let dataOpcaoSimples = undefined;
+  let fonteConsultaCnpj = undefined;
+  let situacaoCadastral = 'ATIVA';
+  let fornecedorMunicipio = undefined;
+  let fornecedorUf = undefined;
+  let sicafInfoNota: DadosSicafConsulta | undefined = undefined;
 
-    const notaExtraida = await PdfParser.parsePdf(req.file.buffer);
-
-    let optanteSimples = false;
-    let optanteSimei = false;
-    let dataOpcaoSimples = undefined;
-    let fonteConsultaCnpj = undefined;
-    let situacaoCadastral = 'ATIVA';
-    let fornecedorMunicipio = undefined;
-    let fornecedorUf = undefined;
-    let sicafConsultaPdf: DadosSicafConsulta | undefined = undefined;
-
-    if (notaExtraida.fornecedorCnpj) {
+  if (notaExtraida.fornecedorCnpj) {
+    const cnpjLimpo = notaExtraida.fornecedorCnpj.replace(/\D/g, '');
+    if (cnpjCache && cnpjCache.has(cnpjLimpo)) {
+      const cached = cnpjCache.get(cnpjLimpo);
+      optanteSimples = cached.optanteSimples;
+      optanteSimei = cached.optanteSimei;
+      dataOpcaoSimples = cached.dataOpcaoSimples;
+      fonteConsultaCnpj = cached.fonteConsulta;
+      situacaoCadastral = cached.situacaoCadastral;
+      fornecedorMunicipio = cached.municipio;
+      fornecedorUf = cached.uf;
+      if (cached.razaoSocial && cached.razaoSocial !== 'Fornecedor Cadastrado' && cached.razaoSocial !== 'Razão Social Não Identificada') {
+        notaExtraida.fornecedorNome = cached.razaoSocial;
+      }
+    } else {
       try {
-        // Consulta CNPJ (Receita/Simples) e SICAF (Compras.gov.br) de forma CONCOMITANTE
         const [cnpjInfo, sicafInfo] = await Promise.all([
-          CnpjService.consultarCnpj(notaExtraida.fornecedorCnpj).catch(e => {
-            console.warn('Aviso na consulta ao CNPJ do PDF:', e?.message || e);
+          CnpjService.consultarCnpj(cnpjLimpo).catch(e => {
+            console.warn('Aviso na consulta ao CNPJ:', e?.message || e);
             return null;
           }),
-          SicafService.consultarSicaf(notaExtraida.fornecedorCnpj).catch(e => {
-            console.warn('Aviso na consulta ao SICAF do PDF:', e?.message || e);
+          SicafService.consultarSicaf(cnpjLimpo).catch(e => {
+            console.warn('Aviso na consulta ao SICAF:', e?.message || e);
             return null;
           })
         ]);
 
         if (cnpjInfo) {
+          if (cnpjCache) cnpjCache.set(cnpjLimpo, cnpjInfo);
           optanteSimples = cnpjInfo.optanteSimples;
           optanteSimei = cnpjInfo.optanteSimei;
           dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
@@ -342,71 +354,106 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
             notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
           }
         }
-
         if (sicafInfo) {
-          sicafConsultaPdf = sicafInfo;
+          if (sicafCache) sicafCache.set(cnpjLimpo, sicafInfo);
+          sicafInfoNota = sicafInfo;
         }
       } catch (e) {
-        console.warn('Não foi possível consultar CNPJ/SICAF do PDF:', e);
+        console.warn('Aviso ao consultar dados externos da nota:', e);
       }
     }
 
-    let municipioTomador = contextoAtual()?.uasg.municipio || 'Vitória';
-    if (notaExtraida.destinatarioCnpj) {
-      try {
-        const infoTom = await CnpjService.consultarCnpj(notaExtraida.destinatarioCnpj);
-        if (infoTom.municipio) municipioTomador = infoTom.municipio;
-      } catch (e) {
-        // Fallback
-      }
+    if (!sicafInfoNota && sicafCache && sicafCache.has(cnpjLimpo)) {
+      sicafInfoNota = sicafCache.get(cnpjLimpo);
+    }
+  }
+
+  let municipioTomador = contextoAtual()?.uasg.municipio || 'Vitória';
+  if (notaExtraida.destinatarioCnpj) {
+    try {
+      const infoTom = await CnpjService.consultarCnpj(notaExtraida.destinatarioCnpj);
+      if (infoTom && infoTom.municipio) municipioTomador = infoTom.municipio;
+    } catch (e) {
+      // Fallback
+    }
+  }
+
+  const params: ParametrosCalculo = {
+    tipoDocumento: notaExtraida.tipoDocumento,
+    numeroNota: notaExtraida.numeroNota,
+    chaveAcesso: notaExtraida.chaveAcesso,
+    numeroProcesso: reqBody?.numeroProcesso ? String(reqBody.numeroProcesso).trim() : undefined,
+    documentoHabil: reqBody?.documentoHabil ? String(reqBody.documentoHabil).trim() : undefined,
+    numeroEmpenho: reqBody?.numeroEmpenho ? String(reqBody.numeroEmpenho).trim() : notaExtraida.numeroEmpenho,
+    fornecedorNome: notaExtraida.fornecedorNome,
+    fornecedorCnpj: notaExtraida.fornecedorCnpj,
+    fornecedorMunicipio: reqBody?.fornecedorMunicipio || fornecedorMunicipio,
+    fornecedorUf: reqBody?.fornecedorUf || fornecedorUf,
+    destinatarioNome: notaExtraida.destinatarioNome,
+    destinatarioCnpj: notaExtraida.destinatarioCnpj,
+    optanteSimples: optanteSimples,
+    situacaoCadastral: situacaoCadastral,
+    dataEmissao: notaExtraida.dataEmissao,
+    itens: notaExtraida.itens,
+    codigoServicoPadrao: notaExtraida.codigoServicoNfse || '6190',
+    aliqIss: reqBody?.aliqIss !== undefined ? parseFloat(String(reqBody.aliqIss)) : (notaExtraida.aliqIssNfseDestaque !== undefined ? notaExtraida.aliqIssNfseDestaque : 5.00),
+    percentualReducaoIss: parseFloat(String(reqBody?.percentualReducaoIss)) || notaExtraida.percentualReducaoIssNfse || 0,
+    retencaoIss: reqBody?.retencaoIss !== undefined ? (reqBody.retencaoIss === 'true' || reqBody.retencaoIss === true) : (notaExtraida.issqnRetidoTomador !== undefined ? notaExtraida.issqnRetidoTomador : true),
+    localPrestacaoServico: reqBody?.localPrestacaoServico || notaExtraida.localPrestacaoServico,
+    municipioTomador: reqBody?.municipioTomador || municipioTomador,
+    valorInssDestacado: parseFloat(String(reqBody?.valorInssDestacado)) || notaExtraida.destaqueInss || 0,
+    valorMateriaisInss: parseFloat(String(reqBody?.valorMateriaisInss)) || (notaExtraida.percentualReducaoIssNfse ? Number((notaExtraida.valorTotal * (notaExtraida.percentualReducaoIssNfse / 100)).toFixed(2)) : 0),
+    valorContaVinculada: parseFloat(String(reqBody?.valorContaVinculada)) || 0,
+    retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : Boolean(reqBody?.retencaoInss),
+    sicaf: sicafInfoNota
+  };
+
+  const resultado = await TaxEngine.processarNota(params);
+  resultado.optanteSimei = optanteSimei;
+  resultado.dataOpcaoSimples = dataOpcaoSimples;
+  resultado.fonteConsultaCnpj = fonteConsultaCnpj;
+  resultado.validacaoChave = notaExtraida.validacaoChave;
+
+  await cruzarComHistoricoEAutoPreencher(resultado, reqBody?.numeroProcesso, reqBody?.numeroEmpenho, reqBody?.documentoHabil);
+  return resultado;
+}
+
+// Upload e Parser de PDF (DANFE ou NFS-e, suporta arquivo único contendo múltiplas notas)
+app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo PDF enviado.' });
     }
 
-    const params: ParametrosCalculo = {
-      tipoDocumento: notaExtraida.tipoDocumento,
-      numeroNota: notaExtraida.numeroNota,
-      chaveAcesso: notaExtraida.chaveAcesso,
-      numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
-      documentoHabil: req.body.documentoHabil ? String(req.body.documentoHabil).trim() : undefined,
-      numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : notaExtraida.numeroEmpenho,
-      fornecedorNome: notaExtraida.fornecedorNome,
-      fornecedorCnpj: notaExtraida.fornecedorCnpj,
-      fornecedorMunicipio: req.body.fornecedorMunicipio || fornecedorMunicipio,
-      fornecedorUf: req.body.fornecedorUf || fornecedorUf,
-      destinatarioNome: notaExtraida.destinatarioNome,
-      destinatarioCnpj: notaExtraida.destinatarioCnpj,
-      optanteSimples: optanteSimples,
-      situacaoCadastral: situacaoCadastral,
-      dataEmissao: notaExtraida.dataEmissao,
-      itens: notaExtraida.itens,
-      codigoServicoPadrao: notaExtraida.codigoServicoNfse || '6190',
-      aliqIss: req.body.aliqIss !== undefined ? parseFloat(String(req.body.aliqIss)) : (notaExtraida.aliqIssNfseDestaque !== undefined ? notaExtraida.aliqIssNfseDestaque : undefined),
-      percentualReducaoIss: parseFloat(String(req.body.percentualReducaoIss)) || notaExtraida.percentualReducaoIssNfse || 0,
-      retencaoIss: req.body.retencaoIss !== undefined ? (req.body.retencaoIss === 'true' || req.body.retencaoIss === true) : (notaExtraida.issqnRetidoTomador !== undefined ? notaExtraida.issqnRetidoTomador : true),
-      localPrestacaoServico: req.body.localPrestacaoServico || notaExtraida.localPrestacaoServico,
-      municipioTomador: req.body.municipioTomador || municipioTomador,
-      valorInssDestacado: parseFloat(String(req.body.valorInssDestacado)) || notaExtraida.destaqueInss || 0,
-      valorMateriaisInss: parseFloat(String(req.body.valorMateriaisInss)) || (notaExtraida.percentualReducaoIssNfse ? Number((notaExtraida.valorTotal * (notaExtraida.percentualReducaoIssNfse / 100)).toFixed(2)) : 0),
-      valorContaVinculada: parseFloat(String(req.body.valorContaVinculada)) || 0,
-      retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : Boolean(req.body.retencaoInss),
-      sicaf: sicafConsultaPdf
-    };
+    const notasExtraidas = await PdfParser.parseMultiplasNotas(req.file.buffer);
+    if (!notasExtraidas || notasExtraidas.length === 0) {
+      return res.status(400).json({ error: 'Nenhuma informação fiscal extraída do PDF.' });
+    }
 
-    const resultado = await TaxEngine.processarNota(params);
-    resultado.optanteSimei = optanteSimei;
-    resultado.dataOpcaoSimples = dataOpcaoSimples;
-    resultado.fonteConsultaCnpj = fonteConsultaCnpj;
-    resultado.validacaoChave = notaExtraida.validacaoChave;
+    const cnpjCache = new Map<string, any>();
+    const sicafCache = new Map<string, DadosSicafConsulta>();
+    const resultadosProcessados: ResultadoConsolidado[] = [];
 
-    await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
+    for (const n of notasExtraidas) {
+      const r = await processarNotaExtraidaUnica(n, req.body, cnpjCache, sicafCache);
+      resultadosProcessados.push(r);
+    }
 
-    res.json(resultado);
+    const principal: any = { ...resultadosProcessados[0] };
+    if (resultadosProcessados.length > 1) {
+      principal.multiplasNotas = true;
+      principal.totalNotasNoArquivo = resultadosProcessados.length;
+      principal.todasNotas = resultadosProcessados;
+    }
+
+    res.json(principal);
   } catch (error: any) {
     console.error('Erro no processamento do PDF:', error);
     res.status(400).json({ error: error.message || 'Erro ao extrair informações do PDF.' });
   }
 });
 
-// Upload e Processamento em Lote de Múltiplas Notas (PDFs e XMLs)
+// Upload e Processamento em Lote de Múltiplas Notas (PDFs e XMLs, com expansão de PDFs multi-notas)
 app.post('/api/upload-lote', uploadSingleFile, async (req: Request, res: Response) => {
   try {
     const files = (req.files as Express.Multer.File[]) || [];
@@ -422,109 +469,19 @@ app.post('/api/upload-lote', uploadSingleFile, async (req: Request, res: Respons
     for (const file of files) {
       try {
         const isXml = file.originalname.toLowerCase().endsWith('.xml') || (file.mimetype && file.mimetype.includes('xml'));
-        let notaExtraida;
+        let notasExtraidasDoArquivo: any[] = [];
 
         if (isXml) {
-          notaExtraida = await XmlParser.parseXml(file.buffer);
+          const n = await XmlParser.parseXml(file.buffer);
+          notasExtraidasDoArquivo = [n];
         } else {
-          notaExtraida = await PdfParser.parsePdf(file.buffer);
+          notasExtraidasDoArquivo = await PdfParser.parseMultiplasNotas(file.buffer);
         }
 
-        let optanteSimples = false;
-        let optanteSimei = false;
-        let dataOpcaoSimples = undefined;
-        let fonteConsultaCnpj = undefined;
-        let situacaoCadastral = 'ATIVA';
-
-        let fornecedorMunicipio = undefined;
-        let fornecedorUf = undefined;
-        let sicafInfoLote: DadosSicafConsulta | undefined = undefined;
-
-        if (notaExtraida.fornecedorCnpj) {
-          const cnpjLimpo = notaExtraida.fornecedorCnpj.replace(/\D/g, '');
-          
-          // Consulta concorrente ou recuperação do cache para o CNPJ
-          if (cnpjCache.has(cnpjLimpo)) {
-            const cached = cnpjCache.get(cnpjLimpo);
-            optanteSimples = cached.optanteSimples;
-            optanteSimei = cached.optanteSimei;
-            dataOpcaoSimples = cached.dataOpcaoSimples;
-            fonteConsultaCnpj = cached.fonteConsulta;
-            situacaoCadastral = cached.situacaoCadastral;
-            fornecedorMunicipio = cached.municipio;
-            fornecedorUf = cached.uf;
-            if (cached.razaoSocial && cached.razaoSocial !== 'Fornecedor Cadastrado' && cached.razaoSocial !== 'Razão Social Não Identificada') {
-              notaExtraida.fornecedorNome = cached.razaoSocial;
-            }
-          } else {
-            try {
-              const cnpjInfo = await CnpjService.consultarCnpj(cnpjLimpo);
-              cnpjCache.set(cnpjLimpo, cnpjInfo);
-              optanteSimples = cnpjInfo.optanteSimples;
-              optanteSimei = cnpjInfo.optanteSimei;
-              dataOpcaoSimples = cnpjInfo.dataOpcaoSimples;
-              fonteConsultaCnpj = cnpjInfo.fonteConsulta;
-              situacaoCadastral = cnpjInfo.situacaoCadastral;
-              fornecedorMunicipio = cnpjInfo.municipio;
-              fornecedorUf = cnpjInfo.uf;
-              if (cnpjInfo.razaoSocial && cnpjInfo.razaoSocial !== 'Fornecedor Cadastrado' && cnpjInfo.razaoSocial !== 'Razão Social Não Identificada') {
-                notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
-              }
-            } catch (e) {
-              console.warn(`Não foi possível consultar CNPJ ${cnpjLimpo}:`, e);
-            }
-          }
-
-          // Consulta concomitante ao SICAF no lote (com cache dedup)
-          if (sicafCache.has(cnpjLimpo)) {
-            sicafInfoLote = sicafCache.get(cnpjLimpo);
-          } else {
-            try {
-              sicafInfoLote = await SicafService.consultarSicaf(cnpjLimpo);
-              sicafCache.set(cnpjLimpo, sicafInfoLote);
-            } catch (eSicaf) {
-              console.warn(`Aviso ao consultar SICAF para ${cnpjLimpo} no lote:`, eSicaf);
-            }
-          }
+        for (const notaExtraida of notasExtraidasDoArquivo) {
+          const resultado = await processarNotaExtraidaUnica(notaExtraida, req.body, cnpjCache, sicafCache);
+          notasResultados.push(resultado);
         }
-
-        const params: ParametrosCalculo = {
-          tipoDocumento: notaExtraida.tipoDocumento,
-          numeroNota: notaExtraida.numeroNota,
-          chaveAcesso: notaExtraida.chaveAcesso,
-          numeroProcesso: req.body.numeroProcesso ? String(req.body.numeroProcesso).trim() : undefined,
-          documentoHabil: req.body.documentoHabil ? String(req.body.documentoHabil).trim() : undefined,
-          numeroEmpenho: req.body.numeroEmpenho ? String(req.body.numeroEmpenho).trim() : undefined,
-          fornecedorNome: notaExtraida.fornecedorNome,
-          fornecedorCnpj: notaExtraida.fornecedorCnpj,
-          fornecedorMunicipio,
-          fornecedorUf,
-          destinatarioNome: notaExtraida.destinatarioNome,
-          destinatarioCnpj: notaExtraida.destinatarioCnpj,
-          optanteSimples: optanteSimples,
-          situacaoCadastral: situacaoCadastral,
-          dataEmissao: notaExtraida.dataEmissao,
-          itens: notaExtraida.itens,
-          codigoServicoPadrao: notaExtraida.codigoServicoNfse || '6190',
-          aliqIss: 5.00,
-          percentualReducaoIss: notaExtraida.percentualReducaoIssNfse || 0,
-          retencaoIss: notaExtraida.issqnRetidoTomador !== undefined ? notaExtraida.issqnRetidoTomador : true,
-          valorInssDestacado: notaExtraida.destaqueInss || 0,
-          valorMateriaisInss: notaExtraida.percentualReducaoIssNfse ? Number((notaExtraida.valorTotal * (notaExtraida.percentualReducaoIssNfse / 100)).toFixed(2)) : 0,
-          valorContaVinculada: 0,
-          retencaoInss: (notaExtraida.destaqueInss && notaExtraida.destaqueInss > 0) ? true : false,
-          sicaf: sicafInfoLote
-        };
-
-        const resultado = await TaxEngine.processarNota(params);
-        resultado.optanteSimei = optanteSimei;
-        resultado.dataOpcaoSimples = dataOpcaoSimples;
-        resultado.fonteConsultaCnpj = fonteConsultaCnpj;
-        resultado.validacaoChave = notaExtraida.validacaoChave;
-
-        await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
-
-        notasResultados.push(resultado);
       } catch (errNota: any) {
         console.error(`Erro ao processar arquivo do lote ${file.originalname}:`, errNota);
         errosLote.push({ arquivo: file.originalname, erro: errNota.message || 'Falha no processamento' });

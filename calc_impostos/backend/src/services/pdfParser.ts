@@ -230,7 +230,149 @@ export class PdfParser {
     return descrPartes.join(' ').trim();
   }
 
-  public static async parsePdf(pdfBuffer: Buffer): Promise<NotaFiscalExtraida & {
+  public static async extrairPaginasTexto(pdfBuffer: Buffer): Promise<string[]> {
+    const pageTexts: string[] = [];
+    const render_page = (pageData: any) => {
+      return pageData.getTextContent().then((textContent: any) => {
+        let lastY: any, text = '';
+        for (const item of textContent.items) {
+          if (lastY === item.transform[5] || !lastY) {
+            text += item.str;
+          } else {
+            text += '\n' + item.str;
+          }
+          lastY = item.transform[5];
+        }
+        pageTexts.push(text);
+        return text;
+      });
+    };
+
+    try {
+      const parseFn = typeof pdfParse === 'function' ? pdfParse : (pdfParse as any).default || pdfParse;
+      await parseFn(pdfBuffer, { pagerender: render_page });
+    } catch (e: any) {
+      console.warn('pdfParse orientado a páginas falhou, tentando fallback padrão:', e?.message);
+    }
+
+    if (pageTexts.length === 0) {
+      const fallback = this.extrairTextoManualFlateDecode(pdfBuffer);
+      if (fallback) {
+        pageTexts.push(fallback);
+      }
+    }
+
+    return pageTexts;
+  }
+
+  public static extrairChaveAcesso(text: string): string {
+    const regexChaveDanfe44 = /\b(\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4})\b/;
+    const matchDanfe44 = text.match(regexChaveDanfe44);
+    if (matchDanfe44) {
+      return matchDanfe44[1].replace(/\s/g, '');
+    }
+    const chaveMatch = text.match(/\b\d{50}\b/) || text.match(/\b\d{44}\b/) ||
+      text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)([\d\s-]{44,60})/i);
+    if (chaveMatch) {
+      const candidata = (chaveMatch[1] || chaveMatch[0]).replace(/[\s-]/g, '');
+      if (candidata.length >= 44 && candidata.length <= 50) return candidata;
+    }
+    return '';
+  }
+
+  public static extrairNumeroNotaDocumento(text: string, chaveAcesso?: string): string {
+    let numeroNota = '';
+    const chave = chaveAcesso || this.extrairChaveAcesso(text);
+    if (chave && chave.length === 50) {
+      const rawNum = chave.substring(23, 36);
+      const mYear = rawNum.match(/^(20\d{2})0*([1-9]\d*)$/);
+      if (mYear) numeroNota = mYear[2];
+      else {
+        const semZeros = rawNum.replace(/^0+/, '');
+        if (semZeros) numeroNota = semZeros;
+      }
+    }
+    if (!numeroNota && chave && chave.length === 44) {
+      const numChave = chave.substring(25, 34).replace(/^0+/, '');
+      if (numChave && numChave !== '0') numeroNota = numChave;
+    }
+    if (!numeroNota) {
+      const matchNumeroNfseDireto = text.match(/(?:N[úu]mero\s*da\s*NFS-e|NÚMERODANFS-e|NÚMERO DA NFS-e|N[ºo\.]\s*NFS-e)[^\d]*0*([1-9]\d{0,10})/i);
+      if (matchNumeroNfseDireto && matchNumeroNfseDireto[1]) {
+        let n = matchNumeroNfseDireto[1].replace(/\./g, '');
+        const mYear = n.match(/^(20\d{2})0*([1-9]\d*)$/);
+        if (mYear) n = mYear[2];
+        numeroNota = n;
+      }
+    }
+    if (!numeroNota) {
+      const padroes = [
+        /N[úu]mero\s*da\s*Nota\s*Fiscal[^\d]*0*([1-9]\d{0,10})/i,
+        /N[ºo\.]\s*0*([0-9]{1,3}(?:\.[0-9]{3})+)/i,
+        /N[ºo]\.?\s*0*([1-9]\d{2,8})\b/i,
+        /(?:N[úu]mero da Nota|N[úu]mero|NF-e|NFS-e)\s*[:\.]?\s*0*([1-9]\d{0,8})\b/i
+      ];
+      for (const p of padroes) {
+        const m = text.match(p);
+        if (m && m[1]) {
+          numeroNota = m[1].replace(/\./g, '');
+          break;
+        }
+      }
+    }
+    return numeroNota;
+  }
+
+  public static agruparPaginasPorDocumentoFiscal(paginas: string[]): Array<{ texto: string; paginasIndices: number[] }> {
+    if (paginas.length <= 1) {
+      return [{ texto: paginas[0] || '', paginasIndices: [1] }];
+    }
+
+    const docs: Array<{ texto: string; paginasIndices: number[] }> = [];
+    let docAtualTexto = paginas[0];
+    let docAtualIndices = [1];
+    let chaveAtual = this.extrairChaveAcesso(paginas[0]);
+    let numAtual = this.extrairNumeroNotaDocumento(paginas[0], chaveAtual);
+
+    for (let i = 1; i < paginas.length; i++) {
+      const pag = paginas[i];
+      const chavePag = this.extrairChaveAcesso(pag);
+      const numPag = this.extrairNumeroNotaDocumento(pag, chavePag);
+
+      // Critério 1: Chaves de acesso identificadas e distintas -> NOVA NOTA
+      const temChavesDistintas = Boolean(chavePag && chaveAtual && chavePag !== chaveAtual);
+
+      // Critério 2: Números de nota identificados e distintos
+      const temNumsDistintos = Boolean(numPag && numAtual && numPag !== numAtual);
+
+      // Critério 3: Cabeçalho claro de nova nota
+      const temCabecalhoInicio = /(?:DANFESe\s+v\d|DOCUMENTO AUXILIAR DA NOTA FISCAL|DANFE|PREFEITURA MUNICIPAL|NOTA FISCAL DE SERVIÇOS ELETRÔNICA)/i.test(pag.substring(0, 400));
+      const ehFolha1 = /FOLHA\s*1\s*\/\s*1|FOLHA\s*0?1\s*\/\s*0?[1-9]/i.test(pag);
+      const ehContinuaFolhaSubsequente = /FOLHA\s*[2-9]\s*\/\s*\d/i.test(pag);
+
+      const ehNovoDocumento = temChavesDistintas || 
+                             (temNumsDistintos && temCabecalhoInicio) || 
+                             (temCabecalhoInicio && !ehContinuaFolhaSubsequente && (ehFolha1 || (chavePag && chavePag !== chaveAtual)));
+
+      if (ehNovoDocumento) {
+        docs.push({ texto: docAtualTexto, paginasIndices: [...docAtualIndices] });
+        docAtualTexto = pag;
+        docAtualIndices = [i + 1];
+        chaveAtual = chavePag || this.extrairChaveAcesso(pag);
+        numAtual = numPag || this.extrairNumeroNotaDocumento(pag, chaveAtual);
+      } else {
+        docAtualTexto += '\n\n' + pag;
+        docAtualIndices.push(i + 1);
+        if (!chaveAtual && chavePag) chaveAtual = chavePag;
+        if (!numAtual && numPag) numAtual = numPag;
+      }
+    }
+
+    docs.push({ texto: docAtualTexto, paginasIndices: [...docAtualIndices] });
+    return docs;
+  }
+
+  public static parseTexto(text: string): NotaFiscalExtraida & {
     destaqueIr?: number;
     destaqueInss?: number;
     destaqueSocial?: number;
@@ -241,24 +383,10 @@ export class PdfParser {
     codigoServicoNfse?: string;
     localPrestacaoServico?: string;
     aliqIssNfseDestaque?: number;
-  }> {
-    let text = '';
-
-    try {
-      const parseFn = typeof pdfParse === 'function' ? pdfParse : (pdfParse as any).default || pdfParse;
-      const data = await parseFn(pdfBuffer);
-
-      if (data && data.text && data.text.length > 50) {
-        text = data.text;
-      }
-    } catch (err: any) {
-      console.warn('pdfParse falhou, acionando fallback manual FlateDecode:', err?.message);
-    }
-
-    if (!text || text.length <= 50) {
-      text = this.extrairTextoManualFlateDecode(pdfBuffer);
-    }
-
+    numeroPaginaOrigem?: number;
+    totalPaginasDocumento?: number;
+    totalNotasNoPdf?: number;
+  } {
     // 1. TIPO DE DOCUMENTO (NF-e vs NFS-e)
     const upperText = text.toUpperCase();
     const temMarcadorReformaNfse = upperText.includes('TRIBUTAÇÃO IBS / CBS') || 
@@ -289,11 +417,16 @@ export class PdfParser {
     if (matchDanfe44) {
       chaveAcesso = matchDanfe44[1].replace(/\s/g, '');
     } else {
-      const chaveMatch = text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)([\d\s-]{44,60})/i) ||
-                         text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)?(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}|\d{44,50})/i);
-      if (chaveMatch) {
-        const candidata = chaveMatch[1].replace(/[\s-]/g, '');
-        if (candidata.length >= 44 && candidata.length <= 50) chaveAcesso = candidata;
+      const match50 = text.match(/\b\d{50}\b/);
+      if (match50) {
+        chaveAcesso = match50[0];
+      } else {
+        const chaveMatch = text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)([\d\s-]{44,60})/i) ||
+                           text.match(/(?:CHAVE\s*DE\s*ACESSO[^\d]*)?(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}|\d{44,50})/i);
+        if (chaveMatch) {
+          const candidata = (chaveMatch[1] || chaveMatch[0]).replace(/[\s-]/g, '');
+          if (candidata.length >= 44 && candidata.length <= 50) chaveAcesso = candidata;
+        }
       }
     }
 
@@ -501,12 +634,17 @@ export class PdfParser {
       }
 
       // 2) Busca por menção de órgãos conhecidos no documento (ex: recebedor na DANFE)
-      if (!destinatarioNome) {
-        const matchRecebedor = text.match(/IDENTIFICA[ÇC][ÃA]O\s*(?:E\s*ASSINATURA)?\s*DO\s*RECEBEDOR\s*\(([^)]+)\)/i);
-        if (matchRecebedor && matchRecebedor[1]) {
-          destinatarioNome = this.formatarNomeEmpresa(matchRecebedor[1].trim());
+      if (!destinatarioNome || destinatarioNome.length < 5 || /^[A-Za-zÀ-ÿ\s]+[\/-]\s*[A-Z]{2}$/i.test(destinatarioNome.trim())) {
+        const matchEbserh = text.match(/(?:Ebserh[^\n\r]{0,80}|EMPRESA BRASILEIRA DE SERVI[ÇC]OS HOSPITALARES[^\n\r]{0,80}|Hospital Universit[áa]rio[^\n\r]{0,80})/i);
+        if (matchEbserh) {
+          destinatarioNome = this.formatarNomeEmpresa(matchEbserh[0].trim());
         } else {
-          destinatarioNome = 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH';
+          const matchRecebedor = text.match(/IDENTIFICA[ÇC][ÃA]O\s*(?:E\s*ASSINATURA)?\s*DO\s*RECEBEDOR\s*\(([^)]+)\)/i);
+          if (matchRecebedor && matchRecebedor[1]) {
+            destinatarioNome = this.formatarNomeEmpresa(matchRecebedor[1].trim());
+          } else {
+            destinatarioNome = 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH';
+          }
         }
       }
     }
@@ -514,6 +652,7 @@ export class PdfParser {
     // 5. VALORES E RETENÇÕES DESTAQUE NA NFS-E
     let valorTotal = 0;
     const padroesValorNota = ehServico ? [
+      /(?:VALOR\s*TOTAL\s*DA\s*NFS-E|VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O)[\s\S]*?R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i,
       /Vl\.?\s*do\s*Servi[çc]o\s*:?\s*R?\$?\s*([\d\.,]+)/i,
       /Valor\s+do\s+Servi[çc]o\s*:?\s*R?\$?\s*([\d\.,]+)/i,
       /VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O\s*:?\s*R?\$?\s*([\d\.,]+)/i,
@@ -1094,5 +1233,55 @@ export class PdfParser {
       localPrestacaoServico,
       aliqIssNfseDestaque
     };
+  }
+
+  public static async parseMultiplasNotas(pdfBuffer: Buffer): Promise<Array<NotaFiscalExtraida & {
+    destaqueIr?: number;
+    destaqueInss?: number;
+    destaqueSocial?: number;
+    destaqueIss?: number;
+    bcIssqnNfse?: number;
+    percentualReducaoIssNfse?: number;
+    issqnRetidoTomador?: boolean;
+    codigoServicoNfse?: string;
+    localPrestacaoServico?: string;
+    aliqIssNfseDestaque?: number;
+    numeroPaginaOrigem?: number;
+    totalPaginasDocumento?: number;
+    totalNotasNoPdf?: number;
+  }>> {
+    const paginas = await this.extrairPaginasTexto(pdfBuffer);
+    const grupos = this.agruparPaginasPorDocumentoFiscal(paginas);
+
+    const resultados: Array<any> = [];
+    for (const g of grupos) {
+      const extraida = this.parseTexto(g.texto);
+      extraida.numeroPaginaOrigem = g.paginasIndices[0];
+      extraida.totalPaginasDocumento = g.paginasIndices.length;
+      extraida.totalNotasNoPdf = grupos.length;
+      resultados.push(extraida);
+    }
+    return resultados;
+  }
+
+  public static async parsePdf(pdfBuffer: Buffer): Promise<NotaFiscalExtraida & {
+    destaqueIr?: number;
+    destaqueInss?: number;
+    destaqueSocial?: number;
+    destaqueIss?: number;
+    bcIssqnNfse?: number;
+    percentualReducaoIssNfse?: number;
+    issqnRetidoTomador?: boolean;
+    codigoServicoNfse?: string;
+    localPrestacaoServico?: string;
+    aliqIssNfseDestaque?: number;
+    totalNotasNoPdf?: number;
+    todasNotasNoPdf?: Array<any>;
+  }> {
+    const notas = await this.parseMultiplasNotas(pdfBuffer);
+    const primeiraNota = notas[0] || this.parseTexto('');
+    (primeiraNota as any).totalNotasNoPdf = notas.length;
+    (primeiraNota as any).todasNotasNoPdf = notas;
+    return primeiraNota;
   }
 }
