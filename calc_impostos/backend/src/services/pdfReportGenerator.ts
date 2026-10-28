@@ -190,17 +190,24 @@ export class PdfReportGenerator {
 
           // 1. Topo: Classificação Fiscal à esquerda e Valor Bruto à direita
           const ehNfe = resultado.tipoDocumento === 'NFE';
-          const labelFiscal = ehNfe ? 'CLASSIFICAÇÃO FISCAL (NCM & CST)' : 'CÓDIGO DE SERVIÇO MUNICIPAL';
+          const codigosDarfConhecidos = ['6190', '6147', '8767', '6175', '8739', '9060', '8850', '8863', '6188', 'ISENTO'];
+          const ehDarfCode = codigosDarfConhecidos.includes(item.codigoServico || '');
+          const temCodLc116 = !ehNfe && Boolean(item.codigoServico && !ehDarfCode);
+
+          const labelFiscal = ehNfe 
+            ? 'CLASSIFICAÇÃO FISCAL (NCM & CST)' 
+            : (temCodLc116 ? 'CÓDIGO DE TRIBUTAÇÃO DO SERVIÇO (LC 116)' : 'IDENTIFICAÇÃO DO SERVIÇO');
+
           doc.fillColor('#2563eb').fontSize(7.5).font('Helvetica-Bold')
              .text(labelFiscal, 45, currentY + 6);
 
           doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold')
              .text('VALOR BRUTO DO ITEM', 420, currentY + 6, { width: 130, align: 'right' });
 
-          // NCM e CST em destaque limpo
+          // NCM e CST ou Código LC 116 em destaque limpo
           const fiscalText = ehNfe 
             ? `NCM: ${item.ncm || 'Geral'}       CST: ${item.cst || '01'}`
-            : `Cód. Serviço: ${item.codigoServico || '6190'}`;
+            : (temCodLc116 ? `Cód. LC 116: ${item.codigoServico}` : 'Prestação de Serviços em Geral');
 
           doc.fillColor('#0f172a').fontSize(9.5).font('Helvetica-Bold')
              .text(fiscalText, 45, currentY + 16, { width: 350 });

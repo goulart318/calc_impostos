@@ -1198,13 +1198,19 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
               <div className="item-header">
                 <div>
                   <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--primary)' }}>
-                    {currentData.tipoDocumento === 'NFE' ? 'CRITÉRIO NCM & CST' : 'CÓDIGO SERVIÇO'}
+                    {currentData.tipoDocumento === 'NFE' 
+                      ? 'CRITÉRIO NCM & CST' 
+                      : (item.codigoServico && !['6190', '6147', '8767', '6175', '8739', '9060', '8850', '8863', '6188', 'ISENTO'].includes(item.codigoServico)
+                          ? 'CÓDIGO DE TRIBUTAÇÃO DO SERVIÇO (LC 116)' 
+                          : 'IDENTIFICAÇÃO DO SERVIÇO')}
                   </span>
                   <div style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span>
                       {currentData.tipoDocumento === 'NFE' 
                         ? `NCM ${item.ncm || 'Geral'} ${item.cst ? `• CST: ${item.cst}` : ''}` 
-                        : `Cód. ${item.codigoServico || '6190'}`}
+                        : (item.codigoServico && !['6190', '6147', '8767', '6175', '8739', '9060', '8850', '8863', '6188', 'ISENTO'].includes(item.codigoServico)
+                            ? `Cód. LC 116: ${item.codigoServico}`
+                            : 'Prestação de Serviços em Geral')}
                     </span>
                     {item.sugestaoMemoria && (
                       <span style={{

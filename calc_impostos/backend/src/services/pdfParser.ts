@@ -670,12 +670,30 @@ export class PdfParser {
 
     // Prioridade máxima e absoluta na NFS-e: Valor da Operação / Serviço (Valor Bruto antes das retenções)
     if (ehServico) {
-      const matchVlrOpAntes = text.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*[\r\n]+\s*VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O/i);
-      const matchVlrOpDepois = text.match(/VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O[\s\S]{0,80}?R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i);
-      if (matchVlrOpAntes) {
-        valorTotal = parseFloat(matchVlrOpAntes[1].replace(/\./g, '').replace(',', '.'));
-      } else if (matchVlrOpDepois) {
-        valorTotal = parseFloat(matchVlrOpDepois[1].replace(/\./g, '').replace(',', '.'));
+      // 1. Procura se logo após "Valor da Operação / Serviço" vem o valor bruto (ex: R$ 50.440,47 na NF 198 Megalav)
+      const mOpApos = text.match(/VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O\s*[\r\n]+\s*(?:R\$\s*)?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i) ||
+                      text.match(/VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O[\s\S]{0,40}?(?:R\$\s*)?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i);
+
+      // 2. Procura se imediatamente antes de "VALOR DA OPERAÇÃO / SERVIÇO" vem o valor bruto (ex: R$ 133.226,52 na NFSe 2499 Murano)
+      const mOpAntes = text.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*[\r\n]+\s*VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O/i);
+
+      let candApos = mOpApos ? parseFloat(mOpApos[1].replace(/\./g, '').replace(',', '.')) : 0;
+      let candAntes = mOpAntes ? parseFloat(mOpAntes[1].replace(/\./g, '').replace(',', '.')) : 0;
+
+      // Se candAntes veio de "Total do IBS/CBS\nR$ 434,86\nValor da Operação", ele pertence ao IBS/CBS, desqualifica!
+      if (candAntes > 0 && /Total\s*do\s*IBS\/CBS[\s\S]{0,35}?R\$\s*[0-9]{1,3}(?:\.[0-9]{3})*,\d{2}\s*[\r\n]+\s*VALOR\s*DA\s*OPERA[ÇC][ÃA]O/i.test(text)) {
+        candAntes = 0;
+      }
+
+      // Se candApos veio de "VALOR DA OPERAÇÃO / SERVIÇO\nR$ 20.450,28\nTotal das Retenções", ele pertence às retenções, desqualifica!
+      if (candApos > 0 && /VALOR\s*DA\s*OPERA[ÇC][ÃA]O\s*\/\s*SERVI[ÇC]O\s*[\r\n]+\s*R\$\s*[0-9]{1,3}(?:\.[0-9]{3})*,\d{2}\s*[\r\n]+\s*Total\s*das\s*Reten[çc][õo]es/i.test(text)) {
+        candApos = 0;
+      }
+
+      if (candApos > 0) {
+        valorTotal = candApos;
+      } else if (candAntes > 0) {
+        valorTotal = candAntes;
       }
     }
 
@@ -831,33 +849,41 @@ export class PdfParser {
         }
       }
 
-      // ISSQN e Redução de Base — restringe a busca ao bloco do ISSQN para não capturar
-      // valores da tabela IBS/CBS (que também tem seu próprio "Base de Cálculo")
-      const idxIssqnSecao = text.search(/IMPOSTO SOBRE SERVI[ÇC]O DE QUALQUER NATUREZA|C[ÁA]LCULO DO ISSQN/i);
-      const idxIbsCbsSecao = text.search(/IMPOSTO E CONTRIBUI[ÇC][ÃA]O SOBRE BENS E SERVI[ÇC]OS/i);
-      let trechoIssqn = text;
-      if (idxIssqnSecao !== -1) {
-        const fimIssqn = idxIbsCbsSecao !== -1 && idxIbsCbsSecao > idxIssqnSecao ? idxIbsCbsSecao : idxIssqnSecao + 500;
-        trechoIssqn = text.substring(idxIssqnSecao, fimIssqn);
+      // ISSQN, Base de Cálculo e Alíquota
+      // Procura valor da Base de Cálculo do ISSQN
+      const matchBcDepois = text.match(/BC\s*ISSQN[\s\S]{0,120}?(?:R\$\s*)?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i) ||
+                            text.match(/Base\s*de\s*C[áa]lculo\s*(?:do\s*ISSQN)?[\s\S]{0,80}?(?:R\$\s*)?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i);
+      const matchBcAntes = text.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*[\r\n]+\s*BC\s*ISSQN/i);
+
+      if (matchBcDepois) {
+        bcIssqnNfse = parseFloat(matchBcDepois[1].replace(/\./g, '').replace(',', '.'));
+      } else if (matchBcAntes) {
+        bcIssqnNfse = parseFloat(matchBcAntes[1].replace(/\./g, '').replace(',', '.'));
       }
 
-      const matchBcIss = trechoIssqn.match(/BC\s*ISSQN[\s\r\n]+(?:R\$\s*)?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i) ||
-                         trechoIssqn.match(/BC\s*ISSQN[^\d]*R?\$?\s*([\d\.,]+)/i) ||
-                         trechoIssqn.match(/Base\s*de\s*C[áa]lculo[^\d]*R?\$?\s*([\d\.,]+)/i);
-      if (matchBcIss) {
-        bcIssqnNfse = parseFloat(matchBcIss[1].replace(/\./g, '').replace(',', '.'));
-        if (valorTotal > 0 && bcIssqnNfse > 0 && bcIssqnNfse < valorTotal) {
-          percentualReducaoIssNfse = Number((((valorTotal - bcIssqnNfse) / valorTotal) * 100).toFixed(2));
-        }
+      if (valorTotal > 0 && bcIssqnNfse > 0 && bcIssqnNfse < valorTotal) {
+        percentualReducaoIssNfse = Number((((valorTotal - bcIssqnNfse) / valorTotal) * 100).toFixed(2));
       }
 
-      const matchIssApuradoAntes = trechoIssqn.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*[\r\n]+\s*ISSQN\s*Apurado/i);
-      if (matchIssApuradoAntes) {
-        destaqueIss = parseFloat(matchIssApuradoAntes[1].replace(/\./g, '').replace(',', '.'));
-      } else {
-        const matchIssApurado = trechoIssqn.match(/ISSQN\s*Apurado[^\d]*R?\$?\s*([\d\.,]+)/i) ||
-                                trechoIssqn.match(/Vl\.?\s*ISSQN[^\d]*R?\$?\s*([\d\.,]+)/i);
-        if (matchIssApurado) destaqueIss = parseFloat(matchIssApurado[1].replace(/\./g, '').replace(',', '.'));
+      // Procura valor apurado do ISSQN:
+      // Tenta primeiro o valor que vem logo APÓS "ISSQN Apurado" (ex: "ISSQN Apurado\nR$ 2.522,02" na NF 198 Megalav)
+      const mIssApos = text.match(/ISSQN\s*Apurado[\s\S]{0,40}?(?:R\$\s*)?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i) ||
+                       text.match(/Valor\s*(?:do\s*)?ISSQN[\s\S]{0,40}?(?:R\$\s*)?([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/i);
+      // Tenta o valor que vem logo ANTES de "ISSQN Apurado" (ex: "R$ 5.329,06\nISSQN Apurado" na NFSe 2499 Murano)
+      const mIssAntes = text.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\s*[\r\n]+\s*ISSQN\s*Apurado/i);
+
+      let vIssApos = mIssApos ? parseFloat(mIssApos[1].replace(/\./g, '').replace(',', '.')) : 0;
+      let vIssAntes = mIssAntes ? parseFloat(mIssAntes[1].replace(/\./g, '').replace(',', '.')) : 0;
+
+      // Se vIssAntes for igual à Base de Cálculo do ISSQN, ele pertence ao campo BC e não ao ISS apurado!
+      if (vIssAntes > 0 && bcIssqnNfse > 0 && Math.abs(vIssAntes - bcIssqnNfse) < 0.05) {
+        vIssAntes = 0;
+      }
+
+      if (vIssApos > 0) {
+        destaqueIss = vIssApos;
+      } else if (vIssAntes > 0) {
+        destaqueIss = vIssAntes;
       }
 
       if (upperText.includes('RETENÇÃO DO ISSQN\nNÃO RETIDO') || upperText.includes('NÃO RETIDO')) {
@@ -865,7 +891,8 @@ export class PdfParser {
       }
 
       // Alíquota do ISS aplicada na NFS-e (ex: "Alíquota Aplicada\n2,00%" ou "Alíquota: 3,00%")
-      const matchAliqIssStrict = text.match(/(?:Al[íi]quota\s*Aplicada|Al[íi]quota\s*do\s*ISSQN|Al[íi]quota\s*:)[^\d%]*(\d{1,2}(?:[,\.]\d{1,2})?)\s*%/i);
+      const matchAliqIssStrict = text.match(/(?:Al[íi]quota\s*Aplicada|Al[íi]quota\s*do\s*ISSQN|Al[íi]quota\s*:)[^\d%]*(\d{1,2}(?:[,\.]\d{1,2})?)\s*%/i) ||
+                                 text.match(/(\d{1,2}(?:[,\.]\d{1,2})?)\s*%[\s\r\n]+(?:Al[íi]quota\s*Aplicada|Al[íi]quota\s*do\s*ISSQN)/i);
       if (matchAliqIssStrict && matchAliqIssStrict[1]) {
         const alNum = parseFloat(matchAliqIssStrict[1].replace(',', '.'));
         if (!isNaN(alNum) && alNum > 0 && alNum <= 10) {
@@ -873,28 +900,44 @@ export class PdfParser {
         }
       }
 
-      // Local da prestação do serviço (Município onde o serviço foi executado)
-      const matchLocalPrestCid = text.match(/(?:Local\s*da\s*Presta[çc][ãa]o|TRIBUTA[ÇC][ÃA]O\s*MUNICIPAL)[\s\S]{0,160}?\n\s*([A-Za-zÀ-ÿ ]{3,40}?)\s*\/\s*([A-Z]{2})\s*(?:\/|$|\s*-)/i);
-      if (matchLocalPrestCid && !matchLocalPrestCid[1].toUpperCase().includes('SERVIÇO PRESTADO')) {
-        localPrestacaoServico = matchLocalPrestCid[1].trim();
-      } else {
-        const matchLocalPrest = text.match(/(?:Local\s*da\s*Presta[çc][ãa]o|LocaldaPresta[çc][ãa]o)[^\n]*\n\s*([^\n\r/]{3,60})/i) ||
-                                text.match(/(?:Munic[íi]pio\s*de\s*Incid[êe]ncia\s*do\s*ISSQN)[^\n]*\n\s*([^\n\r/]{3,60})/i);
-        if (matchLocalPrest && matchLocalPrest[1] && !matchLocalPrest[1].toUpperCase().includes('SERVIÇO PRESTADO')) {
-          localPrestacaoServico = matchLocalPrest[1].trim();
+      // Se a nota traz ISS apurado e BC calculada (ou valorTotal), mas a alíquota destacada está 0,00% ou não informada (caso da NF 198 Megalav):
+      // Calcula a alíquota real correspondente (ex: R$ 2.522,02 / R$ 50.440,47 = 5,00%)
+      const bcEfetiva = bcIssqnNfse > 0 ? bcIssqnNfse : valorTotal;
+      if ((!aliqIssNfseDestaque || aliqIssNfseDestaque === 0) && destaqueIss > 0 && bcEfetiva > 0) {
+        const aliqCalculada = Number(((destaqueIss / bcEfetiva) * 100).toFixed(2));
+        if (aliqCalculada > 0 && aliqCalculada <= 10) {
+          aliqIssNfseDestaque = aliqCalculada;
         }
       }
 
-      // Código do Serviço: prioriza o Código de Tributação Nacional (XX.XX.XX) quando presente
-      const matchCodTribNacional = text.match(/C[óo]d\.?\s*Trib\.?\s*Nacional\s*:?\s*([\d\.]{4,10})/i) ||
-                                   text.match(/(?:Código\s*de\s*Tributação\s*Nacional|CódigodeTributaçãoNacional)[^\n]*\n\s*([\d\.]+)/i);
+      // Local da prestação do serviço (Município onde o serviço foi executado)
+      // Janela de busca: ao redor de "Local da Prestação" (-120 chars antes até +220 chars depois)
+      const idxLocalPrest = text.search(/Local\s*(?:da\s*)?Presta[çc][ãa]o/i);
+      if (idxLocalPrest !== -1) {
+        const janelaLocal = text.substring(Math.max(0, idxLocalPrest - 120), idxLocalPrest + 220);
+        // Ex: "Vitória/ES / BR", "Vitória / ES / -", "Vitória/ ES/ -"
+        const mJanela = janelaLocal.match(/([A-Za-zÀ-ÿ ]{3,30}?)\s*\/\s*([A-Z]{2})\b/);
+        if (mJanela) {
+          const candCid = mJanela[1].trim();
+          if (!/^(?:Município|Sigla|País|Local|Endereço|SERVIÇO PRESTADO)/i.test(candCid)) {
+            localPrestacaoServico = candCid;
+          }
+        }
+      }
+
+      if (!localPrestacaoServico) {
+        const matchLocalPrestCid = text.match(/(?:Local\s*da\s*Presta[çc][ãa]o|TRIBUTA[ÇC][ÃA]O\s*MUNICIPAL)[\s\S]{0,160}?\n\s*([A-Za-zÀ-ÿ ]{3,40}?)\s*\/\s*([A-Z]{2})\s*(?:\/|$|\s*-)/i);
+        if (matchLocalPrestCid && !matchLocalPrestCid[1].toUpperCase().includes('SERVIÇO PRESTADO')) {
+          localPrestacaoServico = matchLocalPrestCid[1].trim();
+        }
+      }
+
+      // Código do Serviço: prioriza o Código de Tributação Nacional da LC 116 (XX.XX ou XX.XX.XX)
+      const matchCodTribNacional = text.match(/(?:C[óo]digo\s*de\s*Tributa[çc][ãa]o\s*Nacional|C[óo]d\.?\s*Trib\.?\s*Nacional)[\s\S]{0,80}?\b(\d{2}\.\d{2}(?:\.\d{2})?)\b/i) ||
+                                   text.match(/Item\s*(?:da\s*)?LC\s*116\s*:?\s*(\d{2}\.\d{2}(?:\.\d{2})?)/i) ||
+                                   text.match(/\b(04\.\d{2}(?:\.\d{2})?|07\.\d{2}(?:\.\d{2})?|17\.\d{2}(?:\.\d{2})?)\b/);
       if (matchCodTribNacional && matchCodTribNacional[1]) {
         codigoServicoNfse = matchCodTribNacional[1];
-      } else {
-        const matchCodServ = text.match(/(07\.02|17\.09|1709|6190|6175)/);
-        if (matchCodServ && matchCodServ[1]) {
-          codigoServicoNfse = matchCodServ[1];
-        }
       }
     }
 
