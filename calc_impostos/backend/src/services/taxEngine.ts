@@ -63,6 +63,8 @@ export interface ItemCalculado {
   valorLiquido: number;
 }
 
+import { ValidacaoChaveAcesso } from './chaveAcessoValidator';
+
 export interface ParametrosCalculo {
   tipoDocumento: 'NFE' | 'NFSE';
   numeroNota: string;
@@ -147,6 +149,7 @@ export interface ResultadoConsolidado {
   codigosReceitaDarf: { codigo: string; valor: number }[];
   fundamentacaoLegalResumo: string[];
   alertasCriticaFiscal?: string[];
+  validacaoChave?: ValidacaoChaveAcesso;
 
   // Auditoria e Conferência Específica de INSS (11% oficial vs Base Reduzida / CPRB 3,5%)
   auditoriaInss?: {

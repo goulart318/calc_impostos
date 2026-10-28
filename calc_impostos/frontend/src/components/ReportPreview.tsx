@@ -65,7 +65,18 @@ export interface DadosSicafConsulta {
   status?: 'HABILITADO' | 'COM_RESTRICAO' | 'NAO_CADASTRADO' | 'INDISPONIVEL';
 }
 
+export interface ValidacaoChaveAcesso {
+  verificavel: boolean;
+  valida: boolean;
+  cnpjChave?: string;
+  cnpjCorpo?: string;
+  numeroChave?: string;
+  numeroCorpo?: string;
+  divergencias: string[];
+}
+
 export interface ResultadoConsolidado {
+  validacaoChave?: ValidacaoChaveAcesso;
   tipoDocumento: 'NFE' | 'NFSE';
   numeroNota: string;
   chaveAcesso?: string;

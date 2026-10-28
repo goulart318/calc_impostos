@@ -22,7 +22,7 @@ import {
   Key,
   Shield
 } from 'lucide-react';
-import { ReportPreview, type ResultadoConsolidado, type DadosSicafConsulta } from './components/ReportPreview';
+import { ReportPreview, type ResultadoConsolidado, type DadosSicafConsulta, type ValidacaoChaveAcesso } from './components/ReportPreview';
 import { SicafCard } from './components/SicafCard';
 import { HistoricoSearch } from './components/HistoricoSearch';
 import { Anexo1Tab } from './components/Anexo1Tab';
@@ -149,12 +149,15 @@ export default function App() {
 
   // Resultado do Cálculo (Vazio por padrão)
   const [resultado, setResultado] = useState<ResultadoConsolidado | null>(null);
+  const [validacaoChave, setValidacaoChave] = useState<ValidacaoChaveAcesso | null>(null);
 
   const cnpjConfigClean = (uasg?.cnpj || '15126437000658').replace(/\D/g, '');
   const destCnpjClean = destinatarioCnpj.replace(/\D/g, '');
   const temDivergenciaDestinatario = Boolean(
     destCnpjClean && cnpjConfigClean && destCnpjClean !== cnpjConfigClean
   );
+  const temDivergenciaChave = Boolean(validacaoChave && validacaoChave.divergencias.length > 0);
+  const bloqueioEmissao = temDivergenciaDestinatario || temDivergenciaChave;
 
   const limparFormulario = () => {
     setNumeroNota('');
@@ -180,6 +183,7 @@ export default function App() {
     setOptanteCprb(false);
     setItens([]);
     setResultado(null);
+    setValidacaoChave(null);
     setSicafData(null);
   };
 
@@ -189,6 +193,11 @@ export default function App() {
   const calcularRetencoes = async () => {
     if (temDivergenciaDestinatario) {
       alert('⚠️ A emissão do relatório foi bloqueada pois a nota fiscal pertence a outro CNPJ!');
+      return;
+    }
+
+    if (temDivergenciaChave) {
+      alert('⚠️ A emissão do relatório foi bloqueada: a chave de acesso não confere com os dados do corpo da nota fiscal (CNPJ/número).');
       return;
     }
 
@@ -327,6 +336,7 @@ export default function App() {
       setDocumentoHabil(data.documentoHabil || '');
       setNumeroEmpenho(data.numeroEmpenho || '');
       setResultado(data);
+      setValidacaoChave(data.validacaoChave || null);
 
       setNumeroNota(data.numeroNota || '');
       setChaveAcesso(data.chaveAcesso || '');
@@ -458,6 +468,7 @@ export default function App() {
     }
     setDestinatarioCnpj(nota.destinatarioCnpj || '');
     setDestinatarioNome(nota.destinatarioNome || '');
+    setValidacaoChave(nota.validacaoChave || null);
     setOptanteSimples(nota.optanteSimples || false);
     setSituacaoCadastral(nota.situacaoCadastral || 'ATIVA');
     if (nota.sicaf) setSicafData(nota.sicaf);
@@ -931,6 +942,50 @@ export default function App() {
                         ) : (
                           <>
                             O CNPJ do Destinatário da Nota (<strong>{destinatarioCnpj}</strong>) é exatamente igual ao CNPJ configurado do seu órgão.
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Banner de Validação Cruzada: Chave de Acesso vs. Corpo da Nota */}
+                {validacaoChave && validacaoChave.verificavel && (
+                  <div style={{
+                    marginBottom: '16px',
+                    padding: '12px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    border: temDivergenciaChave ? '2px solid #ef4444' : '1px solid #10b981',
+                    background: temDivergenciaChave ? '#fef2f2' : '#ecfdf5',
+                    color: temDivergenciaChave ? '#991b1b' : '#065f46',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    {temDivergenciaChave ? (
+                      <AlertTriangle size={24} color="#dc2626" style={{ flexShrink: 0 }} />
+                    ) : (
+                      <CheckCircle2 size={24} color="#059669" style={{ flexShrink: 0 }} />
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ fontSize: '0.9rem', display: 'block', marginBottom: '2px' }}>
+                        {temDivergenciaChave
+                          ? 'DIVERGÊNCIA ENTRE A CHAVE DE ACESSO E O CORPO DA NOTA'
+                          : '✓ CONFERÊNCIA AUTOMÁTICA: CHAVE DE ACESSO CONFERE COM O CORPO DA NOTA'}
+                      </strong>
+                      <div style={{ fontSize: '0.8rem', lineHeight: 1.4 }}>
+                        {temDivergenciaChave ? (
+                          <>
+                            {validacaoChave.divergencias.map((d, i) => (
+                              <div key={i}>• {d}</div>
+                            ))}
+                            <div style={{ fontWeight: 700, marginTop: '4px', color: '#b91c1c' }}>
+                              ⚠️ A emissão do relatório foi BLOQUEADA. Solicite ao fornecedor a verificação/reemissão do documento.
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            CNPJ do emitente e número da nota na chave de acesso coincidem com os dados impressos no documento.
                           </>
                         )}
                       </div>
@@ -1481,12 +1536,12 @@ export default function App() {
                       className="btn btn-primary btn-block" 
                       type="button" 
                       onClick={calcularRetencoes} 
-                      disabled={temDivergenciaDestinatario || calculando}
+                      disabled={bloqueioEmissao || calculando}
                       style={{ 
                         marginTop: '16px',
-                        opacity: (temDivergenciaDestinatario || calculando) ? 0.65 : 1,
-                        cursor: (temDivergenciaDestinatario || calculando) ? 'not-allowed' : 'pointer',
-                        background: temDivergenciaDestinatario ? '#ef4444' : undefined
+                        opacity: (bloqueioEmissao || calculando) ? 0.65 : 1,
+                        cursor: (bloqueioEmissao || calculando) ? 'not-allowed' : 'pointer',
+                        background: bloqueioEmissao ? '#ef4444' : undefined
                       }}
                     >
                       <Calculator size={18} />
@@ -1494,7 +1549,9 @@ export default function App() {
                         ? 'Processando Cálculos e Regras...' 
                         : temDivergenciaDestinatario 
                           ? 'Bloqueado — CNPJ da Nota Pertence a Outro Estabelecimento' 
-                          : 'Calcular Retenções e Gerar Relatório'}
+                          : temDivergenciaChave
+                            ? 'Bloqueado — Chave de Acesso Diverge do Corpo da Nota'
+                            : 'Calcular Retenções e Gerar Relatório'}
                     </button>
                   )}
 

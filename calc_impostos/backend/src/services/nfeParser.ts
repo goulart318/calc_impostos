@@ -1,5 +1,6 @@
 import xml2js from 'xml2js';
 import { ItemAnaliseInput } from './taxEngine';
+import { ValidacaoChaveAcesso } from './chaveAcessoValidator';
 
 export interface NotaFiscalExtraida {
   tipoDocumento: 'NFE' | 'NFSE';
@@ -13,6 +14,7 @@ export interface NotaFiscalExtraida {
   dataEmissao: string;
   valorTotal: number;
   itens: ItemAnaliseInput[];
+  validacaoChave?: ValidacaoChaveAcesso;
 }
 
 export class NfeParser {

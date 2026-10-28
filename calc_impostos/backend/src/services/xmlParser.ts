@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { NotaFiscalExtraida } from './nfeParser';
 import { ItemAnaliseInput } from './taxEngine';
+import { ChaveAcessoValidator } from './chaveAcessoValidator';
 
 export class XmlParser {
   /**
@@ -135,6 +136,11 @@ export class XmlParser {
       tipoDocumento: 'NFE',
       numeroNota,
       chaveAcesso,
+      validacaoChave: ChaveAcessoValidator.validar({
+        chaveAcesso,
+        cnpjCorpo: fornecedorCnpjRaw,
+        numeroCorpo: String(ide.nNF || '')
+      }),
       fornecedorNome,
       fornecedorCnpj,
       destinatarioNome,

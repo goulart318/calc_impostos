@@ -1,6 +1,7 @@
 import zlib from 'zlib';
 import pdfParse from 'pdf-parse';
 import { NotaFiscalExtraida } from './nfeParser';
+import { ChaveAcessoValidator } from './chaveAcessoValidator';
 import { ItemAnaliseInput } from './taxEngine';
 
 export class PdfParser {
@@ -88,8 +89,8 @@ export class PdfParser {
       limpo = mQtdEspaco[2].trim();
     }
 
-    // 1. Caso 4 decimais colados: 3.000,00000,66001.980,00...
-    const mColados4Dec = limpo.match(/^([0-9]{1,3}(?:\.[0-9]{3})*,\d{4})([0-9]{1,3}(?:\.[0-9]{3})*,\d{4})([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/);
+    // 1. Caso 4 decimais (ou 2 a 4 decimais) colados: 3.000,00000,66001.980,00 ou 1,004.300,00004.300,00
+    const mColados4Dec = limpo.match(/^([0-9]{1,3}(?:\.[0-9]{3})*,\d{2,4})\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{3,4})\s*([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})/);
     if (mColados4Dec) {
       qtd = parseFloat(mColados4Dec[1].replace(/\./g, '').replace(',', '.'));
       valorUnitario = parseFloat(mColados4Dec[2].replace(/\./g, '').replace(',', '.'));
@@ -147,25 +148,35 @@ export class PdfParser {
         up.startsWith('PRODUTO:') ||
         up.startsWith('VALID:') ||
         up.startsWith('ANVISA:') ||
+        up.startsWith('REG.ANVISA') ||
         up.startsWith('LOTE') ||
         up.includes('LOTE:') ||
+        up.includes('N LT:') ||
+        up.includes('FAB:') ||
+        up.includes('VAL:') ||
         up.includes('DT VAL:') ||
         up.includes('DT. VAL') ||
+        up.includes('DT. FABRIC') ||
+        up.includes('AL. PROD') ||
         up.includes('PFCP') ||
         up.includes('VFCP') ||
         up.includes('PICMS') ||
         up.includes('VICMS') ||
+        up.includes('Nº DE SERIE') ||
+        up.startsWith('SERIE:') ||
         up.startsWith('S/N:') ||
         up.startsWith('CÓD.') ||
         up.startsWith('COD.') ||
         up.startsWith('DADOS') ||
-        up.startsWith('FOLHA:') ||
+        up.startsWith('FOLHA') ||
         up.startsWith('Nº 00') ||
+        up.startsWith('N. 0') ||
         up.startsWith('SÉRIE') ||
         up.startsWith('DANFE') ||
         up.startsWith('NATUREZA DA OPERAÇÃO') ||
         up.startsWith('PROTOCOLO') ||
         up.startsWith('INSCRIÇÃO') ||
+        up.startsWith('INSC.') ||
         up.startsWith('CNPJ') ||
         up.startsWith('CHAVE') ||
         up.startsWith('CONSULTA') ||
@@ -187,9 +198,14 @@ export class PdfParser {
         up.startsWith('ICMS') ||
         up.startsWith('IPI') ||
         up.startsWith('ALÍQ') ||
+        up.startsWith('ENTO ICMS') ||
+        up.startsWith('ORROG.ATE') ||
+        up.startsWith('ONV ') ||
         up.includes('CÓDIGO PRODUTO') ||
         up.includes('DESCRIÇÃO DO PRODUTO') ||
+        /^(?:\.\s*){4,}$/.test(l) ||
         /^\d{1,4}$/.test(l) ||
+        /^\d+,\d{2,4}\d+,\d{2,4}/.test(l) ||
         /^[A-Z0-9_\-]{8,25}$/.test(l)
       ) {
         if (descrPartes.length > 0) {
@@ -198,9 +214,17 @@ export class PdfParser {
         continue;
       }
 
-      const limpa = l.replace(/^[\d\-_]{4,25}\s*/, '').trim();
-      descrPartes.unshift(limpa || l);
-      if (descrPartes.length >= 2) break;
+      const regexPrefixoCodigo = /^(?:\d{5,20}\s*|[\d\-_]{4,25}|[A-Z]{2,5}\d{1,10}(?:-\d{1,10})*\s*|[A-Z]{2,5}(?:-\d{1,10})+\s*|[A-Z]{2,4}\.[A-Z0-9\.]{2,12}\s*)(?=[A-Za-z"\(])/;
+      const tinhaCodigoColado = regexPrefixoCodigo.test(l);
+      const limpa = l
+        .replace(regexPrefixoCodigo, '')
+        .replace(/^"+/, '')
+        .trim();
+      const textoFinalLinha = limpa || l;
+      if (!descrPartes.includes(textoFinalLinha)) {
+        descrPartes.unshift(textoFinalLinha);
+      }
+      if (tinhaCodigoColado || descrPartes.length >= 2) break;
     }
 
     return descrPartes.join(' ').trim();
@@ -372,16 +396,46 @@ export class PdfParser {
           }
         }
       }
+    } else {
+      // Extração estruturada por blocos da DANFE (Emitente vs Destinatário / Remetente)
+      const idxDestSecao = text.search(/DESTINAT[ÁA]RIO\s*\/\s*REMETENTE/i);
+      if (idxDestSecao !== -1) {
+        const trechoAntesDest = text.substring(0, idxDestSecao);
+        const cnpjsAntesDest = trechoAntesDest.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g) || [];
+        if (cnpjsAntesDest.length > 0) {
+          fornecedorCnpj = cnpjsAntesDest[0];
+        }
+
+        const restoAposDest = text.substring(idxDestSecao);
+        const idxFimDest = restoAposDest.search(/(?:FATURA|DUPLICATA|C[ÁA]LCULO\s*DO\s*IMPOSTO|TRANSPORTADOR|DADOS\s*DO)/i);
+        const trechoDest = idxFimDest !== -1 ? restoAposDest.substring(0, idxFimDest) : restoAposDest.substring(0, 700);
+
+        const cnpjsDest = trechoDest.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g) || [];
+        if (cnpjsDest.length > 0) {
+          destinatarioCnpj = cnpjsDest[0];
+        }
+
+        const matchNomeDestSecao = trechoDest.match(/NOME\s*\/\s*RAZ[ÃA]O\s*SOCIAL\s*[\r\n]+\s*([^\r\n]{4,120})/i);
+        if (matchNomeDestSecao && matchNomeDestSecao[1]) {
+          const candDest = matchNomeDestSecao[1].trim();
+          if (!/^(?:CNPJ|ENDERE|DATA|BAIRRO|MUNIC)/i.test(candDest)) {
+            destinatarioNome = this.formatarNomeEmpresa(candDest);
+          }
+        }
+      }
     }
+
+    // CNPJ do emitente conforme impresso no corpo da DANFE (antes de qualquer fallback pela chave de acesso)
+    const cnpjEmitenteCorpo = fornecedorCnpj;
 
     // Fallbacks para DANFEs de NF-e e documentos estruturados
     const cnpjMatches = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g) || [];
+    const cnpjChaveClean = (chaveAcesso && chaveAcesso.length === 44) ? chaveAcesso.substring(6, 20) : '';
 
-    // Se temos a chave de acesso de 44 dígitos da NF-e, o CNPJ do emitente é 100% determinístico (posições 7 a 20)
+    // Se ainda não identificou o CNPJ do emitente, usa a chave de acesso de 44 dígitos (posições 7 a 20) ou primeiro CNPJ
     if (!fornecedorCnpj) {
-      if (chaveAcesso && chaveAcesso.length === 44) {
-        const cnpjRaw = chaveAcesso.substring(6, 20);
-        fornecedorCnpj = `${cnpjRaw.substring(0,2)}.${cnpjRaw.substring(2,5)}.${cnpjRaw.substring(5,8)}/${cnpjRaw.substring(8,12)}-${cnpjRaw.substring(12,14)}`;
+      if (cnpjChaveClean.length === 14) {
+        fornecedorCnpj = `${cnpjChaveClean.substring(0,2)}.${cnpjChaveClean.substring(2,5)}.${cnpjChaveClean.substring(5,8)}/${cnpjChaveClean.substring(8,12)}-${cnpjChaveClean.substring(12,14)}`;
       } else if (cnpjMatches.length > 0) {
         fornecedorCnpj = cnpjMatches[0];
       }
@@ -392,7 +446,7 @@ export class PdfParser {
       const cnpjEmitenteClean = fornecedorCnpj.replace(/\D/g, '');
       for (const cnpjCad of cnpjMatches) {
         const clean = cnpjCad.replace(/\D/g, '');
-        if (clean !== cnpjEmitenteClean) {
+        if (clean !== cnpjEmitenteClean && (!cnpjChaveClean || clean !== cnpjChaveClean)) {
           destinatarioCnpj = cnpjCad;
           break;
         }
@@ -434,6 +488,7 @@ export class PdfParser {
               linhaCand.length >= 5 &&
               !/^\d{5}-?\d{3}$/.test(linhaCand) &&
               !/^\d+$/.test(linhaCand) &&
+              !/^\d{10,20}\s*[-–]/.test(linhaCand) &&
               !/^\d{2}\/\d{2}\/\d{4}/.test(linhaCand) &&
               !/^\d{2}:\d{2}(?::\d{2})?$/.test(linhaCand) &&
               !/^(?:NOME|RAZ[ÃA]O|DESTINAT[ÁA]RIO|ENDERE[ÇC]O|CNPJ|MUNIC[ÍI]PIO|DATA|HORA|BAIRRO|CEP|INSCRI|UF|FONE|PROTOCOLO)/i.test(linhaCand)
@@ -724,36 +779,64 @@ export class PdfParser {
         textoVarreduraItens = textoVarreduraItens.split(pr).join(' '.repeat(15));
       }
 
-      // 1) Busca primária estruturada: NCM de 8 dígitos seguido de CST (2 a 3 dígitos ou 1/00), CFOP (1/2/5/6/7xxx) e Unidade (2 a 4 letras)
-      // Exige fronteira de palavra \b ou quebra de linha antes do NCM para nunca casar dentro de sequências numéricas maiores
-      const regexItemEstruturado = /(?:^|\n|\b)(\d{8})\s*([0-9]\/[0-9]{2}|\d{2,3})\s*([12567]\d{3})\s*([A-Za-z]{2,4})?[\t ]*([^\r\n]*)/g;
+      // 1) Busca primária estruturada: NCM de 8 dígitos seguido de CST/CSOSN (2 a 3 dígitos, 0/00 ou 0/400), CFOP (1/2/5/6/7xxx) e Unidade (1 a 6 letras)
+      const regexItemEstruturado = /(?<![0-9])(\d{8})\s*([0-9]\/[0-9]{2,3}|\d{2,3})\s*([12567]\d{3})\s*([A-Za-z]{1,6})(?=\s|\d|\r|\n|$)[\t ]*([^\r\n]*)/g;
       let matchEstruturado;
+      let fimUltimoItem = 0;
       while ((matchEstruturado = regexItemEstruturado.exec(textoVarreduraItens)) !== null) {
         const candidatoNcm = matchEstruturado[1];
         const candidatoCst = matchEstruturado[2];
         if (this.ehNcmValido(candidatoNcm)) {
           const idxItem = matchEstruturado.index;
-          const restoLinha = matchEstruturado[5];
+          let restoLinha = (matchEstruturado[5] || '').trim();
+          let fimMatchAtual = idxItem + matchEstruturado[0].length;
+
+          // Se os valores numéricos estiverem na linha imediatamente seguinte (ex: "...902139116406108UN\n1,004.300,00004.300,00...")
+          if (!restoLinha) {
+            const posAposMatch = fimMatchAtual;
+            const proxQuebra = textoVarreduraItens.indexOf('\n', posAposMatch + 1);
+            const proxLinha = (proxQuebra !== -1
+              ? textoVarreduraItens.substring(posAposMatch, proxQuebra)
+              : textoVarreduraItens.substring(posAposMatch)
+            ).trim();
+            if (/^\d+(?:[\.,]\d+)/.test(proxLinha)) {
+              restoLinha = proxLinha;
+              if (proxQuebra !== -1) fimMatchAtual = proxQuebra;
+            }
+          }
+
+          // Exige que após a unidade (UN/PC/CX/etc.) existam valores numéricos de quantidade/preço (evita falso positivo em códigos EAN/GTIN colados à descrição)
+          if (!/^\d/.test(restoLinha)) {
+            continue;
+          }
 
           const valores = this.parseValoresItemDanfe(restoLinha, valorTotal);
+          if (valores.valorTotal <= 0) {
+            continue;
+          }
 
           // 1. Tenta capturar descrição colada na mesma linha antes do NCM (ex: "AJ-501 VALVULA MEC.AO90213911...")
           let descrItem = '';
           const inicioLinha = Math.max(0, textoVarreduraItens.lastIndexOf('\n', idxItem) + 1);
           const pedacoLinhaAntes = textoVarreduraItens.substring(inicioLinha, idxItem).trim();
           if (pedacoLinhaAntes.length > 3) {
-            const limpoMesmaLinha = pedacoLinhaAntes.replace(/^[\d\-_]{4,25}\s*/, '').trim();
+            const limpoMesmaLinha = pedacoLinhaAntes
+              .replace(/^[\d\-_]{4,25}\s*(?=[A-Za-z"\(])/, '')
+              .replace(/^"+/, '')
+              .trim();
             if (limpoMesmaLinha.length >= 3 && !limpoMesmaLinha.startsWith('COD.') && !limpoMesmaLinha.startsWith('DADOS')) {
               descrItem = limpoMesmaLinha;
             }
           }
 
-          // 2. Se não encontrou na mesma linha, busca nas linhas imediatamente anteriores pelo método inteligente
+          // 2. Se não encontrou na mesma linha, busca nas linhas imediatamente anteriores (limitado ao fim do item anterior)
           if (!descrItem) {
-            const inicioJanela = Math.max(0, idxItem - 600);
-            const trechoAnt = textoVarreduraItens.substring(inicioJanela, idxItem);
+            const inicioJanela = Math.max(fimUltimoItem, idxItem - 600);
+            const trechoAnt = textoVarreduraItens.substring(inicioJanela, inicioLinha);
             descrItem = this.extrairDescricaoItemDanfe(trechoAnt);
           }
+
+          fimUltimoItem = fimMatchAtual;
 
           const cstLimpo = candidatoCst.includes('/') ? candidatoCst.split('/')[1] : (candidatoCst.length >= 2 ? candidatoCst.substring(candidatoCst.length - 2) : candidatoCst);
           ncmsEncontrados.push({
@@ -764,6 +847,31 @@ export class PdfParser {
             valorUnitario: valores.valorUnitario > 0 ? valores.valorUnitario : undefined,
             quantidade: valores.quantidade > 0 ? valores.quantidade : undefined
           });
+        }
+      }
+
+      // 1b) Variante estruturada onde CFOP aparece após o Valor Total e a descrição vem na linha seguinte (ex: "210690900102UN160,000010,001.600,00005102...")
+      if (ncmsEncontrados.length === 0) {
+        const regexItemCfopPos = /(?:^|\n)(\d{8})(\d{3,4})([A-Za-z]{1,6})([0-9]{1,3}(?:\.[0-9]{3})*,\d{2,4})([0-9]{1,3}(?:\.[0-9]{3})*,\d{2,4})([0-9]{1,3}(?:\.[0-9]{3})*,\d{2,4})([12567]\d{3})[^\r\n]*[\r\n]+\s*([^\r\n]+)/g;
+        let matchCfopPos;
+        while ((matchCfopPos = regexItemCfopPos.exec(textoVarreduraItens)) !== null) {
+          const candidatoNcm = matchCfopPos[1];
+          const candidatoCst = matchCfopPos[2];
+          if (this.ehNcmValido(candidatoNcm)) {
+            const qtd = parseFloat(matchCfopPos[4].replace(/\./g, '').replace(',', '.'));
+            const vUnit = parseFloat(matchCfopPos[5].replace(/\./g, '').replace(',', '.'));
+            const vTot = parseFloat(matchCfopPos[6].replace(/\./g, '').replace(',', '.'));
+            const descrLinhaSeguinte = (matchCfopPos[8] || '').trim();
+            const cstLimpo = candidatoCst.length >= 3 ? candidatoCst.substring(1) : candidatoCst;
+            ncmsEncontrados.push({
+              ncm: candidatoNcm,
+              cst: cstLimpo,
+              descricao: descrLinhaSeguinte || undefined,
+              valorBruto: !isNaN(vTot) && vTot > 0 ? vTot : undefined,
+              valorUnitario: !isNaN(vUnit) && vUnit > 0 ? vUnit : undefined,
+              quantidade: !isNaN(qtd) && qtd > 0 ? qtd : undefined
+            });
+          }
         }
       }
 
@@ -951,8 +1059,20 @@ export class PdfParser {
       numeroEmpenho = matchEmpenho[1].toUpperCase();
     }
 
+    // Validação cruzada: CNPJ e número da chave de acesso vs. corpo da nota (somente DANFE/NF-e)
+    let validacaoChave = undefined;
+    if (!ehServico && chaveAcesso) {
+      const matchNumeroCorpo = text.match(/N[ºo°]\.?\s*(\d{3}\.\d{3}\.\d{3})\b/i);
+      validacaoChave = ChaveAcessoValidator.validar({
+        chaveAcesso,
+        cnpjCorpo: cnpjEmitenteCorpo,
+        numeroCorpo: matchNumeroCorpo ? matchNumeroCorpo[1] : undefined
+      });
+    }
+
     return {
       tipoDocumento: ehServico ? 'NFSE' : 'NFE',
+      validacaoChave,
       numeroNota: numeroNota || '1',
       chaveAcesso,
       numeroEmpenho,

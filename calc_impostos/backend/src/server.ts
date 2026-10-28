@@ -242,7 +242,7 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
           situacaoCadastral = cnpjInfo.situacaoCadastral;
           fornecedorMunicipio = cnpjInfo.municipio;
           fornecedorUf = cnpjInfo.uf;
-          if (cnpjInfo.razaoSocial && (!notaExtraida.fornecedorNome || notaExtraida.fornecedorNome === 'Fornecedor Desconhecido')) {
+          if (cnpjInfo.razaoSocial && cnpjInfo.razaoSocial !== 'Fornecedor Cadastrado' && cnpjInfo.razaoSocial !== 'Razão Social Não Identificada' && (!notaExtraida.fornecedorNome || notaExtraida.fornecedorNome === 'Fornecedor Desconhecido')) {
             notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
           }
         }
@@ -287,6 +287,7 @@ app.post('/api/upload-xml', uploadSingleFile, async (req: Request, res: Response
     resultado.optanteSimei = optanteSimei;
     resultado.dataOpcaoSimples = dataOpcaoSimples;
     resultado.fonteConsultaCnpj = fonteConsultaCnpj;
+    resultado.validacaoChave = notaExtraida.validacaoChave;
 
     await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
 
@@ -337,7 +338,7 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
           situacaoCadastral = cnpjInfo.situacaoCadastral;
           fornecedorMunicipio = cnpjInfo.municipio;
           fornecedorUf = cnpjInfo.uf;
-          if (cnpjInfo.razaoSocial) {
+          if (cnpjInfo.razaoSocial && cnpjInfo.razaoSocial !== 'Fornecedor Cadastrado' && cnpjInfo.razaoSocial !== 'Razão Social Não Identificada') {
             notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
           }
         }
@@ -394,6 +395,7 @@ app.post('/api/upload-pdf', uploadSingleFile, async (req: Request, res: Response
     resultado.optanteSimei = optanteSimei;
     resultado.dataOpcaoSimples = dataOpcaoSimples;
     resultado.fonteConsultaCnpj = fonteConsultaCnpj;
+    resultado.validacaoChave = notaExtraida.validacaoChave;
 
     await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
 
@@ -451,7 +453,7 @@ app.post('/api/upload-lote', uploadSingleFile, async (req: Request, res: Respons
             situacaoCadastral = cached.situacaoCadastral;
             fornecedorMunicipio = cached.municipio;
             fornecedorUf = cached.uf;
-            if (cached.razaoSocial) {
+            if (cached.razaoSocial && cached.razaoSocial !== 'Fornecedor Cadastrado' && cached.razaoSocial !== 'Razão Social Não Identificada') {
               notaExtraida.fornecedorNome = cached.razaoSocial;
             }
           } else {
@@ -465,7 +467,7 @@ app.post('/api/upload-lote', uploadSingleFile, async (req: Request, res: Respons
               situacaoCadastral = cnpjInfo.situacaoCadastral;
               fornecedorMunicipio = cnpjInfo.municipio;
               fornecedorUf = cnpjInfo.uf;
-              if (cnpjInfo.razaoSocial) {
+              if (cnpjInfo.razaoSocial && cnpjInfo.razaoSocial !== 'Fornecedor Cadastrado' && cnpjInfo.razaoSocial !== 'Razão Social Não Identificada') {
                 notaExtraida.fornecedorNome = cnpjInfo.razaoSocial;
               }
             } catch (e) {
@@ -518,6 +520,7 @@ app.post('/api/upload-lote', uploadSingleFile, async (req: Request, res: Respons
         resultado.optanteSimei = optanteSimei;
         resultado.dataOpcaoSimples = dataOpcaoSimples;
         resultado.fonteConsultaCnpj = fonteConsultaCnpj;
+        resultado.validacaoChave = notaExtraida.validacaoChave;
 
         await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
 
