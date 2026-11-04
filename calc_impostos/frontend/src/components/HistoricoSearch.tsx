@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Download, RefreshCw, Calendar, Building, Layers, Edit3, CheckCircle2, X } from 'lucide-react';
+import { Search, FileText, Download, RefreshCw, Calendar, Building, Layers, Edit3, CheckCircle2, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { gerarNomeArquivoPdf, type ResultadoConsolidado } from './ReportPreview';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './ProcessoConsolidadoModal';
 import { apiFetch } from '../lib/apiFetch';
@@ -22,6 +22,14 @@ interface NotaSalvaResumo {
   created_at: string;
 }
 
+interface RespostaPaginadaNotas {
+  items: NotaSalvaResumo[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 interface Props {
   onSelectNota: (resultado: ResultadoConsolidado) => void;
   onConsolidarNotas?: (dadosProcesso: ProcessoConsolidadoData) => void;
@@ -29,12 +37,21 @@ interface Props {
 
 export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNotas }) => {
   const [termo, setTermo] = useState('');
+  const [termoAtivo, setTermoAtivo] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'NFE' | 'NFSE'>('TODOS');
   const [notas, setNotas] = useState<NotaSalvaResumo[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingId, setLoadingId] = useState<number | null>(null);
+
+  // Estados de Paginação
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(15);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
   
-  // Seleção de Múltiplas Notas para Processo Consolidado
+  // Seleção de Múltiplas Notas para Processo Consolidado (preservada entre páginas)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedNotasCache, setSelectedNotasCache] = useState<Map<number, NotaSalvaResumo>>(new Map());
   const [consolidando, setConsolidando] = useState(false);
   const [processoModalData, setProcessoModalData] = useState<ProcessoConsolidadoData | null>(null);
 
@@ -50,11 +67,58 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
     return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const carregarNotas = async (queryStr: string = '') => {
+  const carregarNotas = async (
+    queryStr: string = termoAtivo,
+    page: number = paginaAtual,
+    limit: number = itensPorPagina,
+    tipo: 'TODOS' | 'NFE' | 'NFSE' = filtroTipo
+  ) => {
     setLoading(true);
     try {
-      const data = await apiFetch<NotaSalvaResumo[]>(`/api/notas/pesquisar?q=${encodeURIComponent(queryStr)}`);
-      setNotas(data || []);
+      const params = new URLSearchParams({
+        q: queryStr,
+        page: String(page),
+        limit: String(limit)
+      });
+      if (tipo !== 'TODOS') {
+        params.set('tipo', tipo);
+      }
+
+      const data = await apiFetch<RespostaPaginadaNotas | NotaSalvaResumo[]>(
+        `/api/notas/pesquisar?${params.toString()}`
+      );
+
+      let lista: NotaSalvaResumo[] = [];
+      if (Array.isArray(data)) {
+        lista = data;
+        setNotas(lista);
+        setTotalRegistros(lista.length);
+        setTotalPaginas(1);
+        setPaginaAtual(1);
+      } else if (data && Array.isArray(data.items)) {
+        lista = data.items;
+        setNotas(lista);
+        setTotalRegistros(data.total ?? lista.length);
+        setTotalPaginas(data.totalPages ?? Math.max(1, Math.ceil((data.total ?? lista.length) / limit)));
+        setPaginaAtual(data.page ?? page);
+      } else {
+        setNotas([]);
+        setTotalRegistros(0);
+        setTotalPaginas(1);
+      }
+
+      // Sincroniza o cache de notas selecionadas caso alguma esteja na página carregada
+      if (lista.length > 0) {
+        setSelectedNotasCache(prev => {
+          const next = new Map(prev);
+          lista.forEach(item => {
+            if (next.has(item.id)) {
+              next.set(item.id, item);
+            }
+          });
+          return next;
+        });
+      }
     } catch (e) {
       console.error('Erro ao buscar histórico:', e);
     } finally {
@@ -63,31 +127,80 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   };
 
   useEffect(() => {
-    carregarNotas();
-  }, []);
+    carregarNotas(termoAtivo, paginaAtual, itensPorPagina, filtroTipo);
+  }, [termoAtivo, paginaAtual, itensPorPagina, filtroTipo]);
+
+  // Debounce automático ao digitar na busca para facilitar encontrar lançamentos
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (termo !== termoAtivo) {
+        setPaginaAtual(1);
+        setTermoAtivo(termo);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [termo, termoAtivo]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    carregarNotas(termo);
+    setPaginaAtual(1);
+    setTermoAtivo(termo);
+    carregarNotas(termo, 1, itensPorPagina, filtroTipo);
   };
 
-  const handleToggleSelectNota = (id: number) => {
+  const handleLimparBusca = () => {
+    setTermo('');
+    setTermoAtivo('');
+    setFiltroTipo('TODOS');
+    setPaginaAtual(1);
+  };
+
+  const handleToggleSelectNota = (nota: NotaSalvaResumo) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      if (next.has(nota.id)) {
+        next.delete(nota.id);
       } else {
-        next.add(id);
+        next.add(nota.id);
+      }
+      return next;
+    });
+    setSelectedNotasCache(prev => {
+      const next = new Map(prev);
+      if (next.has(nota.id)) {
+        next.delete(nota.id);
+      } else {
+        next.set(nota.id, nota);
       }
       return next;
     });
   };
 
+  const todasDaPaginaSelecionadas = notas.length > 0 && notas.every(n => selectedIds.has(n.id));
+
   const handleToggleSelectAll = () => {
-    if (selectedIds.size === notas.length) {
-      setSelectedIds(new Set());
+    if (todasDaPaginaSelecionadas) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        notas.forEach(n => next.delete(n.id));
+        return next;
+      });
+      setSelectedNotasCache(prev => {
+        const next = new Map(prev);
+        notas.forEach(n => next.delete(n.id));
+        return next;
+      });
     } else {
-      setSelectedIds(new Set(notas.map(n => n.id)));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        notas.forEach(n => next.add(n.id));
+        return next;
+      });
+      setSelectedNotasCache(prev => {
+        const next = new Map(prev);
+        notas.forEach(n => next.set(n.id, n));
+        return next;
+      });
     }
   };
 
@@ -277,7 +390,9 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
 
   const handleExportarExcelCsv = () => {
     const notasParaExportar = selectedIds.size > 0 
-      ? notas.filter(n => selectedIds.has(n.id))
+      ? Array.from(selectedIds)
+          .map(id => selectedNotasCache.get(id) || notas.find(n => n.id === id))
+          .filter((n): n is NotaSalvaResumo => Boolean(n))
       : notas;
 
     if (notasParaExportar.length === 0) {
@@ -371,22 +486,100 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
     document.body.removeChild(link);
   };
 
+  // Calcula intervalo exibido e páginas visíveis para os botões de paginação
+  const indicePrimeiroRegistro = totalRegistros === 0 ? 0 : (paginaAtual - 1) * itensPorPagina + 1;
+  const indiceUltimoRegistro = Math.min(totalRegistros, paginaAtual * itensPorPagina);
+
+  const gerarBotoesPaginas = (): Array<number | 'ellipsis-start' | 'ellipsis-end'> => {
+    if (totalPaginas <= 7) {
+      return Array.from({ length: totalPaginas }, (_, i) => i + 1);
+    }
+    const paginas: Array<number | 'ellipsis-start' | 'ellipsis-end'> = [1];
+    const inicioJanela = Math.max(2, paginaAtual - 1);
+    const fimJanela = Math.min(totalPaginas - 1, paginaAtual + 1);
+
+    if (inicioJanela > 2) {
+      paginas.push('ellipsis-start');
+    }
+    for (let p = inicioJanela; p <= fimJanela; p++) {
+      paginas.push(p);
+    }
+    if (fimJanela < totalPaginas - 1) {
+      paginas.push('ellipsis-end');
+    }
+    paginas.push(totalPaginas);
+    return paginas;
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Barra de Pesquisa */}
-      <div className="card-box" style={{ background: '#ffffff', border: '1px solid var(--border)' }}>
-        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
+      {/* Barra de Pesquisa e Filtros */}
+      <div className="card-box" style={{ background: '#ffffff', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 320px' }}>
             <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               type="text"
               className="form-input"
-              style={{ paddingLeft: '40px', fontSize: '0.95rem' }}
+              style={{ paddingLeft: '40px', paddingRight: termo ? '36px' : '12px', fontSize: '0.95rem' }}
               placeholder="Digite o CNPJ do Fornecedor, Nº da Nota, Chave de Acesso, Processo SEI, Doc. Hábil ou Empenho..."
               value={termo}
               onChange={(e) => setTermo(e.target.value)}
             />
+            {termo && (
+              <button
+                type="button"
+                onClick={handleLimparBusca}
+                title="Limpar pesquisa"
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '2px'
+                }}
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
+
+          {/* Filtro rápido por Tipo de Documento */}
+          <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            {(['TODOS', 'NFE', 'NFSE'] as const).map((tipoOpt) => {
+              const ativo = filtroTipo === tipoOpt;
+              return (
+                <button
+                  key={tipoOpt}
+                  type="button"
+                  onClick={() => {
+                    setFiltroTipo(tipoOpt);
+                    setPaginaAtual(1);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: ativo ? '#2563eb' : 'transparent',
+                    color: ativo ? '#ffffff' : '#475569',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {tipoOpt === 'TODOS' ? 'Todas' : tipoOpt === 'NFE' ? 'NF-e (Bens)' : 'NFS-e (Serviços)'}
+                </button>
+              );
+            })}
+          </div>
+
           <button type="submit" className="btn-primary" disabled={loading} style={{ whiteSpace: 'nowrap' }}>
             {loading ? <RefreshCw size={16} className="spin" /> : <Search size={16} />}
             <span>Pesquisar Histórico</span>
@@ -414,14 +607,17 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
             <div>
               <strong style={{ fontSize: '0.9rem' }}>{selectedIds.size} nota(s) fiscal(is) selecionada(s)</strong>
               <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                Prontas para consolidação em processo de pagamento e emissão de relatório único
+                Prontas para consolidação em processo de pagamento e emissão de relatório único (a seleção é mantida ao navegar pelas páginas)
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button 
-              onClick={() => setSelectedIds(new Set())}
+              onClick={() => {
+                setSelectedIds(new Set());
+                setSelectedNotasCache(new Map());
+              }}
               style={{
                 background: 'transparent',
                 border: '1px solid #475569',
@@ -465,34 +661,65 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
           <div>
             <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
               <FileText size={18} color="var(--primary)" />
-              <span>Análises Gravadas no Banco de Dados ({notas.length})</span>
+              <span>Análises Gravadas no Banco de Dados ({totalRegistros})</span>
             </h3>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
               💡 Marque os checkboxes para somar várias notas e gerar o relatório consolidado do processo no SEI.
             </span>
           </div>
 
-          <button 
-            onClick={handleExportarExcelCsv}
-            className="btn-outline" 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '6px', 
-              padding: '6px 14px', 
-              fontSize: '0.82rem', 
-              fontWeight: 700, 
-              borderColor: '#16a34a', 
-              color: '#15803d', 
-              background: '#f0fdf4',
-              cursor: 'pointer',
-              borderRadius: '6px'
-            }}
-            title="Exportar notas exibidas / selecionadas para planilha Excel (formato CSV formatado para o Brasil)"
-          >
-            <Download size={15} />
-            <span>Exportar para Excel (CSV)</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Seletor de Quantidade por Página */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#475569' }}>
+              <label htmlFor="select-itens-pagina" style={{ fontWeight: 600 }}>Exibir:</label>
+              <select
+                id="select-itens-pagina"
+                value={itensPorPagina}
+                onChange={(e) => {
+                  setItensPorPagina(Number(e.target.value));
+                  setPaginaAtual(1);
+                }}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  background: '#f8fafc',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value={10}>10 por página</option>
+                <option value={15}>15 por página</option>
+                <option value={25}>25 por página</option>
+                <option value={50}>50 por página</option>
+                <option value={100}>100 por página</option>
+              </select>
+            </div>
+
+            <button 
+              onClick={handleExportarExcelCsv}
+              className="btn-outline" 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                padding: '6px 14px', 
+                fontSize: '0.82rem', 
+                fontWeight: 700, 
+                borderColor: '#16a34a', 
+                color: '#15803d', 
+                background: '#f0fdf4',
+                cursor: 'pointer',
+                borderRadius: '6px'
+              }}
+              title="Exportar notas exibidas / selecionadas para planilha Excel (formato CSV formatado para o Brasil)"
+            >
+              <Download size={15} />
+              <span>Exportar para Excel (CSV)</span>
+            </button>
+          </div>
         </div>
 
         {notas.length === 0 ? (
@@ -500,154 +727,299 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
             {loading ? 'Buscando registros...' : 'Nenhuma análise encontrada no banco de dados para a busca realizada.'}
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="tax-table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>
-                    <input 
-                      type="checkbox"
-                      title="Selecionar / Desmarcar Todas"
-                      checked={notas.length > 0 && selectedIds.size === notas.length}
-                      onChange={handleToggleSelectAll}
-                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                    />
-                  </th>
-                  <th>DATA / REGISTRO</th>
-                  <th>NOTA FISCAL</th>
-                  <th>FORNECEDOR (RAZÃO SOCIAL / CNPJ)</th>
-                  <th style={{ textAlign: 'right' }}>VALOR BRUTO</th>
-                  <th style={{ textAlign: 'right' }}>TOTAL RETIDO</th>
-                  <th style={{ textAlign: 'right' }}>LÍQUIDO A PAGAR</th>
-                  <th style={{ textAlign: 'center' }}>AÇÕES DA ANÁLISE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {notas.map((n) => {
-                  const isSelected = selectedIds.has(n.id);
-                  const dj = n.dados_json || {};
-                  const procExibir = n.numero_processo || dj.numeroProcesso;
-                  const docHabilExibir = n.documento_habil || dj.documentoHabil;
-                  const empExibir = n.numero_empenho || dj.numeroEmpenho;
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="tax-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input 
+                        type="checkbox"
+                        title="Selecionar / Desmarcar Todas desta Página"
+                        checked={todasDaPaginaSelecionadas}
+                        onChange={handleToggleSelectAll}
+                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                      />
+                    </th>
+                    <th>DATA / REGISTRO</th>
+                    <th>NOTA FISCAL</th>
+                    <th>FORNECEDOR (RAZÃO SOCIAL / CNPJ)</th>
+                    <th style={{ textAlign: 'right' }}>VALOR BRUTO</th>
+                    <th style={{ textAlign: 'right' }}>TOTAL RETIDO</th>
+                    <th style={{ textAlign: 'right' }}>LÍQUIDO A PAGAR</th>
+                    <th style={{ textAlign: 'center' }}>AÇÕES DA ANÁLISE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {notas.map((n) => {
+                    const isSelected = selectedIds.has(n.id);
+                    const dj = n.dados_json || {};
+                    const procExibir = n.numero_processo || dj.numeroProcesso;
+                    const docHabilExibir = n.documento_habil || dj.documentoHabil;
+                    const empExibir = n.numero_empenho || dj.numeroEmpenho;
 
-                  return (
-                    <tr 
-                      key={n.id}
-                      style={{
-                        backgroundColor: isSelected ? '#eff6ff' : undefined
-                      }}
-                    >
-                      <td style={{ textAlign: 'center' }}>
-                        <input 
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleToggleSelectNota(n.id)}
-                          style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                        />
-                      </td>
+                    return (
+                      <tr 
+                        key={n.id}
+                        style={{
+                          backgroundColor: isSelected ? '#eff6ff' : undefined
+                        }}
+                      >
+                        <td style={{ textAlign: 'center' }}>
+                          <input 
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectNota(n)}
+                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                          />
+                        </td>
 
-                      <td>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Calendar size={13} color="var(--text-muted)" />
-                          {new Date(n.created_at).toLocaleDateString('pt-BR')}
-                        </div>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                          {new Date(n.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        <td>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Calendar size={13} color="var(--text-muted)" />
+                            {new Date(n.created_at).toLocaleDateString('pt-BR')}
+                          </div>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            {new Date(n.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </td>
+
+                        <td>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>
+                            Nº {n.numero_nota}
+                          </div>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: n.tipo_documento === 'NFE' ? '#2563eb' : '#9333ea' }}>
+                            {n.tipo_documento === 'NFE' ? 'NF-e Mercadoria' : 'NFS-e Serviço'}
+                          </span>
+
+                          {procExibir && (
+                            <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
+                              <span style={{ color: '#64748b', fontWeight: 500 }}>SEI:</span> {procExibir}
+                            </div>
+                          )}
+                          {docHabilExibir && (
+                            <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
+                              <span style={{ color: '#64748b', fontWeight: 500 }}>DH:</span> {docHabilExibir}
+                            </div>
+                          )}
+                          {empExibir && (
+                            <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
+                              <span style={{ color: '#64748b', fontWeight: 500 }}>NE:</span> {empExibir}
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {n.fornecedor_nome}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Building size={12} />
+                            {n.fornecedor_cnpj}
+                            {n.optante_simples && <span style={{ color: '#d97706', fontWeight: 700 }}>[SIMPLES]</span>}
+                          </div>
+                        </td>
+
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatBRL(n.valor_bruto)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>{formatBRL(n.total_retido)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{formatBRL(n.valor_liquido)}</td>
+
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                            <button
+                              className="btn-outline"
+                              onClick={() => handleAbrirEdicao(n)}
+                              title="Editar Documento Hábil (NS Liquidação), Processo SEI e Empenho rapidamente"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '6px 10px',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                borderColor: '#3b82f6',
+                                color: '#1d4ed8',
+                                background: '#eff6ff',
+                                borderRadius: '6px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Edit3 size={13} />
+                              <span>Editar NS / SEI</span>
+                            </button>
+
+                            <button
+                              className="btn-secondary"
+                              onClick={() => handleReabrirNota(n.id)}
+                              disabled={loadingId === n.id}
+                              title="Reabrir análise para ajustes e recálculo"
+                              style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                            >
+                              {loadingId === n.id ? <RefreshCw size={14} className="spin" /> : <FileText size={14} />}
+                              <span>Reabrir</span>
+                            </button>
+
+                            <button
+                              className="btn-primary"
+                              onClick={() => handleDownloadPdfDirect(n.id, n.numero_nota, n.fornecedor_nome)}
+                              title="Baixar Relatório em PDF para o SEI"
+                              style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                            >
+                              <Download size={14} />
+                              <span>PDF SEI</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Rodapé de Paginação */}
+            <div style={{
+              marginTop: '16px',
+              paddingTop: '14px',
+              borderTop: '1px solid #e2e8f0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ fontSize: '0.82rem', color: '#475569' }}>
+                Exibindo <strong>{indicePrimeiroRegistro}</strong> a <strong>{indiceUltimoRegistro}</strong> de{' '}
+                <strong>{totalRegistros}</strong> lançamento(s)
+                {termoAtivo && (
+                  <span> para a busca <strong>"{termoAtivo}"</strong></span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setPaginaAtual(1)}
+                  disabled={paginaAtual <= 1 || loading}
+                  title="Primeira página"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: paginaAtual <= 1 ? '#f8fafc' : '#ffffff',
+                    color: paginaAtual <= 1 ? '#94a3b8' : '#1e293b',
+                    cursor: paginaAtual <= 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <ChevronsLeft size={16} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaginaAtual(prev => Math.max(1, prev - 1))}
+                  disabled={paginaAtual <= 1 || loading}
+                  title="Página anterior"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: paginaAtual <= 1 ? '#f8fafc' : '#ffffff',
+                    color: paginaAtual <= 1 ? '#94a3b8' : '#1e293b',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: paginaAtual <= 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <ChevronLeft size={15} />
+                  <span>Anterior</span>
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {gerarBotoesPaginas().map((item, idx) => {
+                    if (item === 'ellipsis-start' || item === 'ellipsis-end') {
+                      return (
+                        <span key={`${item}-${idx}`} style={{ padding: '0 6px', color: '#64748b', fontWeight: 700 }}>
+                          ...
                         </span>
-                      </td>
+                      );
+                    }
+                    const ativa = item === paginaAtual;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setPaginaAtual(item)}
+                        disabled={loading}
+                        style={{
+                          minWidth: '34px',
+                          height: '32px',
+                          padding: '0 8px',
+                          borderRadius: '6px',
+                          border: ativa ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                          background: ativa ? '#2563eb' : '#ffffff',
+                          color: ativa ? '#ffffff' : '#1e293b',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+                </div>
 
-                      <td>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>
-                          Nº {n.numero_nota}
-                        </div>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: n.tipo_documento === 'NFE' ? '#2563eb' : '#9333ea' }}>
-                          {n.tipo_documento === 'NFE' ? 'NF-e Mercadoria' : 'NFS-e Serviço'}
-                        </span>
+                <button
+                  type="button"
+                  onClick={() => setPaginaAtual(prev => Math.min(totalPaginas, prev + 1))}
+                  disabled={paginaAtual >= totalPaginas || loading}
+                  title="Próxima página"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: paginaAtual >= totalPaginas ? '#f8fafc' : '#ffffff',
+                    color: paginaAtual >= totalPaginas ? '#94a3b8' : '#1e293b',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: paginaAtual >= totalPaginas ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <span>Próxima</span>
+                  <ChevronRight size={15} />
+                </button>
 
-                        {procExibir && (
-                          <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
-                            <span style={{ color: '#64748b', fontWeight: 500 }}>SEI:</span> {procExibir}
-                          </div>
-                        )}
-                        {docHabilExibir && (
-                          <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
-                            <span style={{ color: '#64748b', fontWeight: 500 }}>DH:</span> {docHabilExibir}
-                          </div>
-                        )}
-                        {empExibir && (
-                          <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
-                            <span style={{ color: '#64748b', fontWeight: 500 }}>NE:</span> {empExibir}
-                          </div>
-                        )}
-                      </td>
-
-                      <td>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {n.fornecedor_nome}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Building size={12} />
-                          {n.fornecedor_cnpj}
-                          {n.optante_simples && <span style={{ color: '#d97706', fontWeight: 700 }}>[SIMPLES]</span>}
-                        </div>
-                      </td>
-
-                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatBRL(n.valor_bruto)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>{formatBRL(n.total_retido)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{formatBRL(n.valor_liquido)}</td>
-
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
-                          <button
-                            className="btn-outline"
-                            onClick={() => handleAbrirEdicao(n)}
-                            title="Editar Documento Hábil (NS Liquidação), Processo SEI e Empenho rapidamente"
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '6px 10px',
-                              fontSize: '0.78rem',
-                              fontWeight: 700,
-                              borderColor: '#3b82f6',
-                              color: '#1d4ed8',
-                              background: '#eff6ff',
-                              borderRadius: '6px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <Edit3 size={13} />
-                            <span>Editar NS / SEI</span>
-                          </button>
-
-                          <button
-                            className="btn-secondary"
-                            onClick={() => handleReabrirNota(n.id)}
-                            disabled={loadingId === n.id}
-                            title="Reabrir análise para ajustes e recálculo"
-                            style={{ padding: '6px 10px', fontSize: '0.78rem' }}
-                          >
-                            {loadingId === n.id ? <RefreshCw size={14} className="spin" /> : <FileText size={14} />}
-                            <span>Reabrir</span>
-                          </button>
-
-                          <button
-                            className="btn-primary"
-                            onClick={() => handleDownloadPdfDirect(n.id, n.numero_nota, n.fornecedor_nome)}
-                            title="Baixar Relatório em PDF para o SEI"
-                            style={{ padding: '6px 10px', fontSize: '0.78rem' }}
-                          >
-                            <Download size={14} />
-                            <span>PDF SEI</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                <button
+                  type="button"
+                  onClick={() => setPaginaAtual(totalPaginas)}
+                  disabled={paginaAtual >= totalPaginas || loading}
+                  title="Última página"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: paginaAtual >= totalPaginas ? '#f8fafc' : '#ffffff',
+                    color: paginaAtual >= totalPaginas ? '#94a3b8' : '#1e293b',
+                    cursor: paginaAtual >= totalPaginas ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <ChevronsRight size={16} />
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Database, FileText } from 'lucide-react';
+import { Database, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiFetch } from '../lib/apiFetch';
 
 export const HistoryTab: React.FC = () => {
   const [notas, setNotas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [termoBusca, setTermoBusca] = useState('');
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const itensPorPagina = 15;
 
   const carregarNotas = async () => {
     try {
@@ -33,6 +35,13 @@ export const HistoryTab: React.FC = () => {
     n.fornecedor_cnpj?.includes(termoBusca)
   );
 
+  const totalPaginas = Math.max(1, Math.ceil(notasFiltradas.length / itensPorPagina));
+  const paginaSegura = Math.min(paginaAtual, totalPaginas);
+  const notasPaginadas = notasFiltradas.slice(
+    (paginaSegura - 1) * itensPorPagina,
+    paginaSegura * itensPorPagina
+  );
+
   return (
     <div className="card">
       <div className="card-header">
@@ -57,7 +66,10 @@ export const HistoryTab: React.FC = () => {
           className="form-input" 
           placeholder="Pesquisar por número da nota, fornecedor ou CNPJ..." 
           value={termoBusca}
-          onChange={(e) => setTermoBusca(e.target.value)}
+          onChange={(e) => {
+            setTermoBusca(e.target.value);
+            setPaginaAtual(1);
+          }}
         />
       </div>
 
@@ -74,49 +86,77 @@ export const HistoryTab: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="tax-table">
-            <thead>
-              <tr>
-                <th>TIPO</th>
-                <th>Nº NOTA</th>
-                <th>FORNECEDOR</th>
-                <th>EMISSÃO</th>
-                <th style={{ textAlign: 'right' }}>VALOR BRUTO</th>
-                <th style={{ textAlign: 'right' }}>TOTAL RETIDO</th>
-                <th style={{ textAlign: 'right' }}>VALOR LÍQUIDO</th>
-                <th>REGIME</th>
-              </tr>
-            </thead>
-            <tbody>
-              {notasFiltradas.map((n) => (
-                <tr key={n.id}>
-                  <td>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: n.tipo_documento === 'NFE' ? '#eff6ff' : '#f0fdf4', color: n.tipo_documento === 'NFE' ? '#1d4ed8' : '#15803d' }}>
-                      {n.tipo_documento}
-                    </span>
-                  </td>
-                  <td style={{ fontWeight: 700 }}>{n.numero_nota}</td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{n.fornecedor_nome}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{n.fornecedor_cnpj}</div>
-                  </td>
-                  <td>{n.data_emissao ? new Date(n.data_emissao).toLocaleDateString('pt-BR') : '---'}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(n.valor_bruto)}</td>
-                  <td style={{ textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>{formatBRL(n.total_retido_geral)}</td>
-                  <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 700 }}>{formatBRL(n.valor_liquido)}</td>
-                  <td>
-                    {n.optante_simples ? (
-                      <span className="badge-simples">SIMPLES</span>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>NORMAL</span>
-                    )}
-                  </td>
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tax-table">
+              <thead>
+                <tr>
+                  <th>TIPO</th>
+                  <th>Nº NOTA</th>
+                  <th>FORNECEDOR</th>
+                  <th>EMISSÃO</th>
+                  <th style={{ textAlign: 'right' }}>VALOR BRUTO</th>
+                  <th style={{ textAlign: 'right' }}>TOTAL RETIDO</th>
+                  <th style={{ textAlign: 'right' }}>VALOR LÍQUIDO</th>
+                  <th>REGIME</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {notasPaginadas.map((n) => (
+                  <tr key={n.id}>
+                    <td>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: n.tipo_documento === 'NFE' ? '#eff6ff' : '#f0fdf4', color: n.tipo_documento === 'NFE' ? '#1d4ed8' : '#15803d' }}>
+                        {n.tipo_documento}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 700 }}>{n.numero_nota}</td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{n.fornecedor_nome}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{n.fornecedor_cnpj}</div>
+                    </td>
+                    <td>{n.data_emissao ? new Date(n.data_emissao).toLocaleDateString('pt-BR') : '---'}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(n.valor_bruto)}</td>
+                    <td style={{ textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>{formatBRL(n.total_retido_geral ?? n.total_retido)}</td>
+                    <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 700 }}>{formatBRL(n.valor_liquido)}</td>
+                    <td>
+                      {n.optante_simples ? (
+                        <span className="badge-simples">SIMPLES</span>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>NORMAL</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              Página <strong>{paginaSegura}</strong> de <strong>{totalPaginas}</strong> ({notasFiltradas.length} registro(s))
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={paginaSegura <= 1}
+                onClick={() => setPaginaAtual(prev => Math.max(1, prev - 1))}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '0.8rem' }}
+              >
+                <ChevronLeft size={14} /> Anterior
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={paginaSegura >= totalPaginas}
+                onClick={() => setPaginaAtual(prev => Math.min(totalPaginas, prev + 1))}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '0.8rem' }}
+              >
+                Próxima <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

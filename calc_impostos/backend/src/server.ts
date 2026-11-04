@@ -797,31 +797,96 @@ app.patch('/api/notas/:id/dados-processo', handlerAtualizarDadosProcesso);
 app.put('/api/notas/:id/dados-processo', handlerAtualizarDadosProcesso);
 app.post('/api/notas/:id/dados-processo', handlerAtualizarDadosProcesso);
 
-// Pesquisar notas salvos por CNPJ, Chave de Acesso, Número da Nota, Processo, Documento Hábil ou Empenho
+// Pesquisar notas salvos por CNPJ, Chave de Acesso, Número da Nota, Processo, Documento Hábil ou Empenho (com suporte a paginação)
 app.get('/api/notas/pesquisar', async (req: Request, res: Response) => {
   try {
     const q = String(req.query.q || '').trim();
-    let queryText = 'SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at FROM notas_analisadas WHERE uasg = $1 ORDER BY created_at DESC LIMIT 50;';
-    let queryParams: any[] = [uasgDaSessao()];
+    const tipo = String(req.query.tipo || '').trim().toUpperCase();
+    const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20));
+    const offset = (page - 1) * limit;
 
-    if (q) {
-      queryText = `
-        SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho, fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at
-        FROM notas_analisadas
-        WHERE uasg = $2 AND (fornecedor_cnpj ILIKE $1 
-           OR chave_acesso ILIKE $1 
-           OR numero_nota ILIKE $1 
-           OR fornecedor_nome ILIKE $1
-           OR numero_processo ILIKE $1
-           OR documento_habil ILIKE $1
-           OR numero_empenho ILIKE $1)
-        ORDER BY created_at DESC 
-        LIMIT 50;
-      `;
-      queryParams = [`%${q}%`, uasgDaSessao()];
+    const conditions: string[] = ['uasg = $1'];
+    const queryParams: any[] = [uasgDaSessao()];
+
+    if (tipo === 'NFE' || tipo === 'NFSE') {
+      queryParams.push(tipo);
+      conditions.push(`tipo_documento = $${queryParams.length}`);
     }
 
-    const result = await pool.query(queryText, queryParams);
+    if (q) {
+      queryParams.push(`%${q}%`);
+      const idxTermo = queryParams.length;
+      const qDigits = q.replace(/\D/g, '');
+
+      if (qDigits.length >= 3) {
+        queryParams.push(`%${qDigits}%`);
+        const idxDigits = queryParams.length;
+        conditions.push(`(
+          fornecedor_cnpj ILIKE $${idxTermo}
+          OR chave_acesso ILIKE $${idxTermo}
+          OR numero_nota ILIKE $${idxTermo}
+          OR fornecedor_nome ILIKE $${idxTermo}
+          OR numero_processo ILIKE $${idxTermo}
+          OR documento_habil ILIKE $${idxTermo}
+          OR numero_empenho ILIKE $${idxTermo}
+          OR regexp_replace(COALESCE(fornecedor_cnpj, ''), '\\D', '', 'g') ILIKE $${idxDigits}
+          OR regexp_replace(COALESCE(numero_processo, ''), '\\D', '', 'g') ILIKE $${idxDigits}
+          OR regexp_replace(COALESCE(chave_acesso, ''), '\\D', '', 'g') ILIKE $${idxDigits}
+        )`);
+      } else {
+        conditions.push(`(
+          fornecedor_cnpj ILIKE $${idxTermo}
+          OR chave_acesso ILIKE $${idxTermo}
+          OR numero_nota ILIKE $${idxTermo}
+          OR fornecedor_nome ILIKE $${idxTermo}
+          OR numero_processo ILIKE $${idxTermo}
+          OR documento_habil ILIKE $${idxTermo}
+          OR numero_empenho ILIKE $${idxTermo}
+        )`);
+      }
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    if (hasPagination) {
+      const countResult = await pool.query(
+        `SELECT COUNT(*)::int AS total FROM notas_analisadas WHERE ${whereClause};`,
+        queryParams
+      );
+      const total = countResult.rows[0]?.total || 0;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+
+      const dataParams = [...queryParams, limit, offset];
+      const dataQuery = `
+        SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho,
+               fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at
+        FROM notas_analisadas
+        WHERE ${whereClause}
+        ORDER BY created_at DESC, id DESC
+        LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length};
+      `;
+      const result = await pool.query(dataQuery, dataParams);
+
+      return res.json({
+        items: result.rows,
+        total,
+        page,
+        limit,
+        totalPages
+      });
+    }
+
+    const legacyQuery = `
+      SELECT id, tipo_documento, numero_nota, chave_acesso, numero_processo, documento_habil, numero_empenho,
+             fornecedor_cnpj, fornecedor_nome, optante_simples, valor_bruto, valor_liquido, total_retido, dados_json, created_at
+      FROM notas_analisadas
+      WHERE ${whereClause}
+      ORDER BY created_at DESC, id DESC
+      LIMIT 50;
+    `;
+    const result = await pool.query(legacyQuery, queryParams);
     res.json(result.rows);
   } catch (error: any) {
     console.error('Erro ao pesquisar notas:', error);
