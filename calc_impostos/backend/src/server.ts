@@ -10,6 +10,7 @@ import { XmlParser } from './services/xmlParser';
 import { CnpjService } from './services/cnpjService';
 import { PdfReportGenerator } from './services/pdfReportGenerator';
 import { HistoryService } from './services/historyService';
+import { ProcessoService } from './services/processoService';
 import { SupplierMemoryService } from './services/supplierMemoryService';
 import { SicafService, DadosSicafConsulta } from './services/sicafService';
 import { RaufIntegrationService } from './services/raufIntegrationService';
@@ -702,9 +703,112 @@ app.post('/api/processo/gerar-pdf-consolidado', async (req: Request, res: Respon
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+
+    // Auto-salva ou atualiza automaticamente o processo consolidado no histórico PostgreSQL
+    try {
+      await ProcessoService.salvarOuAtualizarProcesso(dadosProcesso);
+    } catch (eSaveProc: any) {
+      console.warn('Aviso ao auto-salvar processo consolidado no banco:', eSaveProc?.message || eSaveProc);
+    }
+
     res.send(pdfBuffer);
   } catch (error: any) {
     console.error('Erro ao gerar PDF consolidado:', error);
+    res.status(500).json({ error: 'Erro ao gerar relatório consolidado em PDF.' });
+  }
+});
+
+// Salvar Processo Consolidado (com todas as suas notas fiscais vinculadas)
+app.post('/api/processos/salvar', async (req: Request, res: Response) => {
+  try {
+    const dadosProcesso = req.body;
+    if (!dadosProcesso || !dadosProcesso.notas || !dadosProcesso.resumo) {
+      return res.status(400).json({ error: 'Dados incompletos para salvar o processo consolidado.' });
+    }
+
+    const resultado = await ProcessoService.salvarOuAtualizarProcesso(dadosProcesso);
+    res.json({
+      success: true,
+      processoId: resultado.id,
+      acao: resultado.acao,
+      numeroProcesso: resultado.numeroProcesso,
+      totalNotas: resultado.totalNotas,
+      message: resultado.acao === 'ATUALIZADO'
+        ? `Processo consolidado #${resultado.id} e suas ${resultado.totalNotas} notas atualizados com sucesso!`
+        : `Processo consolidado gravado com sucesso com ${resultado.totalNotas} notas!`
+    });
+  } catch (error: any) {
+    console.error('Erro ao salvar processo consolidado:', error);
+    res.status(500).json({ error: error.message || 'Erro ao salvar processo consolidado no banco.' });
+  }
+});
+
+// Listar Processos Consolidados Gravados (com paginação e busca)
+app.get('/api/processos', async (req: Request, res: Response) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '15'), 10) || 15));
+
+    // Executa auto-consolidação de notas existentes que compartilham mesmo processo SEI
+    try {
+      await ProcessoService.autoConsolidarNotasExistentes();
+    } catch (eAuto) {
+      console.warn('Aviso na auto-consolidação de notas:', eAuto);
+    }
+
+    const resultado = await ProcessoService.listarProcessos({ q, page, limit });
+    res.json(resultado);
+  } catch (error: any) {
+    console.error('Erro ao listar processos consolidados:', error);
+    res.status(500).json({ error: 'Erro ao buscar processos consolidados no banco de dados.' });
+  }
+});
+
+// Buscar Detalhes de um Processo Consolidado por ID para Reabertura Completa
+app.get('/api/processos/:id', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: 'ID do processo inválido.' });
+    }
+
+    const dados = await ProcessoService.obterProcessoPorId(id);
+    if (!dados) {
+      return res.status(404).json({ error: 'Processo consolidado não encontrado.' });
+    }
+
+    res.json(dados);
+  } catch (error: any) {
+    console.error('Erro ao obter processo consolidado:', error);
+    res.status(500).json({ error: 'Erro ao recuperar dados do processo consolidado.' });
+  }
+});
+
+// Baixar PDF Consolidado diretamente a partir do ID do Processo Salvo
+app.get('/api/processos/:id/pdf', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: 'ID do processo inválido.' });
+    }
+
+    const dadosProcesso = await ProcessoService.obterProcessoPorId(id);
+    if (!dadosProcesso) {
+      return res.status(404).json({ error: 'Processo consolidado não encontrado.' });
+    }
+
+    const pdfBuffer = await PdfReportGenerator.gerarRelatorioConsolidado(dadosProcesso);
+    const procLimpo = (dadosProcesso.numeroProcesso || 'Consolidado')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .substring(0, 30);
+    const nomeArquivo = `Relatorio_Consolidado_Processo_${procLimpo}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+    res.send(pdfBuffer);
+  } catch (error: any) {
+    console.error('Erro ao gerar PDF do processo consolidado:', error);
     res.status(500).json({ error: 'Erro ao gerar relatório consolidado em PDF.' });
   }
 });

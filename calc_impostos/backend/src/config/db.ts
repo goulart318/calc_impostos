@@ -93,6 +93,33 @@ export async function initDatabase() {
       ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS uasg VARCHAR(6);
       ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS usuario_id INTEGER;
       ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS usuario_email VARCHAR(100);
+      ALTER TABLE notas_analisadas ADD COLUMN IF NOT EXISTS processo_consolidado_id INTEGER;
+
+      CREATE TABLE IF NOT EXISTS processos_consolidados (
+        id SERIAL PRIMARY KEY,
+        numero_processo VARCHAR(60),
+        documento_habil VARCHAR(60),
+        numero_empenho VARCHAR(50),
+        fornecedor_cnpj VARCHAR(20),
+        fornecedor_nome VARCHAR(255),
+        optante_simples BOOLEAN DEFAULT FALSE,
+        tem_multiplos_fornecedores BOOLEAN DEFAULT FALSE,
+        total_notas INTEGER NOT NULL DEFAULT 1,
+        valor_bruto NUMERIC(15, 2) NOT NULL,
+        valor_liquido NUMERIC(15, 2) NOT NULL,
+        total_retido NUMERIC(15, 2) NOT NULL,
+        dados_json JSONB NOT NULL,
+        uasg VARCHAR(6),
+        usuario_id INTEGER,
+        usuario_email VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE processos_consolidados ADD COLUMN IF NOT EXISTS uasg VARCHAR(6);
+      ALTER TABLE processos_consolidados ADD COLUMN IF NOT EXISTS usuario_id INTEGER;
+      ALTER TABLE processos_consolidados ADD COLUMN IF NOT EXISTS usuario_email VARCHAR(100);
+      ALTER TABLE processos_consolidados ADD COLUMN IF NOT EXISTS tem_multiplos_fornecedores BOOLEAN DEFAULT FALSE;
 
       CREATE TABLE IF NOT EXISTS memoria_tributaria_fornecedores (
         id SERIAL PRIMARY KEY,

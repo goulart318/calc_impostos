@@ -20,6 +20,32 @@ interface NotaSalvaResumo {
   total_retido: number;
   dados_json?: any;
   created_at: string;
+  processo_consolidado_id?: number;
+}
+
+interface ProcessoSalvoResumo {
+  id: number;
+  numeroProcesso?: string;
+  documentoHabil?: string;
+  numeroEmpenho?: string;
+  fornecedorCnpj?: string;
+  fornecedorNome?: string;
+  optanteSimples?: boolean;
+  temMultiplosFornecedores?: boolean;
+  totalNotas: number;
+  valorBruto: number;
+  valorLiquido: number;
+  totalRetido: number;
+  dadosJson?: any;
+  createdAt: string;
+}
+
+interface RespostaPaginadaProcessos {
+  items: ProcessoSalvoResumo[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 interface RespostaPaginadaNotas {
@@ -39,15 +65,27 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   const [termo, setTermo] = useState('');
   const [termoAtivo, setTermoAtivo] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'NFE' | 'NFSE'>('TODOS');
+  const [abaHistorico, setAbaHistorico] = useState<'PROCESSOS' | 'NOTAS'>('PROCESSOS');
+
+  // Estados de Notas Individuais
   const [notas, setNotas] = useState<NotaSalvaResumo[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingId, setLoadingId] = useState<number | null>(null);
 
-  // Estados de Paginação
+  // Estados de Paginação de Notas
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(15);
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [totalPaginas, setTotalPaginas] = useState(1);
+
+  // Estados de Processos Consolidados
+  const [processos, setProcessos] = useState<ProcessoSalvoResumo[]>([]);
+  const [loadingProcessos, setLoadingProcessos] = useState(false);
+  const [loadingProcessoId, setLoadingProcessoId] = useState<number | null>(null);
+  const [paginaProcessos, setPaginaProcessos] = useState(1);
+  const [itensPorPaginaProcessos, setItensPorPaginaProcessos] = useState(15);
+  const [totalProcessos, setTotalProcessos] = useState(0);
+  const [totalPaginasProcessos, setTotalPaginasProcessos] = useState(1);
   
   // Seleção de Múltiplas Notas para Processo Consolidado (preservada entre páginas)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -65,6 +103,36 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
 
   const formatBRL = (val: number) => {
     return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const carregarProcessos = async (
+    queryStr: string = termoAtivo,
+    page: number = paginaProcessos,
+    limit: number = itensPorPaginaProcessos
+  ) => {
+    setLoadingProcessos(true);
+    try {
+      const params = new URLSearchParams({
+        q: queryStr,
+        page: String(page),
+        limit: String(limit)
+      });
+      const data = await apiFetch<RespostaPaginadaProcessos>(`/api/processos?${params.toString()}`);
+      if (data && Array.isArray(data.items)) {
+        setProcessos(data.items);
+        setTotalProcessos(data.total ?? data.items.length);
+        setTotalPaginasProcessos(data.totalPages ?? Math.max(1, Math.ceil((data.total ?? data.items.length) / limit)));
+        setPaginaProcessos(data.page ?? page);
+      } else {
+        setProcessos([]);
+        setTotalProcessos(0);
+        setTotalPaginasProcessos(1);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar processos consolidados:', e);
+    } finally {
+      setLoadingProcessos(false);
+    }
   };
 
   const carregarNotas = async (
@@ -129,6 +197,72 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   useEffect(() => {
     carregarNotas(termoAtivo, paginaAtual, itensPorPagina, filtroTipo);
   }, [termoAtivo, paginaAtual, itensPorPagina, filtroTipo]);
+
+  useEffect(() => {
+    carregarProcessos(termoAtivo, paginaProcessos, itensPorPaginaProcessos);
+  }, [termoAtivo, paginaProcessos, itensPorPaginaProcessos]);
+
+  const handleReabrirProcesso = async (id: number) => {
+    setLoadingProcessoId(id);
+    try {
+      const dados = await apiFetch<ProcessoConsolidadoData>(`/api/processos/${id}`);
+      if (dados) {
+        if (onConsolidarNotas) {
+          onConsolidarNotas(dados);
+        } else {
+          setProcessoModalData(dados);
+        }
+      }
+    } catch (e: any) {
+      alert('Erro ao carregar processo consolidado: ' + e.message);
+    } finally {
+      setLoadingProcessoId(null);
+    }
+  };
+
+  const handleDownloadPdfProcesso = async (id: number, numProc?: string) => {
+    try {
+      setLoadingProcessoId(id);
+      const res = await apiFetch<Response>(`/api/processos/${id}/pdf`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const nomeLimpo = (numProc || 'Consolidado').replace(/[^a-zA-Z0-9_-]/g, '_');
+        a.download = `Relatorio_Consolidado_Processo_${nomeLimpo}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        throw new Error('Falha ao gerar PDF no servidor.');
+      }
+    } catch (e: any) {
+      alert('Erro ao baixar PDF consolidado: ' + e.message);
+    } finally {
+      setLoadingProcessoId(null);
+    }
+  };
+
+  const handleAbrirProcessoDaNota = async (numProc: string) => {
+    try {
+      setLoading(true);
+      const res = await apiFetch<RespostaPaginadaProcessos>(`/api/processos?q=${encodeURIComponent(numProc)}`);
+      if (res && res.items && res.items.length > 0) {
+        await handleReabrirProcesso(res.items[0].id);
+      } else {
+        alert(`Processo ${numProc} identificado. Alternando para a aba de Processos Consolidados.`);
+        setAbaHistorico('PROCESSOS');
+        setTermo(numProc);
+        setTermoAtivo(numProc);
+      }
+    } catch (e) {
+      console.warn('Aviso ao abrir processo da nota:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Debounce automático ao digitar na busca para facilitar encontrar lançamentos
   useEffect(() => {
@@ -486,17 +620,21 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
     document.body.removeChild(link);
   };
 
-  // Calcula intervalo exibido e páginas visíveis para os botões de paginação
+  // Calcula intervalo exibido e páginas visíveis para os botões de paginação de notas
   const indicePrimeiroRegistro = totalRegistros === 0 ? 0 : (paginaAtual - 1) * itensPorPagina + 1;
   const indiceUltimoRegistro = Math.min(totalRegistros, paginaAtual * itensPorPagina);
 
-  const gerarBotoesPaginas = (): Array<number | 'ellipsis-start' | 'ellipsis-end'> => {
-    if (totalPaginas <= 7) {
-      return Array.from({ length: totalPaginas }, (_, i) => i + 1);
+  // Calcula intervalo exibido e páginas visíveis para paginação de processos
+  const indicePrimeiroProcesso = totalProcessos === 0 ? 0 : (paginaProcessos - 1) * itensPorPaginaProcessos + 1;
+  const indiceUltimoProcesso = Math.min(totalProcessos, paginaProcessos * itensPorPaginaProcessos);
+
+  const gerarBotoesPaginas = (atual: number, totalPags: number): Array<number | 'ellipsis-start' | 'ellipsis-end'> => {
+    if (totalPags <= 7) {
+      return Array.from({ length: totalPags }, (_, i) => i + 1);
     }
     const paginas: Array<number | 'ellipsis-start' | 'ellipsis-end'> = [1];
-    const inicioJanela = Math.max(2, paginaAtual - 1);
-    const fimJanela = Math.min(totalPaginas - 1, paginaAtual + 1);
+    const inicioJanela = Math.max(2, atual - 1);
+    const fimJanela = Math.min(totalPags - 1, atual + 1);
 
     if (inicioJanela > 2) {
       paginas.push('ellipsis-start');
@@ -504,15 +642,92 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
     for (let p = inicioJanela; p <= fimJanela; p++) {
       paginas.push(p);
     }
-    if (fimJanela < totalPaginas - 1) {
+    if (fimJanela < totalPags - 1) {
       paginas.push('ellipsis-end');
     }
-    paginas.push(totalPaginas);
+    paginas.push(totalPags);
     return paginas;
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Abas Superiores de Seleção de Histórico: Processos Consolidados vs Notas Individuais */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        borderBottom: '2px solid #e2e8f0',
+        paddingBottom: '2px',
+        alignItems: 'center'
+      }}>
+        <button
+          type="button"
+          onClick={() => setAbaHistorico('PROCESSOS')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 20px',
+            background: 'transparent',
+            border: 'none',
+            borderBottom: abaHistorico === 'PROCESSOS' ? '3px solid #2563eb' : '3px solid transparent',
+            color: abaHistorico === 'PROCESSOS' ? '#1d4ed8' : '#64748b',
+            fontWeight: abaHistorico === 'PROCESSOS' ? 800 : 600,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            marginBottom: '-2px',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Layers size={18} color={abaHistorico === 'PROCESSOS' ? '#2563eb' : '#64748b'} />
+          <span>Processos de Pagamento Consolidados</span>
+          <span style={{
+            background: abaHistorico === 'PROCESSOS' ? '#eff6ff' : '#f1f5f9',
+            color: abaHistorico === 'PROCESSOS' ? '#1d4ed8' : '#475569',
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            padding: '2px 8px',
+            borderRadius: '12px',
+            border: '1px solid #cbd5e1'
+          }}>
+            {totalProcessos}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAbaHistorico('NOTAS')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 20px',
+            background: 'transparent',
+            border: 'none',
+            borderBottom: abaHistorico === 'NOTAS' ? '3px solid #2563eb' : '3px solid transparent',
+            color: abaHistorico === 'NOTAS' ? '#1d4ed8' : '#64748b',
+            fontWeight: abaHistorico === 'NOTAS' ? 800 : 600,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            marginBottom: '-2px',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <FileText size={18} color={abaHistorico === 'NOTAS' ? '#2563eb' : '#64748b'} />
+          <span>Todas as Notas Fiscais (Individuais)</span>
+          <span style={{
+            background: abaHistorico === 'NOTAS' ? '#eff6ff' : '#f1f5f9',
+            color: abaHistorico === 'NOTAS' ? '#1d4ed8' : '#475569',
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            padding: '2px 8px',
+            borderRadius: '12px',
+            border: '1px solid #cbd5e1'
+          }}>
+            {totalRegistros}
+          </span>
+        </button>
+      </div>
+
       {/* Barra de Pesquisa e Filtros */}
       <div className="card-box" style={{ background: '#ffffff', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -522,7 +737,9 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
               type="text"
               className="form-input"
               style={{ paddingLeft: '40px', paddingRight: termo ? '36px' : '12px', fontSize: '0.95rem' }}
-              placeholder="Digite o CNPJ do Fornecedor, Nº da Nota, Chave de Acesso, Processo SEI, Doc. Hábil ou Empenho..."
+              placeholder={abaHistorico === 'PROCESSOS' 
+                ? "Pesquise por Processo SEI, Documento Hábil (NS), Empenho, Razão Social ou CNPJ..." 
+                : "Digite o CNPJ do Fornecedor, Nº da Nota, Chave de Acesso, Processo SEI, Doc. Hábil ou Empenho..."}
               value={termo}
               onChange={(e) => setTermo(e.target.value)}
             />
@@ -550,39 +767,41 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
             )}
           </div>
 
-          {/* Filtro rápido por Tipo de Documento */}
-          <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            {(['TODOS', 'NFE', 'NFSE'] as const).map((tipoOpt) => {
-              const ativo = filtroTipo === tipoOpt;
-              return (
-                <button
-                  key={tipoOpt}
-                  type="button"
-                  onClick={() => {
-                    setFiltroTipo(tipoOpt);
-                    setPaginaAtual(1);
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    borderRadius: '6px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: ativo ? '#2563eb' : 'transparent',
-                    color: ativo ? '#ffffff' : '#475569',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {tipoOpt === 'TODOS' ? 'Todas' : tipoOpt === 'NFE' ? 'NF-e (Bens)' : 'NFS-e (Serviços)'}
-                </button>
-              );
-            })}
-          </div>
+          {/* Filtro rápido por Tipo de Documento (apenas na aba de Notas) */}
+          {abaHistorico === 'NOTAS' && (
+            <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              {(['TODOS', 'NFE', 'NFSE'] as const).map((tipoOpt) => {
+                const ativo = filtroTipo === tipoOpt;
+                return (
+                  <button
+                    key={tipoOpt}
+                    type="button"
+                    onClick={() => {
+                      setFiltroTipo(tipoOpt);
+                      setPaginaAtual(1);
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: ativo ? '#2563eb' : 'transparent',
+                      color: ativo ? '#ffffff' : '#475569',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {tipoOpt === 'TODOS' ? 'Todas' : tipoOpt === 'NFE' ? 'NF-e (Bens)' : 'NFS-e (Serviços)'}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-          <button type="submit" className="btn-primary" disabled={loading} style={{ whiteSpace: 'nowrap' }}>
-            {loading ? <RefreshCw size={16} className="spin" /> : <Search size={16} />}
-            <span>Pesquisar Histórico</span>
+          <button type="submit" className="btn-primary" disabled={loading || loadingProcessos} style={{ whiteSpace: 'nowrap' }}>
+            {(loading || loadingProcessos) ? <RefreshCw size={16} className="spin" /> : <Search size={16} />}
+            <span>Pesquisar</span>
           </button>
         </form>
       </div>
@@ -655,373 +874,754 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
         </div>
       )}
 
-      {/* Lista de Registros */}
-      <div className="card-box" style={{ background: '#ffffff', border: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-              <FileText size={18} color="var(--primary)" />
-              <span>Análises Gravadas no Banco de Dados ({totalRegistros})</span>
-            </h3>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              💡 Marque os checkboxes para somar várias notas e gerar o relatório consolidado do processo no SEI.
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {/* Seletor de Quantidade por Página */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#475569' }}>
-              <label htmlFor="select-itens-pagina" style={{ fontWeight: 600 }}>Exibir:</label>
-              <select
-                id="select-itens-pagina"
-                value={itensPorPagina}
-                onChange={(e) => {
-                  setItensPorPagina(Number(e.target.value));
-                  setPaginaAtual(1);
-                }}
-                style={{
-                  padding: '5px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid #cbd5e1',
-                  background: '#f8fafc',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  color: '#0f172a',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value={10}>10 por página</option>
-                <option value={15}>15 por página</option>
-                <option value={25}>25 por página</option>
-                <option value={50}>50 por página</option>
-                <option value={100}>100 por página</option>
-              </select>
+      {/* Lista de Registros Conforme a Aba Selecionada */}
+      {abaHistorico === 'PROCESSOS' ? (
+        /* ========================================================
+           TABELA DE PROCESSOS CONSOLIDADOS
+           ======================================================== */
+        <div className="card-box" style={{ background: '#ffffff', border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <Layers size={18} color="var(--primary)" />
+                <span>Processos de Pagamento Consolidados ({totalProcessos})</span>
+              </h3>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                💡 Processos cadastrados ou auto-consolidados por Número do Processo SEI, agrupando múltiplas notas e memória de cálculo única.
+              </span>
             </div>
 
-            <button 
-              onClick={handleExportarExcelCsv}
-              className="btn-outline" 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '6px', 
-                padding: '6px 14px', 
-                fontSize: '0.82rem', 
-                fontWeight: 700, 
-                borderColor: '#16a34a', 
-                color: '#15803d', 
-                background: '#f0fdf4',
-                cursor: 'pointer',
-                borderRadius: '6px'
-              }}
-              title="Exportar notas exibidas / selecionadas para planilha Excel (formato CSV formatado para o Brasil)"
-            >
-              <Download size={15} />
-              <span>Exportar para Excel (CSV)</span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#475569' }}>
+                <label htmlFor="select-itens-processos" style={{ fontWeight: 600 }}>Exibir:</label>
+                <select
+                  id="select-itens-processos"
+                  value={itensPorPaginaProcessos}
+                  onChange={(e) => {
+                    setItensPorPaginaProcessos(Number(e.target.value));
+                    setPaginaProcessos(1);
+                  }}
+                  style={{
+                    padding: '5px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={10}>10 por página</option>
+                  <option value={15}>15 por página</option>
+                  <option value={25}>25 por página</option>
+                  <option value={50}>50 por página</option>
+                </select>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {notas.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-            {loading ? 'Buscando registros...' : 'Nenhuma análise encontrada no banco de dados para a busca realizada.'}
-          </div>
-        ) : (
-          <>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="tax-table" style={{ width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: '40px', textAlign: 'center' }}>
-                      <input 
-                        type="checkbox"
-                        title="Selecionar / Desmarcar Todas desta Página"
-                        checked={todasDaPaginaSelecionadas}
-                        onChange={handleToggleSelectAll}
-                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                      />
-                    </th>
-                    <th>DATA / REGISTRO</th>
-                    <th>NOTA FISCAL</th>
-                    <th>FORNECEDOR (RAZÃO SOCIAL / CNPJ)</th>
-                    <th style={{ textAlign: 'right' }}>VALOR BRUTO</th>
-                    <th style={{ textAlign: 'right' }}>TOTAL RETIDO</th>
-                    <th style={{ textAlign: 'right' }}>LÍQUIDO A PAGAR</th>
-                    <th style={{ textAlign: 'center' }}>AÇÕES DA ANÁLISE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {notas.map((n) => {
-                    const isSelected = selectedIds.has(n.id);
-                    const dj = n.dados_json || {};
-                    const procExibir = n.numero_processo || dj.numeroProcesso;
-                    const docHabilExibir = n.documento_habil || dj.documentoHabil;
-                    const empExibir = n.numero_empenho || dj.numeroEmpenho;
+          {loadingProcessos ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+              <RefreshCw size={24} className="spin" style={{ marginBottom: '8px' }} />
+              <div>Carregando processos consolidados...</div>
+            </div>
+          ) : processos.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+              Nenhum processo consolidado encontrado para a busca informada.
+            </div>
+          ) : (
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="tax-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '130px' }}>DATA / REGISTRO</th>
+                      <th>PROCESSO SEI / DOC. HÁBIL / EMPENHO</th>
+                      <th>CREDOR / FORNECEDOR (NOTAS DO PROCESSO)</th>
+                      <th style={{ textAlign: 'right', width: '130px' }}>VALOR BRUTO</th>
+                      <th style={{ textAlign: 'right', width: '130px' }}>TOTAL RETIDO</th>
+                      <th style={{ textAlign: 'right', width: '130px' }}>LÍQUIDO A PAGAR</th>
+                      <th style={{ textAlign: 'center', width: '220px' }}>AÇÕES DA ANÁLISE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {processos.map((p) => {
+                      const notasDoLote = Array.isArray(p.dadosJson?.notas) ? p.dadosJson.notas : [];
 
-                    return (
-                      <tr 
-                        key={n.id}
-                        style={{
-                          backgroundColor: isSelected ? '#eff6ff' : undefined
-                        }}
-                      >
-                        <td style={{ textAlign: 'center' }}>
-                          <input 
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleSelectNota(n)}
-                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                          />
-                        </td>
-
-                        <td>
-                          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Calendar size={13} color="var(--text-muted)" />
-                            {new Date(n.created_at).toLocaleDateString('pt-BR')}
-                          </div>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                            {new Date(n.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </td>
-
-                        <td>
-                          <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>
-                            Nº {n.numero_nota}
-                          </div>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: n.tipo_documento === 'NFE' ? '#2563eb' : '#9333ea' }}>
-                            {n.tipo_documento === 'NFE' ? 'NF-e Mercadoria' : 'NFS-e Serviço'}
-                          </span>
-
-                          {procExibir && (
-                            <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
-                              <span style={{ color: '#64748b', fontWeight: 500 }}>SEI:</span> {procExibir}
+                      return (
+                        <tr key={p.id}>
+                          <td>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Calendar size={13} color="var(--text-muted)" />
+                              {new Date(p.createdAt).toLocaleDateString('pt-BR')}
                             </div>
-                          )}
-                          {docHabilExibir && (
-                            <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
-                              <span style={{ color: '#64748b', fontWeight: 500 }}>DH:</span> {docHabilExibir}
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                              {new Date(p.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </td>
+
+                          <td>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--primary)', fontFamily: 'var(--font-mono)' }}>
+                              {p.numeroProcesso || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Não informado</span>}
                             </div>
-                          )}
-                          {empExibir && (
-                            <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
-                              <span style={{ color: '#64748b', fontWeight: 500 }}>NE:</span> {empExibir}
-                            </div>
-                          )}
-                        </td>
-
-                        <td>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                            {n.fornecedor_nome}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Building size={12} />
-                            {n.fornecedor_cnpj}
-                            {n.optante_simples && <span style={{ color: '#d97706', fontWeight: 700 }}>[SIMPLES]</span>}
-                          </div>
-                        </td>
-
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatBRL(n.valor_bruto)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>{formatBRL(n.total_retido)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{formatBRL(n.valor_liquido)}</td>
-
-                        <td style={{ textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
-                            <button
-                              className="btn-outline"
-                              onClick={() => handleAbrirEdicao(n)}
-                              title="Editar Documento Hábil (NS Liquidação), Processo SEI e Empenho rapidamente"
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '6px 10px',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                borderColor: '#3b82f6',
-                                color: '#1d4ed8',
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
+                              <span style={{
                                 background: '#eff6ff',
-                                borderRadius: '6px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <Edit3 size={13} />
-                              <span>Editar NS / SEI</span>
-                            </button>
+                                color: '#1d4ed8',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                border: '1px solid #bfdbfe'
+                              }}>
+                                📑 {p.totalNotas || (notasDoLote.length > 0 ? notasDoLote.length : 1)} nota(s) no lote
+                              </span>
+                              {p.documentoHabil && (
+                                <span style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                  <span style={{ color: '#64748b', fontWeight: 500 }}>DH:</span> {p.documentoHabil}
+                                </span>
+                              )}
+                              {p.numeroEmpenho && (
+                                <span style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                  <span style={{ color: '#64748b', fontWeight: 500 }}>NE:</span> {p.numeroEmpenho}
+                                </span>
+                              )}
+                            </div>
+                          </td>
 
-                            <button
-                              className="btn-secondary"
-                              onClick={() => handleReabrirNota(n.id)}
-                              disabled={loadingId === n.id}
-                              title="Reabrir análise para ajustes e recálculo"
-                              style={{ padding: '6px 10px', fontSize: '0.78rem' }}
-                            >
-                              {loadingId === n.id ? <RefreshCw size={14} className="spin" /> : <FileText size={14} />}
-                              <span>Reabrir</span>
-                            </button>
+                          <td>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {p.temMultiplosFornecedores 
+                                ? 'Múltiplos Fornecedores (Lote Misto)' 
+                                : (p.fornecedorNome || 'Credor não identificado')}
+                            </div>
+                            {p.fornecedorCnpj && (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                <Building size={12} />
+                                {p.fornecedorCnpj}
+                                {p.optanteSimples && <span style={{ color: '#d97706', fontWeight: 700 }}>[SIMPLES]</span>}
+                              </div>
+                            )}
 
-                            <button
-                              className="btn-primary"
-                              onClick={() => handleDownloadPdfDirect(n.id, n.numero_nota, n.fornecedor_nome)}
-                              title="Baixar Relatório em PDF para o SEI"
-                              style={{ padding: '6px 10px', fontSize: '0.78rem' }}
-                            >
-                              <Download size={14} />
-                              <span>PDF SEI</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            {/* Badges das Notas Fiscais que compõem o processo */}
+                            {notasDoLote.length > 0 && (
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
+                                {notasDoLote.slice(0, 6).map((nf: any, idx: number) => (
+                                  <span 
+                                    key={idx}
+                                    style={{
+                                      fontSize: '0.7rem',
+                                      background: '#f8fafc',
+                                      border: '1px solid #cbd5e1',
+                                      color: '#334155',
+                                      borderRadius: '4px',
+                                      padding: '1px 6px',
+                                      fontWeight: 600
+                                    }}
+                                  >
+                                    NF {nf.numeroNota || `#${idx + 1}`}
+                                  </span>
+                                ))}
+                                {notasDoLote.length > 6 && (
+                                  <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, alignSelf: 'center' }}>
+                                    +{notasDoLote.length - 6} outras
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
 
-            {/* Rodapé de Paginação */}
-            <div style={{
-              marginTop: '16px',
-              paddingTop: '14px',
-              borderTop: '1px solid #e2e8f0',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '12px'
-            }}>
-              <div style={{ fontSize: '0.82rem', color: '#475569' }}>
-                Exibindo <strong>{indicePrimeiroRegistro}</strong> a <strong>{indiceUltimoRegistro}</strong> de{' '}
-                <strong>{totalRegistros}</strong> lançamento(s)
-                {termoAtivo && (
-                  <span> para a busca <strong>"{termoAtivo}"</strong></span>
-                )}
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatBRL(p.valorBruto)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>{formatBRL(p.totalRetido)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{formatBRL(p.valorLiquido)}</td>
+
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleReabrirProcesso(p.id)}
+                                disabled={loadingProcessoId === p.id}
+                                title="Reabrir processo consolidado completo com todas as notas e somatórios"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '6px 10px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700
+                                }}
+                              >
+                                {loadingProcessoId === p.id ? <RefreshCw size={14} className="spin" /> : <Layers size={14} />}
+                                <span>Reabrir Processo</span>
+                              </button>
+
+                              <button
+                                className="btn-primary"
+                                onClick={() => handleDownloadPdfProcesso(p.id, p.numeroProcesso)}
+                                disabled={loadingProcessoId === p.id}
+                                title="Baixar Relatório Consolidado do Processo no SEI em PDF"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '6px 10px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700
+                                }}
+                              >
+                                <Download size={14} />
+                                <span>PDF SEI</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => setPaginaAtual(1)}
-                  disabled={paginaAtual <= 1 || loading}
-                  title="Primeira página"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    background: paginaAtual <= 1 ? '#f8fafc' : '#ffffff',
-                    color: paginaAtual <= 1 ? '#94a3b8' : '#1e293b',
-                    cursor: paginaAtual <= 1 ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  <ChevronsLeft size={16} />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaginaAtual(prev => Math.max(1, prev - 1))}
-                  disabled={paginaAtual <= 1 || loading}
-                  title="Página anterior"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    background: paginaAtual <= 1 ? '#f8fafc' : '#ffffff',
-                    color: paginaAtual <= 1 ? '#94a3b8' : '#1e293b',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    cursor: paginaAtual <= 1 ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  <ChevronLeft size={15} />
-                  <span>Anterior</span>
-                </button>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  {gerarBotoesPaginas().map((item, idx) => {
-                    if (item === 'ellipsis-start' || item === 'ellipsis-end') {
-                      return (
-                        <span key={`${item}-${idx}`} style={{ padding: '0 6px', color: '#64748b', fontWeight: 700 }}>
-                          ...
-                        </span>
-                      );
-                    }
-                    const ativa = item === paginaAtual;
-                    return (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => setPaginaAtual(item)}
-                        disabled={loading}
-                        style={{
-                          minWidth: '34px',
-                          height: '32px',
-                          padding: '0 8px',
-                          borderRadius: '6px',
-                          border: ativa ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                          background: ativa ? '#2563eb' : '#ffffff',
-                          color: ativa ? '#ffffff' : '#1e293b',
-                          fontSize: '0.82rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {item}
-                      </button>
-                    );
-                  })}
+              {/* Rodapé de Paginação de Processos */}
+              <div style={{
+                marginTop: '16px',
+                paddingTop: '14px',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div style={{ fontSize: '0.82rem', color: '#475569' }}>
+                  Exibindo <strong>{indicePrimeiroProcesso}</strong> a <strong>{indiceUltimoProcesso}</strong> de{' '}
+                  <strong>{totalProcessos}</strong> processo(s) consolidado(s)
+                  {termoAtivo && (
+                    <span> para a busca <strong>"{termoAtivo}"</strong></span>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setPaginaAtual(prev => Math.min(totalPaginas, prev + 1))}
-                  disabled={paginaAtual >= totalPaginas || loading}
-                  title="Próxima página"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    background: paginaAtual >= totalPaginas ? '#f8fafc' : '#ffffff',
-                    color: paginaAtual >= totalPaginas ? '#94a3b8' : '#1e293b',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    cursor: paginaAtual >= totalPaginas ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  <span>Próxima</span>
-                  <ChevronRight size={15} />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPaginaProcessos(1)}
+                    disabled={paginaProcessos <= 1 || loadingProcessos}
+                    title="Primeira página"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: paginaProcessos <= 1 ? '#f8fafc' : '#ffffff',
+                      color: paginaProcessos <= 1 ? '#94a3b8' : '#1e293b',
+                      cursor: paginaProcessos <= 1 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <ChevronsLeft size={16} />
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setPaginaAtual(totalPaginas)}
-                  disabled={paginaAtual >= totalPaginas || loading}
-                  title="Última página"
+                  <button
+                    type="button"
+                    onClick={() => setPaginaProcessos(prev => Math.max(1, prev - 1))}
+                    disabled={paginaProcessos <= 1 || loadingProcessos}
+                    title="Página anterior"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: paginaProcessos <= 1 ? '#f8fafc' : '#ffffff',
+                      color: paginaProcessos <= 1 ? '#94a3b8' : '#1e293b',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: paginaProcessos <= 1 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <ChevronLeft size={15} />
+                    <span>Anterior</span>
+                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {gerarBotoesPaginas(paginaProcessos, totalPaginasProcessos).map((item, idx) => {
+                      if (item === 'ellipsis-start' || item === 'ellipsis-end') {
+                        return (
+                          <span key={`${item}-${idx}`} style={{ padding: '0 6px', color: '#64748b', fontWeight: 700 }}>
+                            ...
+                          </span>
+                        );
+                      }
+                      const ativa = item === paginaProcessos;
+                      return (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => setPaginaProcessos(item)}
+                          disabled={loadingProcessos}
+                          style={{
+                            minWidth: '34px',
+                            height: '32px',
+                            padding: '0 8px',
+                            borderRadius: '6px',
+                            border: ativa ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                            background: ativa ? '#2563eb' : '#ffffff',
+                            color: ativa ? '#ffffff' : '#1e293b',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {item}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaginaProcessos(prev => Math.min(totalPaginasProcessos, prev + 1))}
+                    disabled={paginaProcessos >= totalPaginasProcessos || loadingProcessos}
+                    title="Próxima página"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: paginaProcessos >= totalPaginasProcessos ? '#f8fafc' : '#ffffff',
+                      color: paginaProcessos >= totalPaginasProcessos ? '#94a3b8' : '#1e293b',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: paginaProcessos >= totalPaginasProcessos ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <span>Próxima</span>
+                    <ChevronRight size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaginaProcessos(totalPaginasProcessos)}
+                    disabled={paginaProcessos >= totalPaginasProcessos || loadingProcessos}
+                    title="Última página"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: paginaProcessos >= totalPaginasProcessos ? '#f8fafc' : '#ffffff',
+                      color: paginaProcessos >= totalPaginasProcessos ? '#94a3b8' : '#1e293b',
+                      cursor: paginaProcessos >= totalPaginasProcessos ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <ChevronsRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        /* ========================================================
+           TABELA DE TODAS AS NOTAS FISCAIS (INDIVIDUAIS)
+           ======================================================== */
+        <div className="card-box" style={{ background: '#ffffff', border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <FileText size={18} color="var(--primary)" />
+                <span>Análises Gravadas no Banco de Dados ({totalRegistros})</span>
+              </h3>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                💡 Marque os checkboxes para somar várias notas e gerar o relatório consolidado do processo no SEI.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* Seletor de Quantidade por Página */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#475569' }}>
+                <label htmlFor="select-itens-pagina" style={{ fontWeight: 600 }}>Exibir:</label>
+                <select
+                  id="select-itens-pagina"
+                  value={itensPorPagina}
+                  onChange={(e) => {
+                    setItensPorPagina(Number(e.target.value));
+                    setPaginaAtual(1);
+                  }}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '6px 8px',
+                    padding: '5px 8px',
                     borderRadius: '6px',
                     border: '1px solid #cbd5e1',
-                    background: paginaAtual >= totalPaginas ? '#f8fafc' : '#ffffff',
-                    color: paginaAtual >= totalPaginas ? '#94a3b8' : '#1e293b',
-                    cursor: paginaAtual >= totalPaginas ? 'not-allowed' : 'pointer'
+                    background: '#f8fafc',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    cursor: 'pointer'
                   }}
                 >
-                  <ChevronsRight size={16} />
-                </button>
+                  <option value={10}>10 por página</option>
+                  <option value={15}>15 por página</option>
+                  <option value={25}>25 por página</option>
+                  <option value={50}>50 por página</option>
+                  <option value={100}>100 por página</option>
+                </select>
               </div>
+
+              <button 
+                onClick={handleExportarExcelCsv}
+                className="btn-outline" 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  padding: '6px 14px', 
+                  fontSize: '0.82rem', 
+                  fontWeight: 700, 
+                  borderColor: '#16a34a', 
+                  color: '#15803d', 
+                  background: '#f0fdf4',
+                  cursor: 'pointer',
+                  borderRadius: '6px'
+                }}
+                title="Exportar notas exibidas / selecionadas para planilha Excel (formato CSV formatado para o Brasil)"
+              >
+                <Download size={15} />
+                <span>Exportar para Excel (CSV)</span>
+              </button>
             </div>
-          </>
-        )}
-      </div>
+          </div>
+
+          {notas.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+              {loading ? 'Buscando registros...' : 'Nenhuma análise encontrada no banco de dados para a busca realizada.'}
+            </div>
+          ) : (
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="tax-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input 
+                          type="checkbox"
+                          title="Selecionar / Desmarcar Todas desta Página"
+                          checked={todasDaPaginaSelecionadas}
+                          onChange={handleToggleSelectAll}
+                          style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                        />
+                      </th>
+                      <th>DATA / REGISTRO</th>
+                      <th>NOTA FISCAL</th>
+                      <th>FORNECEDOR (RAZÃO SOCIAL / CNPJ)</th>
+                      <th style={{ textAlign: 'right' }}>VALOR BRUTO</th>
+                      <th style={{ textAlign: 'right' }}>TOTAL RETIDO</th>
+                      <th style={{ textAlign: 'right' }}>LÍQUIDO A PAGAR</th>
+                      <th style={{ textAlign: 'center' }}>AÇÕES DA ANÁLISE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {notas.map((n) => {
+                      const isSelected = selectedIds.has(n.id);
+                      const dj = n.dados_json || {};
+                      const procExibir = n.numero_processo || dj.numeroProcesso;
+                      const docHabilExibir = n.documento_habil || dj.documentoHabil;
+                      const empExibir = n.numero_empenho || dj.numeroEmpenho;
+
+                      return (
+                        <tr 
+                          key={n.id}
+                          style={{
+                            backgroundColor: isSelected ? '#eff6ff' : undefined
+                          }}
+                        >
+                          <td style={{ textAlign: 'center' }}>
+                            <input 
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectNota(n)}
+                              style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                            />
+                          </td>
+
+                          <td>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Calendar size={13} color="var(--text-muted)" />
+                              {new Date(n.created_at).toLocaleDateString('pt-BR')}
+                            </div>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                              {new Date(n.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </td>
+
+                          <td>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>
+                              Nº {n.numero_nota}
+                            </div>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: n.tipo_documento === 'NFE' ? '#2563eb' : '#9333ea' }}>
+                              {n.tipo_documento === 'NFE' ? 'NF-e Mercadoria' : 'NFS-e Serviço'}
+                            </span>
+
+                            {procExibir && (
+                              <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
+                                <span style={{ color: '#64748b', fontWeight: 500 }}>SEI:</span> {procExibir}
+                              </div>
+                            )}
+                            {docHabilExibir && (
+                              <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
+                                <span style={{ color: '#64748b', fontWeight: 500 }}>DH:</span> {docHabilExibir}
+                              </div>
+                            )}
+                            {empExibir && (
+                              <div style={{ fontSize: '0.72rem', color: '#0f172a', fontWeight: 700, marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
+                                <span style={{ color: '#64748b', fontWeight: 500 }}>NE:</span> {empExibir}
+                              </div>
+                            )}
+                          </td>
+
+                          <td>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {n.fornecedor_nome}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Building size={12} />
+                              {n.fornecedor_cnpj}
+                              {n.optante_simples && <span style={{ color: '#d97706', fontWeight: 700 }}>[SIMPLES]</span>}
+                            </div>
+                          </td>
+
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatBRL(n.valor_bruto)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>{formatBRL(n.total_retido)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{formatBRL(n.valor_liquido)}</td>
+
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+                              {procExibir && (
+                                <button
+                                  className="btn-outline"
+                                  onClick={() => handleAbrirProcessoDaNota(procExibir)}
+                                  title={`Ver processo consolidado ${procExibir}`}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '6px 8px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    borderColor: '#8b5cf6',
+                                    color: '#6d28d9',
+                                    background: '#f5f3ff',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <Layers size={13} />
+                                  <span>Ver Processo</span>
+                                </button>
+                              )}
+
+                              <button
+                                className="btn-outline"
+                                onClick={() => handleAbrirEdicao(n)}
+                                title="Editar Documento Hábil (NS Liquidação), Processo SEI e Empenho rapidamente"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '6px 8px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  borderColor: '#3b82f6',
+                                  color: '#1d4ed8',
+                                  background: '#eff6ff',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Edit3 size={13} />
+                                <span>Editar</span>
+                              </button>
+
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleReabrirNota(n.id)}
+                                disabled={loadingId === n.id}
+                                title="Reabrir análise para ajustes e recálculo"
+                                style={{ padding: '6px 8px', fontSize: '0.75rem' }}
+                              >
+                                {loadingId === n.id ? <RefreshCw size={14} className="spin" /> : <FileText size={14} />}
+                                <span>Reabrir</span>
+                              </button>
+
+                              <button
+                                className="btn-primary"
+                                onClick={() => handleDownloadPdfDirect(n.id, n.numero_nota, n.fornecedor_nome)}
+                                title="Baixar Relatório em PDF para o SEI"
+                                style={{ padding: '6px 8px', fontSize: '0.75rem' }}
+                              >
+                                <Download size={14} />
+                                <span>PDF SEI</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Rodapé de Paginação */}
+              <div style={{
+                marginTop: '16px',
+                paddingTop: '14px',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div style={{ fontSize: '0.82rem', color: '#475569' }}>
+                  Exibindo <strong>{indicePrimeiroRegistro}</strong> a <strong>{indiceUltimoRegistro}</strong> de{' '}
+                  <strong>{totalRegistros}</strong> lançamento(s)
+                  {termoAtivo && (
+                    <span> para a busca <strong>"{termoAtivo}"</strong></span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPaginaAtual(1)}
+                    disabled={paginaAtual <= 1 || loading}
+                    title="Primeira página"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: paginaAtual <= 1 ? '#f8fafc' : '#ffffff',
+                      color: paginaAtual <= 1 ? '#94a3b8' : '#1e293b',
+                      cursor: paginaAtual <= 1 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <ChevronsLeft size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaginaAtual(prev => Math.max(1, prev - 1))}
+                    disabled={paginaAtual <= 1 || loading}
+                    title="Página anterior"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: paginaAtual <= 1 ? '#f8fafc' : '#ffffff',
+                      color: paginaAtual <= 1 ? '#94a3b8' : '#1e293b',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: paginaAtual <= 1 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <ChevronLeft size={15} />
+                    <span>Anterior</span>
+                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {gerarBotoesPaginas(paginaAtual, totalPaginas).map((item, idx) => {
+                      if (item === 'ellipsis-start' || item === 'ellipsis-end') {
+                        return (
+                          <span key={`${item}-${idx}`} style={{ padding: '0 6px', color: '#64748b', fontWeight: 700 }}>
+                            ...
+                          </span>
+                        );
+                      }
+                      const ativa = item === paginaAtual;
+                      return (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => setPaginaAtual(item)}
+                          disabled={loading}
+                          style={{
+                            minWidth: '34px',
+                            height: '32px',
+                            padding: '0 8px',
+                            borderRadius: '6px',
+                            border: ativa ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                            background: ativa ? '#2563eb' : '#ffffff',
+                            color: ativa ? '#ffffff' : '#1e293b',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {item}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaginaAtual(prev => Math.min(totalPaginas, prev + 1))}
+                    disabled={paginaAtual >= totalPaginas || loading}
+                    title="Próxima página"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: paginaAtual >= totalPaginas ? '#f8fafc' : '#ffffff',
+                      color: paginaAtual >= totalPaginas ? '#94a3b8' : '#1e293b',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: paginaAtual >= totalPaginas ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <span>Próxima</span>
+                    <ChevronRight size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaginaAtual(totalPaginas)}
+                    disabled={paginaAtual >= totalPaginas || loading}
+                    title="Última página"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: paginaAtual >= totalPaginas ? '#f8fafc' : '#ffffff',
+                      color: paginaAtual >= totalPaginas ? '#94a3b8' : '#1e293b',
+                      cursor: paginaAtual >= totalPaginas ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <ChevronsRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Modal do Processo Consolidado Aberto via Histórico */}
       {processoModalData && (

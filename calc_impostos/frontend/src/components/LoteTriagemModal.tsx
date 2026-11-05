@@ -350,16 +350,14 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
 
-        // Gravação automática de todas as notas do grupo consolidado no banco de dados
+        // Gravação automática do processo consolidado completo no banco de dados
         try {
-          for (const n of notasAtualizadas) {
-            await apiFetch('/api/notas/salvar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(n)
-            });
-          }
-          setMsgSucesso(`✓ Relatório consolidado baixado e as ${notasAtualizadas.length} notas salvas no banco de dados!`);
+          await apiFetch('/api/processos/salvar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          setMsgSucesso(`✓ Relatório consolidado baixado e o processo (${notasAtualizadas.length} notas) salvo em conjunto no histórico!`);
           setTimeout(() => setMsgSucesso(null), 5000);
         } catch (saveErr) {
           console.warn('Gravação automática do grupo consolidado falhou:', saveErr);

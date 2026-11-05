@@ -117,25 +117,30 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
   const handleSalvarTodasNoBanco = async () => {
     try {
       setSalvando(true);
-      let salvas = 0;
-      for (const nota of dados.notas) {
-        const notaComProcesso = {
+      const payload = {
+        ...dados,
+        numeroProcesso: numeroProcesso.trim() || undefined,
+        documentoHabil: documentoHabil.trim() || undefined,
+        notaEmpenho: notaEmpenho.trim() || undefined,
+        observacoes: observacoes.trim() || undefined,
+        notas: dados.notas.map(nota => ({
           ...nota,
           numeroProcesso: numeroProcesso.trim() || nota.numeroProcesso,
           documentoHabil: documentoHabil.trim() || nota.documentoHabil,
           numeroEmpenho: notaEmpenho.trim() || nota.numeroEmpenho
-        };
-        await apiFetch('/api/notas/salvar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(notaComProcesso)
-        });
-        salvas++;
-      }
+        }))
+      };
+
+      const res = await apiFetch<{ success: boolean; processoId: number; message: string }>('/api/processos/salvar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
       setSalvoSucesso(true);
-      alert(`✅ ${salvas} nota(s) fiscal(is) gravada(s) com sucesso no histórico do PostgreSQL!`);
+      alert(res.message || `✅ Processo consolidado e suas ${dados.notas.length} notas gravados com sucesso em conjunto no histórico!`);
     } catch (err: any) {
-      alert('Erro ao salvar notas no banco de dados: ' + err.message);
+      alert('Erro ao salvar processo consolidado no banco de dados: ' + err.message);
     } finally {
       setSalvando(false);
     }
