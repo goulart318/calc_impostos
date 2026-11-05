@@ -430,10 +430,11 @@ export class PdfReportGenerator {
    */
   public static gerarRelatorioConsolidado(processo: {
     numeroProcesso?: string;
+    documentoHabil?: string;
     notaEmpenho?: string;
     observacoes?: string;
-    orgaoTomador?: { nome?: string; cnpj?: string };
-    fornecedorPrincipal?: { nome?: string; cnpj?: string; optanteSimples?: boolean };
+    orgaoTomador?: { nome?: string; cnpj?: string; uasg?: string; siglaOrgao?: string };
+    fornecedorPrincipal?: { nome?: string; cnpj?: string; optanteSimples?: boolean; municipio?: string; uf?: string };
     temMultiplosFornecedores?: boolean;
     notas: ResultadoConsolidado[];
     resumo: {
@@ -477,7 +478,9 @@ export class PdfReportGenerator {
         const borderColor = '#cbd5e1';
         const textMuted = '#64748b';
 
-        // 1. Cabeçalho Oficial do Processo
+        // ==========================================
+        // 1. CABEÇALHO OFICIAL DO PROCESSO
+        // ==========================================
         doc.fillColor(primaryColor)
            .fontSize(14)
            .font('Helvetica-Bold')
@@ -488,63 +491,98 @@ export class PdfReportGenerator {
            .font('Helvetica')
            .text(`Instrução Processual de Liquidação SEI • Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 35, 47);
 
-        // Tarja de Processo SEI e Empenho
-        const headerBoxY = 62;
+        // Selo de Confirmação de Tomador (EBSERH / HUCAM)
+        const destY = 60;
+        const destCnpjFmt = processo.orgaoTomador?.cnpj || processo.notas[0]?.destinatarioCnpj || '15.126.437/0006-58';
+        const destNomeFmt = processo.orgaoTomador?.nome || processo.notas[0]?.destinatarioNome || 'EMPRESA BRASILEIRA DE SERVICOS HOSPITALARES - EBSERH';
+        const uasgFmt = (processo.orgaoTomador?.uasg || processo.notas[0]?.uasg) ? ` • UASG: ${processo.orgaoTomador?.uasg || processo.notas[0]?.uasg}` : '';
+        const siglaFmt = (processo.orgaoTomador?.siglaOrgao || processo.notas[0]?.siglaOrgao) ? ` [${processo.orgaoTomador?.siglaOrgao || processo.notas[0]?.siglaOrgao}]` : ' [HUCAM]';
+
+        doc.rect(35, destY, 525, 20).fillAndStroke('#ecfdf5', '#a7f3d0');
+        doc.fillColor('#047857').fontSize(7.5).font('Helvetica-Bold')
+           .text(`[CONFERÊNCIA DE CNPJ / TOMADOR] ${destNomeFmt}${siglaFmt} • CNPJ: ${destCnpjFmt}${uasgFmt}`, 45, destY + 5, { width: 505, ellipsis: true });
+
+        // Tarja de Processo SEI, Documento Hábil, Nota de Empenho e Quantidade de Notas
+        const headerBoxY = 84;
         doc.rect(35, headerBoxY, 525, 26).fillAndStroke('#f1f5f9', '#94a3b8');
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('PROCESSO SEI Nº', 45, headerBoxY + 5);
-        doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text(processo.numeroProcesso || 'Não informado / Em instrução', 45, headerBoxY + 14);
+        // Coluna 1: Processo SEI
+        doc.fillColor(textMuted).fontSize(6.8).font('Helvetica-Bold').text('PROCESSO SEI Nº', 45, headerBoxY + 4);
+        const procTexto = processo.numeroProcesso || processo.notas.find(n => n.numeroProcesso)?.numeroProcesso || 'Não informado / Em instrução';
+        doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold').text(procTexto, 45, headerBoxY + 14, { width: 135, ellipsis: true });
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('NOTA DE EMPENHO / CONTRATO', 240, headerBoxY + 5);
-        doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text(processo.notaEmpenho || 'Não informada', 240, headerBoxY + 14);
+        // Coluna 2: Documento Hábil / Liquidação (NS / Chave de Liquidação)
+        const docsHabils = Array.from(new Set(processo.notas.map(n => n.documentoHabil).filter(Boolean)));
+        const docHabilConsolidado = processo.documentoHabil || (docsHabils.length > 0 ? docsHabils.join(', ') : 'Não informado');
+        doc.fillColor(textMuted).fontSize(6.8).font('Helvetica-Bold').text('DOC. HÁBIL / LIQUIDAÇÃO', 185, headerBoxY + 4);
+        doc.fillColor(docHabilConsolidado !== 'Não informado' ? primaryColor : '#64748b').fontSize(8.5).font('Helvetica-Bold')
+           .text(docHabilConsolidado, 185, headerBoxY + 14, { width: 130, ellipsis: true });
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('QUANTIDADE DE NOTAS', 440, headerBoxY + 5);
-        doc.fillColor(accentColor).fontSize(11).font('Helvetica-Bold').text(`${processo.resumo.totalNotas} nota(s)`, 440, headerBoxY + 13);
+        // Coluna 3: Nota de Empenho / Contrato
+        const empenhos = Array.from(new Set(processo.notas.map(n => n.numeroEmpenho).filter(Boolean)));
+        const empenhoConsolidado = processo.notaEmpenho || (empenhos.length > 0 ? empenhos.join(', ') : 'Não informada');
+        doc.fillColor(textMuted).fontSize(6.8).font('Helvetica-Bold').text('NOTA DE EMPENHO / CONTRATO', 320, headerBoxY + 4);
+        doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold').text(empenhoConsolidado, 320, headerBoxY + 14, { width: 125, ellipsis: true });
+
+        // Coluna 4: Quantidade de Notas
+        doc.fillColor(textMuted).fontSize(6.8).font('Helvetica-Bold').text('QUANTIDADE DE NOTAS', 450, headerBoxY + 4);
+        doc.fillColor(accentColor).fontSize(9.5).font('Helvetica-Bold').text(`${processo.resumo.totalNotas} nota(s)`, 450, headerBoxY + 13, { width: 95, ellipsis: true });
 
         // Dados do Tomador e Fornecedor
-        const fornecBoxY = 93;
+        const fornecBoxY = 114;
         doc.rect(35, fornecBoxY, 525, 30).fillAndStroke(lightBg, borderColor);
 
         const fornecedorTexto = processo.temMultiplosFornecedores 
           ? 'Múltiplos Credores / Fornecedores no Lote'
-          : `${processo.fornecedorPrincipal?.nome || 'Fornecedor Identificado'} • CNPJ: ${processo.fornecedorPrincipal?.cnpj || '---'}`;
+          : `${processo.fornecedorPrincipal?.nome || processo.notas[0]?.fornecedorNome || 'Fornecedor Identificado'} • CNPJ: ${processo.fornecedorPrincipal?.cnpj || processo.notas[0]?.fornecedorCnpj || '---'}`;
 
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('CREDOR(ES) / FORNECEDOR(ES)', 45, fornecBoxY + 5);
-        doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold').text(fornecedorTexto, 45, fornecBoxY + 15, { width: 505, ellipsis: true });
+        const ehOptanteSimples = Boolean(processo.fornecedorPrincipal?.optanteSimples || processo.notas.some(n => n.optanteSimples));
+        const regimeTexto = ehOptanteSimples
+          ? 'SITUAÇÃO TRIBUTÁRIA: OPTANTE PELO SIMPLES NACIONAL • Dispensa de Retenção Federal (Art. 4º, Inciso XI da IN RFB nº 1.234/2012)'
+          : 'SITUAÇÃO TRIBUTÁRIA: REGIME NORMAL • Sujeito a Retenção Ampla de IR, CSLL, COFINS e PIS/PASEP (IN RFB nº 1.234/2012)';
 
-        // 2. Cards de Resumo Consolidado
-        const cardsY = 129;
+        doc.fillColor(textMuted).fontSize(6.8).font('Helvetica-Bold').text('CREDOR(ES) / FORNECEDOR(ES)', 45, fornecBoxY + 4);
+        doc.fillColor(primaryColor).fontSize(8.2).font('Helvetica-Bold').text(fornecedorTexto, 45, fornecBoxY + 13, { width: 505, ellipsis: true });
+        doc.fillColor(ehOptanteSimples ? '#92400e' : '#1e40af').fontSize(6.8).font('Helvetica')
+           .text(regimeTexto, 45, fornecBoxY + 22, { width: 505, ellipsis: true });
+
+        // ==========================================
+        // 2. CARDS DE RESUMO FINANCEIRO CONSOLIDADO
+        // ==========================================
+        const cardsY = 148;
         const cardW = 125;
-        const cardH = 38;
+        const cardH = 34;
 
         // Card 1: Total Bruto
         doc.rect(35, cardsY, cardW, cardH).fillAndStroke('#f8fafc', borderColor);
-        doc.fillColor(textMuted).fontSize(6.5).font('Helvetica-Bold').text('VALOR BRUTO TOTAL', 43, cardsY + 6);
-        doc.fillColor(primaryColor).fontSize(10.5).font('Helvetica-Bold').text(formatBRL(processo.resumo.totalBruto), 43, cardsY + 19);
+        doc.fillColor(textMuted).fontSize(6.5).font('Helvetica-Bold').text('VALOR BRUTO TOTAL', 43, cardsY + 5);
+        doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text(formatBRL(processo.resumo.totalBruto), 43, cardsY + 17);
 
         // Card 2: Retenção Federal DARF
         const totalFederais = (processo.resumo.totalIr || 0) + (processo.resumo.totalCsll || 0) + (processo.resumo.totalCofins || 0) + (processo.resumo.totalPis || 0);
         doc.rect(168, cardsY, cardW, cardH).fillAndStroke('#eff6ff', '#bfdbfe');
-        doc.fillColor('#1e40af').fontSize(6.5).font('Helvetica-Bold').text('FEDERAIS (IR+CS+COF+PIS)', 176, cardsY + 6);
-        doc.fillColor('#1e40af').fontSize(10.5).font('Helvetica-Bold').text(formatBRL(totalFederais), 176, cardsY + 19);
+        doc.fillColor('#1e40af').fontSize(6.5).font('Helvetica-Bold').text('FEDERAIS (IR+CS+COF+PIS)', 176, cardsY + 5);
+        doc.fillColor('#1e40af').fontSize(10).font('Helvetica-Bold').text(formatBRL(totalFederais), 176, cardsY + 17);
 
         // Card 3: Total Geral Retido
         doc.rect(301, cardsY, cardW, cardH).fillAndStroke('#fef2f2', '#fecaca');
-        doc.fillColor('#991b1b').fontSize(6.5).font('Helvetica-Bold').text('TOTAL RETIDO GERAL', 309, cardsY + 6);
-        doc.fillColor('#991b1b').fontSize(10.5).font('Helvetica-Bold').text(formatBRL(processo.resumo.totalRetidoGeral), 309, cardsY + 19);
+        doc.fillColor('#991b1b').fontSize(6.5).font('Helvetica-Bold').text('TOTAL RETIDO GERAL', 309, cardsY + 5);
+        doc.fillColor('#991b1b').fontSize(10).font('Helvetica-Bold').text(formatBRL(processo.resumo.totalRetidoGeral), 309, cardsY + 17);
 
         // Card 4: Valor Líquido a Pagar
         doc.rect(434, cardsY, 126, cardH).fillAndStroke('#f0fdf4', '#bbf7d0');
-        doc.fillColor('#166534').fontSize(6.5).font('Helvetica-Bold').text('LÍQUIDO A PAGAR TOTAL', 442, cardsY + 6);
-        doc.fillColor('#166534').fontSize(10.5).font('Helvetica-Bold').text(formatBRL(processo.resumo.totalLiquido), 442, cardsY + 19);
+        doc.fillColor('#166534').fontSize(6.5).font('Helvetica-Bold').text('LÍQUIDO A PAGAR TOTAL', 442, cardsY + 5);
+        doc.fillColor('#166534').fontSize(10).font('Helvetica-Bold').text(formatBRL(processo.resumo.totalLiquido), 442, cardsY + 17);
 
-        // 3. Tabela Analítica das Notas do Processo
-        let currentY = 175;
-        doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text('DEMONSTRATIVO ANALÍTICO DAS NOTAS FISCAIS DO PROCESSO', 35, currentY);
-        currentY += 14;
+        // ==========================================
+        // 3. TABELA ANALÍTICA DAS NOTAS DO PROCESSO
+        // ==========================================
+        let currentY = 188;
+        doc.fillColor(primaryColor).fontSize(9.5).font('Helvetica-Bold').text('DEMONSTRATIVO ANALÍTICO DAS NOTAS FISCAIS DO PROCESSO', 35, currentY);
+        currentY += 13;
 
         // Cabeçalho da Tabela
-        doc.rect(35, currentY, 525, 18).fillAndStroke(primaryColor, primaryColor);
+        doc.rect(35, currentY, 525, 17).fillAndStroke(primaryColor, primaryColor);
         doc.fillColor('#ffffff').fontSize(7).font('Helvetica-Bold')
            .text('Nº NOTA', 40, currentY + 5)
            .text('TIPO', 85, currentY + 5)
@@ -556,7 +594,7 @@ export class PdfReportGenerator {
            .text('RETIDO', 405, currentY + 5, { width: 55, align: 'right' })
            .text('LÍQUIDO', 475, currentY + 5, { width: 75, align: 'right' });
 
-        currentY += 18;
+        currentY += 17;
 
         // Linhas de Notas
         processo.notas.forEach((n, idx) => {
@@ -566,7 +604,7 @@ export class PdfReportGenerator {
           }
 
           const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
-          doc.rect(35, currentY, 525, 16).fillAndStroke(rowBg, borderColor);
+          doc.rect(35, currentY, 525, 15).fillAndStroke(rowBg, borderColor);
 
           const federaisNota = (n.totalIr || 0) + (n.totalCsll || 0) + (n.totalCofins || 0) + (n.totalPis || 0);
 
@@ -580,11 +618,11 @@ export class PdfReportGenerator {
           doc.fillColor('#991b1b').fontSize(7.5).font('Helvetica-Bold').text(formatBRL(n.totalRetidoGeral), 405, currentY + 4, { width: 55, align: 'right' });
           doc.fillColor('#166534').fontSize(7.5).font('Helvetica-Bold').text(formatBRL(n.valorLiquido), 475, currentY + 4, { width: 75, align: 'right' });
 
-          currentY += 16;
+          currentY += 15;
         });
 
         // Linha de TOTAIS DA TABELA
-        doc.rect(35, currentY, 525, 18).fillAndStroke('#e2e8f0', '#94a3b8');
+        doc.rect(35, currentY, 525, 17).fillAndStroke('#e2e8f0', '#94a3b8');
         doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica-Bold')
            .text('TOTAIS CONSOLIDADOS', 40, currentY + 5)
            .text(formatBRL(processo.resumo.totalBruto), 165, currentY + 5, { width: 55, align: 'right' })
@@ -594,60 +632,299 @@ export class PdfReportGenerator {
            .text(formatBRL(processo.resumo.totalRetidoGeral), 405, currentY + 5, { width: 55, align: 'right' })
            .text(formatBRL(processo.resumo.totalLiquido), 475, currentY + 5, { width: 75, align: 'right' });
 
-        currentY += 26;
+        currentY += 22;
 
-        if (currentY > 670) {
+        // ==========================================
+        // 4. CLASSIFICAÇÃO FISCAL, NATUREZA E CÓDIGO DA RECEITA DAS NOTAS
+        // ==========================================
+        doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold')
+           .text('CLASSIFICAÇÃO FISCAL, CÓDIGOS DARF E NATUREZAS DE RENDIMENTO (EFD-REINF)', 35, currentY);
+        currentY += 14;
+
+        processo.notas.forEach((nota) => {
+          const ehNfe = nota.tipoDocumento === 'NFE';
+          const itensNota = nota.itens && nota.itens.length > 0 ? nota.itens : [
+            {
+              numeroItem: 1,
+              descricao: 'Item / Prestação de Serviço Consolidado',
+              ncm: '',
+              cst: '01',
+              codigoServico: '',
+              valorBruto: nota.totalBruto,
+              condicaoAplicavel: ehNfe ? 'Mercadorias / Produtos conforme IN RFB nº 1.234/2012' : 'Prestação de Serviços em Geral (IN 1.234/2012)',
+              fundamentacaoLegal: 'IN RFB nº 1.234/2012',
+              codigoReceitaDarf: nota.codigosReceitaDarf && nota.codigosReceitaDarf[0]?.codigo ? nota.codigosReceitaDarf[0].codigo : (ehNfe ? '6147' : '6190'),
+              naturezaRendimentoReinf: ehNfe ? '17009' : '17099',
+              aliqIr: 1.2,
+              aliqCsll: 1.0,
+              aliqCofins: 3.0,
+              aliqPis: 0.65,
+              aliqInss: ehNfe ? 0 : 11,
+              aliqIss: ehNfe ? 0 : 5
+            }
+          ];
+
+          itensNota.forEach((item) => {
+            const cardH = 94;
+            if (currentY + cardH + 10 > 750) {
+              doc.addPage();
+              currentY = 40;
+            }
+
+            doc.rect(35, currentY, 525, cardH).fillAndStroke('#ffffff', borderColor);
+
+            const codigosDarfConhecidos = ['6190', '6147', '8767', '6175', '8739', '9060', '8850', '8863', '6188', 'ISENTO'];
+            const ehDarfCode = codigosDarfConhecidos.includes(item.codigoServico || '');
+            const temCodLc116 = !ehNfe && Boolean(item.codigoServico && !ehDarfCode);
+
+            const labelFiscal = ehNfe 
+              ? `NOTA FISCAL Nº ${nota.numeroNota || 'S/N'} — CLASSIFICAÇÃO FISCAL (NCM & CST)` 
+              : `NOTA FISCAL Nº ${nota.numeroNota || 'S/N'} — ${temCodLc116 ? 'CÓDIGO DE TRIBUTAÇÃO DO SERVIÇO (LC 116)' : 'IDENTIFICAÇÃO DO SERVIÇO'}`;
+
+            doc.fillColor('#2563eb').fontSize(7.2).font('Helvetica-Bold')
+               .text(labelFiscal, 45, currentY + 5);
+
+            doc.fillColor(textMuted).fontSize(6.8).font('Helvetica-Bold')
+               .text('VALOR BRUTO DO ITEM', 420, currentY + 5, { width: 130, align: 'right' });
+
+            // NCM e CST ou LC 116
+            const fiscalText = ehNfe 
+              ? `NCM: ${item.ncm || 'Geral'}       CST: ${item.cst || '01'}`
+              : (temCodLc116 ? `Cód. LC 116: ${item.codigoServico}` : 'Prestação de Serviços em Geral');
+
+            doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold')
+               .text(fiscalText, 45, currentY + 15, { width: 350 });
+
+            doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold')
+               .text(formatBRL(item.valorBruto), 420, currentY + 15, { width: 130, align: 'right' });
+
+            // Descrição do Item
+            const descrLimpa = item.descricao ? `Item: ${item.descricao}` : 'Item: Material / Prestação de Serviço';
+            doc.fillColor('#475569').fontSize(7).font('Helvetica')
+               .text(descrLimpa, 45, currentY + 26, { width: 505, height: 9.5, ellipsis: true });
+
+            // Faixa de Condição Aplicável
+            const condY = currentY + 37;
+            doc.rect(45, condY, 505, 14).fillAndStroke(lightBg, borderColor);
+            doc.fillColor(primaryColor).fontSize(7).font('Helvetica-Bold')
+               .text(`Condição aplicável: ${item.condicaoAplicavel || 'Conforme Instrução Normativa RFB nº 1.234/2012'}`, 52, condY + 3, { width: 490, height: 9.5, ellipsis: true });
+
+            // Bloco EFD-REINF e Código DARF (Retângulo azul claro)
+            const reinfY = currentY + 53;
+            doc.rect(45, reinfY, 505, 26).fillAndStroke('#f0f9ff', '#bae6fd');
+
+            // Coluna 1: Reinf
+            doc.fillColor('#0369a1').fontSize(6.5).font('Helvetica-Bold').text('NATUREZA DE RENDIMENTO (EFD-REINF R-4020):', 53, reinfY + 3.5);
+            doc.fillColor('#0c4a6e').fontSize(10).font('Helvetica-Bold').text(item.naturezaRendimentoReinf || '17009', 53, reinfY + 12.5);
+
+            // Coluna 2: Código DARF
+            doc.fillColor('#0369a1').fontSize(6.5).font('Helvetica-Bold').text('CÓDIGO DA RECEITA DARF (RFB):', 300, reinfY + 3.5);
+            doc.fillColor('#0c4a6e').fontSize(10).font('Helvetica-Bold').text(item.codigoReceitaDarf || '6147', 300, reinfY + 12.5);
+
+            // Fundamentação Legal
+            doc.fillColor(textMuted).fontSize(6.5).font('Helvetica')
+               .text(`Fundamentação Legal: ${item.fundamentacaoLegal || 'IN RFB nº 1.234/2012'}`, 45, currentY + 82, { width: 505, height: 9, ellipsis: true });
+
+            currentY += cardH + 6;
+          });
+        });
+
+        // ==========================================
+        // 5. MEMÓRIA DE DEDUÇÕES DA BASE DE CÁLCULO (SE HOUVER)
+        // ==========================================
+        const totalMateriaisAbatidos = processo.notas.reduce((acc, n) => acc + (n.totalMateriaisInssDeducao || 0), 0);
+        const temDeducaoMateriais = totalMateriaisAbatidos > 0;
+        const notaComReducaoIss = processo.notas.find(n => n.percentualReducaoIssAplicado && n.percentualReducaoIssAplicado > 0);
+        const temReducaoIss = Boolean(notaComReducaoIss);
+
+        if (temDeducaoMateriais || temReducaoIss) {
+          if (currentY + 45 > 750) {
+            doc.addPage();
+            currentY = 40;
+          }
+
+          doc.rect(35, currentY, 525, 34).fillAndStroke('#fffbeb', '#fde68a');
+          doc.fillColor('#92400e').fontSize(7.5).font('Helvetica-Bold')
+             .text('MEMÓRIA DE DEDUÇÕES DA BASE DE CÁLCULO (MATERIAIS E EQUIPAMENTOS):', 45, currentY + 4);
+
+          let txtDeducao = `Valor Bruto Total: ${formatBRL(processo.resumo.totalBruto)}`;
+          if (temDeducaoMateriais) {
+            txtDeducao += `  |  (-) Materiais Abatidos (IN 2.110/2022): ${formatBRL(totalMateriaisAbatidos)}`;
+          }
+          if (temReducaoIss && notaComReducaoIss) {
+            txtDeducao += `  |  Base ISSQN Reduzida (${notaComReducaoIss.percentualReducaoIssAplicado}%): Conforme Legislação Municipal`;
+          }
+
+          doc.fillColor('#78350f').fontSize(7).font('Helvetica')
+             .text(txtDeducao, 45, currentY + 16, { width: 505 });
+
+          currentY += 38;
+        } else {
+          currentY += 2;
+        }
+
+        // ==========================================
+        // 6. CONSOLIDADO DO LOTE E MEMÓRIA DE CÁLCULO DAS RETENÇÕES
+        // ==========================================
+        // Se a memória de cálculo e o termo de atesto não couberem na folha atual, inicia na próxima
+        if (currentY + 235 > 785) {
           doc.addPage();
           currentY = 40;
         }
 
-        // 4. Detalhamento dos Tributos Federais e Códigos DARF
-        doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text('RESUMO DE RETENÇÕES POR NATUREZA DE TRIBUTO & GUIA', 35, currentY);
+        doc.fillColor(primaryColor).fontSize(10.5).font('Helvetica-Bold').text('CONSOLIDADO DO LOTE E MEMORIA DE CALCULO DAS RETENCOES', 35, currentY);
         currentY += 14;
 
-        const tributosResumo = [
-          { nome: 'IR (Imposto de Renda) - Total Acumulado', valor: processo.resumo.totalIr, legal: 'IN RFB nº 1.234/2012' },
-          { nome: 'CSLL (Contribuição Social sobre o Lucro Líquido)', valor: processo.resumo.totalCsll, legal: 'IN RFB nº 1.234/2012' },
-          { nome: 'COFINS (Seguridade Social)', valor: processo.resumo.totalCofins, legal: 'IN RFB nº 1.234/2012' },
-          { nome: 'PIS/PASEP (Programa de Integração Social)', valor: processo.resumo.totalPis, legal: 'IN RFB nº 1.234/2012' },
-          { nome: 'INSS (Previdência Social - Retenção Previdenciária)', valor: processo.resumo.totalInss, legal: 'IN RFB nº 2.110/2022' },
-          { nome: 'ISSQN (Imposto Sobre Serviços - Municipal)', valor: processo.resumo.totalIss, legal: 'LC nº 116/2003 c/c Legislação Municipal' }
+        // Caixa de Total Retido
+        doc.rect(35, currentY, 525, 32).fillAndStroke('#eff6ff', '#bfdbfe');
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica-Bold').text('TOTAL A RETER (FEDERAIS + INSS + ISS + CONTA VINCULADA)', 45, currentY + 5);
+        doc.fillColor('#1e40af').fontSize(13).font('Helvetica-Bold').text(formatBRL(processo.resumo.totalRetidoGeral), 45, currentY + 15);
+        doc.fillColor(textMuted).fontSize(7).font('Helvetica').text(`sobre o valor bruto de ${formatBRL(processo.resumo.totalBruto)}`, 180, currentY + 19);
+
+        currentY += 36;
+
+        // Cálculo das Alíquotas Ponderadas / Médias do Lote
+        const vBrutoTotal = processo.resumo.totalBruto || 1;
+        const aliqFedPonderada = (totalFederais / vBrutoTotal) * 100;
+        const aliqIrPonderada = (processo.resumo.totalIr / vBrutoTotal) * 100;
+        const aliqCsllPonderada = (processo.resumo.totalCsll / vBrutoTotal) * 100;
+        const aliqCofinsPonderada = (processo.resumo.totalCofins / vBrutoTotal) * 100;
+        const aliqPisPonderada = (processo.resumo.totalPis / vBrutoTotal) * 100;
+        const aliqInssPonderada = (processo.resumo.totalInss / vBrutoTotal) * 100;
+        const aliqIssPonderada = (processo.resumo.totalIss / vBrutoTotal) * 100;
+
+        const rows: { nome: string; aliq: number; valor: number; legal: string; destaque?: boolean; isSubItem?: boolean; aliqTexto?: string }[] = [
+          { 
+            nome: 'TRIBUTOS FEDERAIS AGREGADOS (IR+CSLL+COFINS+PIS) [SIAFI]', 
+            aliq: aliqFedPonderada, 
+            valor: totalFederais, 
+            legal: 'IN RFB nº 1.234/2012',
+            destaque: true 
+          },
+          { 
+            nome: '   |-- IR (Imposto de Renda)', 
+            aliq: aliqIrPonderada, 
+            valor: processo.resumo.totalIr, 
+            legal: 'IN RFB nº 1.234/2012', 
+            isSubItem: true 
+          },
+          { 
+            nome: '   |-- CSLL (Contribuição Social sobre o Lucro Líquido)', 
+            aliq: aliqCsllPonderada, 
+            valor: processo.resumo.totalCsll, 
+            legal: 'IN RFB nº 1.234/2012', 
+            isSubItem: true 
+          },
+          { 
+            nome: '   |-- COFINS (Contribuição para Seguridade)', 
+            aliq: aliqCofinsPonderada, 
+            valor: processo.resumo.totalCofins, 
+            legal: 'IN RFB nº 1.234/2012', 
+            isSubItem: true 
+          },
+          { 
+            nome: '   |-- PIS/PASEP (Programa de Integração Social)', 
+            aliq: aliqPisPonderada, 
+            valor: processo.resumo.totalPis, 
+            legal: 'IN RFB nº 1.234/2012', 
+            isSubItem: true 
+          },
+          { 
+            nome: temDeducaoMateriais 
+              ? `INSS — Retenção Previdenciária (Materiais Abatidos: ${formatBRL(totalMateriaisAbatidos)})` 
+              : 'INSS — Retenção Previdenciária', 
+            aliq: aliqInssPonderada, 
+            aliqTexto: aliqInssPonderada > 0 ? `(${aliqInssPonderada.toFixed(2)}%)` : (processo.notas.some(n => n.tipoDocumento === 'NFSE') ? '(11.00%)' : '---'),
+            valor: processo.resumo.totalInss, 
+            legal: temDeducaoMateriais ? 'Art. 120 e 121 da IN RFB nº 2.110/2022' : 'IN RFB nº 2.110/2022' 
+          },
+          { 
+            nome: (() => {
+              const primeiraNf = processo.notas[0];
+              const tomador = primeiraNf?.municipioTomador || 'VITÓRIA';
+              return `ISSQN — Imposto Sobre Serviços (${tomador}/ES - Executado Localmente)`;
+            })(), 
+            aliq: aliqIssPonderada, 
+            aliqTexto: aliqIssPonderada > 0 ? `(${aliqIssPonderada.toFixed(2)}%)` : '---',
+            valor: processo.resumo.totalIss, 
+            legal: 'Lei Municipal nº 6.075/2003 c/c LC nº 116/2003'
+          }
         ];
 
         if (processo.resumo.totalContaVinculada && processo.resumo.totalContaVinculada > 0) {
-          tributosResumo.push({
-            nome: 'Conta Vinculada (Provisões Trabalhistas Terceirizadas)',
+          rows.push({
+            nome: 'RETENÇÃO PARA CONTA VINCULADA (Provisões Trabalhistas)',
+            aliq: 0,
+            aliqTexto: '---',
             valor: processo.resumo.totalContaVinculada,
-            legal: 'IN SEGES/ME nº 5/2017'
+            legal: 'IN SEGES/ME nº 5/2017 (Conta-Depósito Vinculada)'
           });
         }
 
-        tributosResumo.forEach((tr, tIdx) => {
-          const rowBg = tIdx % 2 === 0 ? lightBg : '#ffffff';
-          doc.rect(35, currentY, 525, 16).fillAndStroke(rowBg, borderColor);
-          doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica-Bold').text(tr.nome, 45, currentY + 4, { width: 300 });
-          doc.fillColor(textMuted).fontSize(7).font('Helvetica').text(tr.legal, 350, currentY + 4);
-          doc.fillColor(primaryColor).fontSize(8).font('Helvetica-Bold').text(formatBRL(tr.valor), 460, currentY + 4, { width: 90, align: 'right' });
-          currentY += 16;
+        rows.forEach((r, rIdx) => {
+          let rowBg = rIdx % 2 === 0 ? lightBg : '#ffffff';
+          let textColor = primaryColor;
+          let fontStyle = 'Helvetica';
+
+          if (r.destaque) {
+            rowBg = '#f0fdf4';
+            textColor = '#166534';
+            fontStyle = 'Helvetica-Bold';
+          } else if (r.isSubItem) {
+            rowBg = '#f7fee7';
+            textColor = '#365314';
+            fontStyle = 'Helvetica';
+          }
+
+          doc.rect(35, currentY, 525, 15).fillAndStroke(rowBg, borderColor);
+
+          // Borda lateral verde conectando o grupo de tributos federais
+          if (r.destaque || r.isSubItem) {
+            doc.rect(35, currentY, 3.5, 15).fillAndStroke(r.destaque ? '#16a34a' : '#84cc16', r.destaque ? '#16a34a' : '#84cc16');
+          }
+
+          doc.fillColor(textColor).fontSize(7.2).font(fontStyle).text(r.nome, 45, currentY + 3.5, { width: 270, ellipsis: true });
+          
+          const textoAliq = r.aliqTexto || (r.aliq > 0 ? `(${r.aliq.toFixed(2)}%)` : '---');
+          doc.fillColor(r.isSubItem ? '#4d7c0f' : textMuted).fontSize(6.8).font('Helvetica').text(textoAliq, 320, currentY + 3.5);
+          doc.fillColor(textColor).fontSize(7.5).font(r.destaque ? 'Helvetica-Bold' : 'Helvetica').text(formatBRL(r.valor), 420, currentY + 3, { width: 130, align: 'right' });
+
+          currentY += 15;
         });
 
-        // 5. Termo de Liquidação e Assinatura SEI
-        currentY += 20;
-        if (currentY > 690) {
+        // Linha de Valor Líquido Final
+        currentY += 3;
+        doc.rect(35, currentY, 525, 20).fillAndStroke('#f0fdf4', '#86efac');
+        doc.fillColor('#166534').fontSize(8.5).font('Helvetica-Bold').text('VALOR LÍQUIDO A PAGAR AO FORNECEDOR', 45, currentY + 5.5);
+        doc.fillColor('#166534').fontSize(10.5).font('Helvetica-Bold').text(formatBRL(processo.resumo.totalLiquido), 420, currentY + 4.5, { width: 130, align: 'right' });
+
+        // Rodapé de Auditoria SEI
+        currentY += 23;
+        doc.rect(35, currentY, 525, 22).fillAndStroke(lightBg, borderColor);
+        doc.fillColor(textMuted).fontSize(6.2).font('Helvetica')
+           .text(`AUDITORIA DOCUMENTAL & CONFERENCIA FISCAL: Documento gerado automaticamente para instrucao de processo de pagamento no SEI. Em conformidade com a IN RFB nº 1.234/2012, IN RFB nº 2.110/2022 e Codigo Tributario de Vitoria/ES (Lei nº 6.075/2003).`, 42, currentY + 3.5, { width: 511 });
+
+        // ==========================================
+        // 7. TERMO DE LIQUIDAÇÃO E ASSINATURA SEI
+        // ==========================================
+        currentY += 25;
+        if (currentY + 58 > 790) {
           doc.addPage();
           currentY = 40;
         }
 
-        doc.rect(35, currentY, 525, 65).fillAndStroke(lightBg, borderColor);
-        doc.fillColor(primaryColor).fontSize(8).font('Helvetica-Bold').text('ATESTO DE LIQUIDAÇÃO E CONFERÊNCIA FISCAL', 45, currentY + 6);
-        doc.fillColor(textMuted).fontSize(7).font('Helvetica')
-           .text(`Certifico que as retenções tributárias das ${processo.resumo.totalNotas} nota(s) fiscal(is) constantes deste processo foram devidamente calculadas e consolidadas conforme as normas vigentes (IN RFB 1.234/2012, IN RFB 2.110/2022 e LC 116/2003). Encaminhe-se ao setor financeiro para efetivação do pagamento líquido e emissão dos respectivos documentos de arrecadação (DARF / GPS / DAM).`, 45, currentY + 18, { width: 505 });
+        doc.rect(35, currentY, 525, 58).fillAndStroke(lightBg, borderColor);
+        doc.fillColor(primaryColor).fontSize(7.8).font('Helvetica-Bold').text('ATESTO DE LIQUIDAÇÃO E CONFERÊNCIA FISCAL', 45, currentY + 5);
+        doc.fillColor(textMuted).fontSize(6.8).font('Helvetica')
+           .text(`Certifico que as retenções tributárias das ${processo.resumo.totalNotas} nota(s) fiscal(is) constantes deste processo foram devidamente calculadas e consolidadas conforme as normas vigentes (IN RFB 1.234/2012, IN RFB 2.110/2022 e LC 116/2003). Encaminhe-se ao setor financeiro para efetivação do pagamento líquido e emissão dos respectivos documentos de arrecadação (DARF / GPS / DAM).`, 45, currentY + 16, { width: 505 });
 
-        doc.fillColor(textMuted).fontSize(7.5).font('Helvetica-Bold')
-           .text('__________________________________________________________', 45, currentY + 48)
-           .text('Assinatura Eletrônica / Carimbo do Responsável Fiscal - SEI', 45, currentY + 56);
+        doc.fillColor(textMuted).fontSize(7.2).font('Helvetica-Bold')
+           .text('__________________________________________________________', 45, currentY + 41)
+           .text('Assinatura Eletrônica / Carimbo do Responsável Fiscal - SEI', 45, currentY + 48);
 
-        // Anexo SICAF para o processo consolidado
+        // ==========================================
+        // 8. ANEXO — CONSULTA PÚBLICA AO SICAF
+        // ==========================================
         if (processo.fornecedorPrincipal?.cnpj || (processo.notas && processo.notas.length > 0 && processo.notas[0].fornecedorCnpj)) {
           const primeira = processo.notas[0];
           const cnpjAlvo = processo.fornecedorPrincipal?.cnpj || primeira.fornecedorCnpj;
