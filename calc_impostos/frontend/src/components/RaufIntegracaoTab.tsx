@@ -60,6 +60,23 @@ export const RaufIntegracaoTab: React.FC = () => {
     return () => clearInterval(t);
   }, [job]);
 
+  const baixarRelatorio = async (formato: 'pdf' | 'csv') => {
+    try {
+      const res = await apiFetch<Response>(`/api/integracao/rauf/reenviar-historico/relatorio?formato=${formato}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pendencias_rauf_${new Date().toISOString().slice(0, 10)}.${formato}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setMsg({ tipo: 'erro', texto: e?.message || 'Não foi possível gerar o relatório de pendências.' });
+    }
+  };
+
   const iniciarHistorico = async (apenasDiagnostico: boolean) => {
     if (!apenasDiagnostico && !window.confirm('Enviar ao Rauf todas as notas já calculadas deste órgão que tenham processo SEI completo e NS válida?')) return;
     try {
@@ -104,7 +121,7 @@ export const RaufIntegracaoTab: React.FC = () => {
   const campo: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(148,163,184,0.5)' };
 
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
       <div style={caixa}>
         <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px' }}>
           <Link2 size={18} /> Integração com o Rauf
@@ -124,6 +141,8 @@ export const RaufIntegracaoTab: React.FC = () => {
         </div>
       )}
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 16, alignItems: 'start' }}>
+      <div>
       {habilitado && (
         <>
           <div style={caixa}>
@@ -166,6 +185,8 @@ export const RaufIntegracaoTab: React.FC = () => {
         </>
       )}
 
+      </div>
+      <div>
       <div style={caixa}>
         <b style={{ fontSize: 13 }}>Enviar histórico ao Rauf</b>
         <p style={{ fontSize: 12, opacity: 0.75, margin: '6px 0 10px' }}>
@@ -189,9 +210,15 @@ export const RaufIntegracaoTab: React.FC = () => {
               ))}
             </ul>
             {job.problemas?.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, margin: '10px 0 4px', flexWrap: 'wrap' }}>
+                <button className="btn btn-secondary" onClick={() => baixarRelatorio('pdf')}>Baixar pendências (PDF)</button>
+                <button className="btn btn-secondary" onClick={() => baixarRelatorio('csv')}>Baixar pendências (Excel/CSV)</button>
+              </div>
+            )}
+            {job.problemas?.length > 0 && (
               <details style={{ marginTop: 8 }}>
                 <summary style={{ cursor: 'pointer' }}>Notas com pendência ({job.problemas.length})</summary>
-                <div style={{ maxHeight: 260, overflow: 'auto', marginTop: 6 }}>
+                <div style={{ maxHeight: 520, overflow: 'auto', marginTop: 6 }}>
                   {job.problemas.map((p: any) => (
                     <div key={p.id} style={{ padding: '6px 0', borderTop: '1px solid rgba(148,163,184,0.25)', fontSize: 12 }}>
                       <b>NF {p.notaFiscal}</b> · {p.fornecedor} · SEI {p.processo || '—'} · NS {p.documentoHabil || '—'}
@@ -203,6 +230,8 @@ export const RaufIntegracaoTab: React.FC = () => {
             )}
           </div>
         )}
+      </div>
+      </div>
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import { ProcessoService } from './services/processoService';
 import { SupplierMemoryService } from './services/supplierMemoryService';
 import { SicafService, DadosSicafConsulta } from './services/sicafService';
 import { RaufIntegrationService, normalizarNS, normalizarProcessoSei } from './services/raufIntegrationService';
+import { gerarCsvPendencias, gerarPdfPendencias } from './services/relatorioPendenciasService';
 import { RaufCredenciaisService, cadastroPelaTelaHabilitado, tokenAdminValido } from './services/raufCredenciaisService';
 import { AuthService } from './services/authService';
 import { aplicarIdentidadeOrgao, uasgDaSessao, contextoAtual } from './services/requestContext';
@@ -1061,6 +1062,30 @@ app.post('/api/integracao/rauf/reenviar-historico', (req: Request, res: Response
 app.get('/api/integracao/rauf/reenviar-historico/status', (_req: Request, res: Response) => {
   const uasg = uasgDaSessao();
   res.json((uasg && RaufIntegrationService.statusJobHistorico(uasg)) || null);
+});
+
+// Relatório das notas com pendência (PDF ou CSV/Excel) para o usuário ir corrigindo e lançando
+app.get('/api/integracao/rauf/reenviar-historico/relatorio', async (req: Request, res: Response) => {
+  try {
+    const ctx = contextoAtual();
+    const uasg = uasgDaSessao();
+    const job = uasg ? RaufIntegrationService.statusJobHistorico(uasg) : null;
+    if (!job) {
+      return res.status(404).json({ error: 'Nenhum diagnóstico/envio encontrado. Clique em Diagnosticar antes de gerar o relatório.' });
+    }
+    const dataArq = new Date().toISOString().slice(0, 10);
+    if (String(req.query.formato || 'pdf') === 'csv') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="pendencias_rauf_${uasg}_${dataArq}.csv"`);
+      return res.send(gerarCsvPendencias(job));
+    }
+    const pdf = await gerarPdfPendencias(job, `${ctx?.uasg.sigla || ctx?.uasg.nome || ''} · UASG ${uasg}`);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="pendencias_rauf_${uasg}_${dataArq}.pdf"`);
+    res.send(pdf);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao gerar o relatório de pendências.' });
+  }
 });
 
 // Reenvia a fila local de sincronizações que falharam por indisponibilidade do Rauf

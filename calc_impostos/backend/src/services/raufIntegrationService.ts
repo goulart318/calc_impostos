@@ -123,18 +123,26 @@ export class RaufIntegrationService {
   }
 
   private static async chamar<T = any>(metodo: 'GET' | 'POST', caminho: string, chave: string, corpo?: unknown): Promise<T> {
-    const resp = await fetch(`${this.getApiUrl()}${caminho}`, {
-      method: metodo,
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': chave },
-      body: corpo === undefined ? undefined : JSON.stringify(corpo),
-      signal: AbortSignal.timeout(15000)
-    });
-    if (!resp.ok) {
-      const erro: any = new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 300)}`);
-      erro.status = resp.status;
+    let resp: Response | undefined;
+    // Limite de requisições do Rauf (HTTP 429): espera e repete algumas vezes antes de desistir
+    for (let tentativa = 0; tentativa < 4; tentativa++) {
+      resp = await fetch(`${this.getApiUrl()}${caminho}`, {
+        method: metodo,
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': chave },
+        body: corpo === undefined ? undefined : JSON.stringify(corpo),
+        signal: AbortSignal.timeout(15000)
+      });
+      if (resp.status !== 429) break;
+      const espera = Math.min(Number(resp.headers.get('retry-after')) || 15, 60);
+      await new Promise(r => setTimeout(r, espera * 1000));
+    }
+    const respFinal = resp!;
+    if (!respFinal.ok) {
+      const erro: any = new Error(`HTTP ${respFinal.status}: ${(await respFinal.text()).slice(0, 300)}`);
+      erro.status = respFinal.status;
       throw erro;
     }
-    return (await resp.json()) as T;
+    return (await respFinal.json()) as T;
   }
 
   /**
@@ -170,7 +178,8 @@ export class RaufIntegrationService {
 
     const ir = n(r.totalIr), csll = n(r.totalCsll), cofins = n(r.totalCofins), pis = n(r.totalPis);
     const federalCalculado = arred(ir + csll + cofins + pis);
-    const inss = arred(n(r.totalInss));
+    const inssCalculado = arred(n(r.totalInss));
+    const inss = simples ? 0 : inssCalculado; // optante pelo Simples Nacional não sofre retenção de INSS
     const iss = arred(n(r.totalIss));
 
     const porCodigo = new Map<string, { codigo: string; valor: number; ir: number; csll: number; cofins: number; pis: number }>();
@@ -197,13 +206,16 @@ export class RaufIntegrationService {
     if (simples && federalCalculado > 0) {
       alertas.push('SIMPLES_COM_RETENCAO_FEDERAL: fornecedor optante pelo Simples Nacional com valores federais calculados; considerados zero na conferência.');
     }
+    if (simples && inssCalculado > 0) {
+      alertas.push('SIMPLES_COM_INSS: fornecedor optante pelo Simples Nacional com INSS calculado; considerado zero na conferência.');
+    }
     if (!simples && federalTotal > 0 && arred(darfsFederais.reduce((a, d) => a + d.valor, 0)) !== federalTotal) {
       alertas.push('DARF_FEDERAL_INCOMPLETO: há retenção federal sem código de DARF informado em algum item.');
     }
 
     return {
       optanteSimples: simples,
-      regra: 'Simples Nacional não sofre retenção federal; apenas ISS (e INSS quando aplicável).',
+      regra: 'Simples Nacional não sofre retenção federal nem de INSS; apenas ISS.',
       federais: { total: federalTotal, ir: simples ? 0 : ir, csll: simples ? 0 : csll, cofins: simples ? 0 : cofins, pis: simples ? 0 : pis, darfs: darfsFederais },
       previdenciaria: { inss, darf: inss > 0 ? { codigo: '1162', valor: inss } : null },
       municipal: { iss },
@@ -371,13 +383,14 @@ export class RaufIntegrationService {
             mensagem = res.mensagem;
           }
           job.contagem[motivo] = (job.contagem[motivo] || 0) + 1;
-          if (!['OK', 'PRONTA'].includes(motivo) && job.problemas.length < 300) {
+          if (!['OK', 'PRONTA'].includes(motivo) && job.problemas.length < 3000) {
             job.problemas.push({
               id: row.id, notaFiscal: row.numero_nota, processo: row.numero_processo || '',
               documentoHabil: row.documento_habil || '', fornecedor: row.fornecedor_nome, motivo, mensagem
             });
           }
           job.processados++;
+          if (!apenasDiagnostico && motivo === 'OK') await new Promise(r => setTimeout(r, 750)); // respeita o limite do Rauf (120/min)
         }
       } catch (e: any) {
         job.erro = e?.message || String(e);
