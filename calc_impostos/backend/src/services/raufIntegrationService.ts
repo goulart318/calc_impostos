@@ -218,7 +218,8 @@ export class RaufIntegrationService {
       regra: 'Simples Nacional não sofre retenção federal nem de INSS; apenas ISS.',
       federais: { total: federalTotal, ir: simples ? 0 : ir, csll: simples ? 0 : csll, cofins: simples ? 0 : cofins, pis: simples ? 0 : pis, darfs: darfsFederais },
       previdenciaria: { inss, darf: inss > 0 ? { codigo: '1162', valor: inss } : null },
-      municipal: { iss },
+      // retidoTomador define se se espera OB de ISS no pagamento (guia municipal retida pelo tomador)
+      municipal: { iss, retidoTomador: Boolean(r.issRetidoTomador) && iss > 0 },
       contaVinculada: arred(n(r.totalContaVinculada)),
       // Total que deve aparecer como DF/DARF no SIAFI (federais + INSS 1162); ISS e conta vinculada ficam de fora
       totalDarf: arred(federalTotal + inss),
