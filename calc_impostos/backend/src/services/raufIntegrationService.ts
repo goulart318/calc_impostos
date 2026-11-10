@@ -155,6 +155,65 @@ export class RaufIntegrationService {
     return out;
   }
 
+  /**
+   * Classificação das retenções para o Rauf (conferência com os DF/DARF do SIAFI):
+   *  - federais: IR, CSLL, COFINS e PIS, agrupadas por código de DARF da tabela de retenção do calc;
+   *  - previdenciária: INSS, com DARF próprio de código 1162;
+   *  - municipal: ISS (guia municipal, não é DARF);
+   *  - conta vinculada: valor retido em conta vinculada (não é tributo).
+   * Optante pelo Simples Nacional não sofre retenção federal (somente ISS e, quando aplicável, INSS).
+   */
+  private static classificarRetencoes(r: ResultadoConsolidado) {
+    const simples = Boolean(r.optanteSimples);
+    const n = (v: any) => Number(v) || 0;
+    const arred = (v: number) => Number(v.toFixed(2));
+
+    const ir = n(r.totalIr), csll = n(r.totalCsll), cofins = n(r.totalCofins), pis = n(r.totalPis);
+    const federalCalculado = arred(ir + csll + cofins + pis);
+    const inss = arred(n(r.totalInss));
+    const iss = arred(n(r.totalIss));
+
+    const porCodigo = new Map<string, { codigo: string; valor: number; ir: number; csll: number; cofins: number; pis: number }>();
+    if (!simples) {
+      for (const it of r.itens || []) {
+        const codigo = String(it.codigoReceitaDarf || '').trim();
+        const federalItem = n(it.valorFederalTotal);
+        if (!codigo || codigo === 'ISENTO' || federalItem <= 0) continue;
+        const g = porCodigo.get(codigo) || { codigo, valor: 0, ir: 0, csll: 0, cofins: 0, pis: 0 };
+        g.valor += federalItem;
+        g.ir += n(it.valorIr);
+        g.csll += n(it.valorCsll);
+        g.cofins += n(it.valorCofins);
+        g.pis += n(it.valorPis);
+        porCodigo.set(codigo, g);
+      }
+    }
+    const darfsFederais = Array.from(porCodigo.values()).map(g => ({
+      codigo: g.codigo, valor: arred(g.valor), ir: arred(g.ir), csll: arred(g.csll), cofins: arred(g.cofins), pis: arred(g.pis)
+    }));
+
+    const federalTotal = simples ? 0 : federalCalculado;
+    const alertas: string[] = [];
+    if (simples && federalCalculado > 0) {
+      alertas.push('SIMPLES_COM_RETENCAO_FEDERAL: fornecedor optante pelo Simples Nacional com valores federais calculados; considerados zero na conferência.');
+    }
+    if (!simples && federalTotal > 0 && arred(darfsFederais.reduce((a, d) => a + d.valor, 0)) !== federalTotal) {
+      alertas.push('DARF_FEDERAL_INCOMPLETO: há retenção federal sem código de DARF informado em algum item.');
+    }
+
+    return {
+      optanteSimples: simples,
+      regra: 'Simples Nacional não sofre retenção federal; apenas ISS (e INSS quando aplicável).',
+      federais: { total: federalTotal, ir: simples ? 0 : ir, csll: simples ? 0 : csll, cofins: simples ? 0 : cofins, pis: simples ? 0 : pis, darfs: darfsFederais },
+      previdenciaria: { inss, darf: inss > 0 ? { codigo: '1162', valor: inss } : null },
+      municipal: { iss },
+      contaVinculada: arred(n(r.totalContaVinculada)),
+      // Total que deve aparecer como DF/DARF no SIAFI (federais + INSS 1162); ISS e conta vinculada ficam de fora
+      totalDarf: arred(federalTotal + inss),
+      alertas
+    };
+  }
+
   private static montarPayload(r: ResultadoConsolidado, uasg: string, processo: string, ns: string) {
     const detalhamento = {
       ir: Number(r.totalIr) || 0,
@@ -168,6 +227,7 @@ export class RaufIntegrationService {
       naturezasEFDReinf: r.naturezasEFDReinf || [],
       fundamentacaoLegal: r.fundamentacaoLegalResumo || [],
       optanteSimples: Boolean(r.optanteSimples),
+      classificacao: this.classificarRetencoes(r),
       dataEmissao: r.dataEmissao || null,
       tipoDocumento: r.tipoDocumento,
       itensResumo: (r.itens || []).map(it => ({

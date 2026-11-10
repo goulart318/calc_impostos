@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { type ResultadoConsolidado } from './ReportPreview';
 import { apiFetch } from '../lib/apiFetch';
+import { pendenciasParaPdf } from '../lib/requisitosPdf';
 
 export interface ProcessoConsolidadoData {
   numeroProcesso?: string;
@@ -77,6 +78,11 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
                         (dados.resumo.totalPis || 0);
 
   const handleDownloadPdf = async () => {
+    const faltas = pendenciasParaPdf({ numeroProcesso, documentoHabil });
+    if (faltas.length > 0) {
+      alert(`Não é possível baixar o PDF. Falta: ${faltas.join('; ')}.`);
+      return;
+    }
     try {
       setGerandoPdf(true);
       const payload = {
@@ -614,7 +620,9 @@ export const ProcessoConsolidadoModal: React.FC<Props> = ({
             <button 
               className="btn-primary"
               onClick={handleDownloadPdf}
-              disabled={gerandoPdf}
+              disabled={gerandoPdf || pendenciasParaPdf({ numeroProcesso, documentoHabil }).length > 0}
+              title={pendenciasParaPdf({ numeroProcesso, documentoHabil }).length > 0
+                ? `Falta: ${pendenciasParaPdf({ numeroProcesso, documentoHabil }).join('; ')}` : undefined}
               style={{
                 fontSize: '0.85rem',
                 display: 'flex',

@@ -17,6 +17,7 @@ import {
 import { type ResultadoConsolidado, ReportPreview, gerarNomeArquivoPdf } from './ReportPreview';
 import { ModalPromptProcesso } from './ModalPromptProcesso';
 import { apiFetch } from '../lib/apiFetch';
+import { pendenciasParaPdf } from '../lib/requisitosPdf';
 
 export interface LoteTriagemModalProps {
   notasIniciais: ResultadoConsolidado[];
@@ -173,12 +174,13 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
 
   // Baixar relatório individual da nota ativa
   const handleDownloadPdfNotaIndividual = async (notaAlvo: ResultadoConsolidado, indiceAlvo: number) => {
-    const executarDownload = async (procDefinido: string, empDefinido?: string) => {
+    const executarDownload = async (procDefinido: string, empDefinido?: string, docHabDefinido?: string) => {
       try {
         setBaixandoPdf(true);
         const notaComProcesso = {
           ...notaAlvo,
           numeroProcesso: procDefinido.trim() || undefined,
+          documentoHabil: docHabDefinido?.trim() || notaAlvo.documentoHabil,
           numeroEmpenho: empDefinido?.trim() || notaAlvo.numeroEmpenho
         };
 
@@ -228,22 +230,19 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
       }
     };
 
-    if (!notaAlvo.numeroProcesso || !notaAlvo.numeroProcesso.trim()) {
-      setPromptTitulo(`Número do Processo da NF ${notaAlvo.numeroNota || ''}`);
-      setPromptSubtitulo('Informe o Número do Processo SEI para constar no relatório oficial');
-      setPromptValorProcesso('');
+    if (pendenciasParaPdf(notaAlvo).length > 0) {
+      setPromptTitulo(`Processo e NS da NF ${notaAlvo.numeroNota || ''}`);
+      setPromptSubtitulo('Processo SEI e NS da liquidação são obrigatórios para baixar o relatório oficial');
+      setPromptValorProcesso(notaAlvo.numeroProcesso || '');
+      setPromptValorDocumentoHabil(notaAlvo.documentoHabil || '');
       setPromptValorEmpenho(notaAlvo.numeroEmpenho || '');
-      setPromptOnConfirmCallback(() => (proc: string, emp: string) => {
-        if (!proc.trim()) {
-          alert('O Número do Processo SEI é obrigatório para gerar o relatório.');
-          return;
-        }
+      setPromptOnConfirmCallback(() => (proc: string, emp: string, docHab?: string) => {
         setPromptOpen(false);
-        executarDownload(proc, emp);
+        executarDownload(proc, emp, docHab);
       });
       setPromptOpen(true);
     } else {
-      executarDownload(notaAlvo.numeroProcesso, notaAlvo.numeroEmpenho);
+      executarDownload(notaAlvo.numeroProcesso!, notaAlvo.numeroEmpenho, notaAlvo.documentoHabil);
     }
   };
 
@@ -369,17 +368,13 @@ export const LoteTriagemModal: React.FC<LoteTriagemModalProps> = ({
       }
     };
 
-    if (!procAtual || !procAtual.trim()) {
+    if (pendenciasParaPdf({ numeroProcesso: procAtual, documentoHabil: docHabilAtual }).length > 0) {
       setPromptTitulo(`Processo Consolidado (${notasGrupo.length} Notas Fiscais)`);
       setPromptSubtitulo('Informe o Número do Processo SEI para gerar o Relatório Consolidado Unificado');
-      setPromptValorProcesso('');
+      setPromptValorProcesso(procAtual || '');
       setPromptValorDocumentoHabil(docHabilAtual);
       setPromptValorEmpenho(empAtual);
       setPromptOnConfirmCallback(() => (proc: string, emp: string, docHab?: string) => {
-        if (!proc.trim()) {
-          alert('O Número do Processo SEI é obrigatório para gerar o relatório consolidado.');
-          return;
-        }
         setPromptOpen(false);
         executarDownloadConsolidado(proc, emp, docHab);
       });

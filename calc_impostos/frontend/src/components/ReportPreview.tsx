@@ -15,6 +15,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { apiFetch } from '../lib/apiFetch';
+import { normalizarNS, MSG_NS } from '../lib/requisitosPdf';
 
 export interface ItemCalculado {
   numeroItem: number;
@@ -600,9 +601,25 @@ export const ReportPreview: React.FC<Props> = ({ data, onUpdateData, onClearAfte
       if (onUpdateData) onUpdateData(atualizado);
     }
 
+    // NS da liquidação é obrigatória para liberar o PDF
+    let ns = normalizarNS(currentData.documentoHabil);
+    if (!ns) {
+      const digitadoNs = prompt(`⚠️ ${MSG_NS}
+
+Informe a NS (Ex: 2026NS001313):`);
+      ns = normalizarNS(digitadoNs || '');
+      if (!ns) {
+        alert('Geração de relatório cancelada: ' + MSG_NS);
+        return;
+      }
+      const atualizadoNs = { ...currentData, numeroProcesso: proc, documentoHabil: ns };
+      setCurrentData(atualizadoNs);
+      if (onUpdateData) onUpdateData(atualizadoNs);
+    }
+
     try {
       setBaixandoPdf(true);
-      const payloadEnvio = { ...currentData, numeroProcesso: proc };
+      const payloadEnvio = { ...currentData, numeroProcesso: proc, documentoHabil: ns };
 
       const response = await apiFetch<Response>(`/api/gerar-pdf`, {
         method: 'POST',

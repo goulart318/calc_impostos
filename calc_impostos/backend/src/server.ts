@@ -13,7 +13,7 @@ import { HistoryService } from './services/historyService';
 import { ProcessoService } from './services/processoService';
 import { SupplierMemoryService } from './services/supplierMemoryService';
 import { SicafService, DadosSicafConsulta } from './services/sicafService';
-import { RaufIntegrationService } from './services/raufIntegrationService';
+import { RaufIntegrationService, normalizarNS, normalizarProcessoSei } from './services/raufIntegrationService';
 import { RaufCredenciaisService, cadastroPelaTelaHabilitado, tokenAdminValido } from './services/raufCredenciaisService';
 import { AuthService } from './services/authService';
 import { aplicarIdentidadeOrgao, uasgDaSessao, contextoAtual } from './services/requestContext';
@@ -659,6 +659,21 @@ app.post('/api/gerar-pdf', async (req: Request, res: Response) => {
       }
     }
 
+    // Regra de negócio: o PDF só é liberado com processo SEI completo e NS da liquidação preenchidos
+    {
+      const faltando: string[] = [];
+      if (!normalizarProcessoSei(resultado.numeroProcesso)) faltando.push('numeroProcesso');
+      const ns = normalizarNS(resultado.documentoHabil);
+      if (!ns) faltando.push('documentoHabil');
+      if (faltando.length > 0) {
+        return res.status(422).json({
+          error: 'Não é possível gerar o PDF: informe o Nº do processo SEI completo e a NS da liquidação (AAAANSXXXXXX).',
+          faltando
+        });
+      }
+      resultado.documentoHabil = ns!;
+    }
+
     // Garante que o SICAF esteja preenchido antes de gerar o relatório com anexo
     if (!resultado.sicaf && resultado.fornecedorCnpj) {
       try {
@@ -694,6 +709,15 @@ app.post('/api/processo/gerar-pdf-consolidado', async (req: Request, res: Respon
     if (!dadosProcesso || !dadosProcesso.notas || !dadosProcesso.resumo) {
       return res.status(400).json({ error: 'Dados incompletos para geração do PDF consolidado.' });
     }
+
+    const nsConsolidada = normalizarNS(dadosProcesso.documentoHabil);
+    if (!nsConsolidada || !normalizarProcessoSei(dadosProcesso.numeroProcesso)) {
+      return res.status(422).json({
+        error: 'Não é possível gerar o PDF consolidado: informe o Nº do processo SEI completo e a NS da liquidação (AAAANSXXXXXX).',
+        faltando: [!normalizarProcessoSei(dadosProcesso.numeroProcesso) ? 'numeroProcesso' : null, !nsConsolidada ? 'documentoHabil' : null].filter(Boolean)
+      });
+    }
+    dadosProcesso.documentoHabil = nsConsolidada;
 
     const pdfBuffer = await PdfReportGenerator.gerarRelatorioConsolidado(dadosProcesso);
     const procLimpo = (dadosProcesso.numeroProcesso || 'SEI')

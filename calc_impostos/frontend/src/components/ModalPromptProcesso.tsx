@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, X, Check, Hash } from 'lucide-react';
+import { normalizarNS, processoSeiValido, MSG_NS } from '../lib/requisitosPdf';
 
 interface Props {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export const ModalPromptProcesso: React.FC<Props> = ({
   const [processo, setProcesso] = useState(valorInicialProcesso);
   const [documentoHabil, setDocumentoHabil] = useState(valorInicialDocumentoHabil);
   const [empenho, setEmpenho] = useState(valorInicialEmpenho);
+  const [erro, setErro] = useState('');
 
   useEffect(() => {
     setProcesso(valorInicialProcesso || '');
@@ -49,7 +51,17 @@ export const ModalPromptProcesso: React.FC<Props> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onConfirm(processo.trim(), empenho.trim(), documentoHabil.trim());
+    if (!processoSeiValido(processo)) {
+      setErro('Informe o número do processo SEI completo (NNNNN.NNNNNN/AAAA-DD).');
+      return;
+    }
+    const ns = normalizarNS(documentoHabil);
+    if (!ns) {
+      setErro(MSG_NS);
+      return;
+    }
+    setErro('');
+    onConfirm(processo.trim(), empenho.trim(), ns);
   };
 
   return (
@@ -153,13 +165,13 @@ export const ModalPromptProcesso: React.FC<Props> = ({
 
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-              Documento Hábil - Liquidação <span style={{ color: '#64748b', fontWeight: 400 }}>(Opcional)</span>
+              Documento Hábil - NS da Liquidação <span style={{ color: '#ef4444' }}>*</span>
             </label>
             <input
               type="text"
               value={documentoHabil}
               onChange={(e) => setDocumentoHabil(e.target.value)}
-              placeholder="Ex: 2026NS000123 / Chave de Integração"
+              placeholder="Ex: 2026NS001313"
               style={{
                 width: '100%',
                 padding: '10px 12px',
@@ -192,6 +204,10 @@ export const ModalPromptProcesso: React.FC<Props> = ({
               }}
             />
           </div>
+
+          {erro && (
+            <div style={{ marginBottom: '14px', color: '#b91c1c', fontSize: '0.82rem', fontWeight: 600 }}>{erro}</div>
+          )}
 
           {/* Action buttons */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

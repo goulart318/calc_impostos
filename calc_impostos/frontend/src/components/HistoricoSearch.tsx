@@ -3,6 +3,7 @@ import { Search, FileText, Download, RefreshCw, Calendar, Building, Layers, Edit
 import { gerarNomeArquivoPdf, type ResultadoConsolidado } from './ReportPreview';
 import { ProcessoConsolidadoModal, type ProcessoConsolidadoData } from './ProcessoConsolidadoModal';
 import { apiFetch } from '../lib/apiFetch';
+import { pendenciasParaPdf } from '../lib/requisitosPdf';
 
 interface NotaSalvaResumo {
   id: number;
@@ -445,6 +446,14 @@ export const HistoricoSearch: React.FC<Props> = ({ onSelectNota, onConsolidarNot
   const handleDownloadPdfDirect = async (id: number, numeroNota: string, fornecedorNome?: string) => {
     try {
       const dataFull = await apiFetch<ResultadoConsolidado>(`/api/notas/${id}`);
+      const faltas = pendenciasParaPdf(dataFull);
+      if (faltas.length > 0) {
+        alert(`Não é possível baixar o PDF da NF ${numeroNota}.
+Falta: ${faltas.join('; ')}.
+
+Abra a análise (Editar / Reabrir), preencha e salve para liberar o download.`);
+        return;
+      }
       const resPdf = await apiFetch<Response>(`/api/gerar-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
