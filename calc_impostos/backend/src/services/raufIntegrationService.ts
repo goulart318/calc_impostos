@@ -36,6 +36,20 @@ interface ResultadoSync {
   mensagem: string;
   ignorado?: boolean;
   pendente?: boolean;
+  motivo?: 'SEM_PROCESSO' | 'SEM_NS' | 'CNPJ_INVALIDO' | 'SEM_CHAVE' | 'RECUSADO' | 'FILA' | 'OK';
+}
+
+export interface JobHistorico {
+  uasg: string;
+  apenasDiagnostico: boolean;
+  concluido: boolean;
+  total: number;
+  processados: number;
+  contagem: Record<string, number>;
+  problemas: Array<{ id: number; notaFiscal: string; processo: string; documentoHabil: string; fornecedor: string; motivo: string; mensagem: string }>;
+  iniciadoEm: string;
+  finalizadoEm: string | null;
+  erro: string | null;
 }
 
 const RE_NS = /(\d{4})\s*NS\s*0*(\d{1,6})\b/i;
@@ -207,11 +221,14 @@ export class RaufIntegrationService {
       return {
         sucesso: false,
         ignorado: true,
-        mensagem: 'Integração com o Rauf pendente: informe o Nº do processo SEI completo (NNNNN.NNNNNN/AAAA-DD) e a NS da liquidação (AAAANSXXXXXX).'
+        motivo: !processo ? 'SEM_PROCESSO' : 'SEM_NS',
+        mensagem: !processo
+          ? 'Integração com o Rauf pendente: informe o Nº do processo SEI completo (NNNNN.NNNNNN/AAAA-DD).'
+          : 'Integração com o Rauf pendente: informe a NS da liquidação no padrão AAAANSXXXXXX (ex.: 2026NS001313).'
       };
     }
     if (!cnpjValido(r.fornecedorCnpj)) {
-      return { sucesso: false, ignorado: true, mensagem: 'Integração com o Rauf pendente: CNPJ do fornecedor inválido.' };
+      return { sucesso: false, ignorado: true, motivo: 'CNPJ_INVALIDO', mensagem: 'Integração com o Rauf pendente: CNPJ do fornecedor inválido.' };
     }
 
     const uasg = ((r.uasg || '').replace(/\D/g, '') || this.uasgPadrao()).padStart(6, '0');
@@ -221,6 +238,7 @@ export class RaufIntegrationService {
       return {
         sucesso: false,
         ignorado: true,
+        motivo: 'SEM_CHAVE',
         mensagem: `Sem chave de integração do Rauf configurada para a UASG ${uasg}. Peça ao administrador do órgão para gerar uma chave no Rauf e configure RAUF_API_KEYS.`
       };
     }
@@ -229,16 +247,86 @@ export class RaufIntegrationService {
     try {
       const j = await this.chamar<{ id: number; acao: string }>('POST', '/retencoes/sincronizar', chave, payload);
       await pool.query('DELETE FROM rauf_sync_pendentes WHERE chave = $1', [`${processo}|${ns}|${payload.numeroNota}|${uasg}`]).catch(() => undefined);
-      return { sucesso: true, id: j.id, mensagem: `Retenção sincronizada com o Rauf (ID ${j.id}, ${j.acao}).` };
+      return { sucesso: true, motivo: 'OK', id: j.id, mensagem: `Retenção sincronizada com o Rauf (ID ${j.id}, ${j.acao}).` };
     } catch (e: any) {
       const status = e?.status as number | undefined;
       const transitorio = !status || status >= 500 || status === 429;
       if (transitorio) {
         await this.enfileirar(uasg, payload, e?.message || 'falha de rede');
-        return { sucesso: false, pendente: true, mensagem: `Rauf indisponível; a sincronização ficou na fila e será reenviada (${e?.message || e}).` };
+        return { sucesso: false, pendente: true, motivo: 'FILA', mensagem: `Rauf indisponível; a sincronização ficou na fila e será reenviada (${e?.message || e}).` };
       }
-      return { sucesso: false, mensagem: `Rauf recusou a sincronização: ${e?.message || e}` };
+      return { sucesso: false, motivo: 'RECUSADO', mensagem: `Rauf recusou a sincronização: ${e?.message || e}` };
     }
+  }
+
+  // ───────────── Reenvio do histórico (notas já calculadas e salvas antes da integração) ─────────────
+  private static jobsHistorico: Map<string, JobHistorico> = new Map();
+
+  public static statusJobHistorico(uasg: string): JobHistorico | null {
+    return this.jobsHistorico.get(uasg) || null;
+  }
+
+  /**
+   * Lê as notas salvas da UASG e envia ao Rauf as que tiverem processo SEI completo e NS válida.
+   * `apenasDiagnostico` só classifica (não envia). Roda em segundo plano; acompanhe por statusJobHistorico.
+   */
+  public static iniciarReenvioHistorico(uasgBruta: string, apenasDiagnostico: boolean): JobHistorico {
+    const uasg = (uasgBruta || '').replace(/\D/g, '').padStart(6, '0');
+    const atual = this.jobsHistorico.get(uasg);
+    if (atual && !atual.concluido) return atual;
+
+    const job: JobHistorico = {
+      uasg, apenasDiagnostico, concluido: false, total: 0, processados: 0,
+      contagem: {}, problemas: [], iniciadoEm: new Date().toISOString(), finalizadoEm: null, erro: null
+    };
+    this.jobsHistorico.set(uasg, job);
+
+    (async () => {
+      try {
+        const r = await pool.query(
+          `SELECT id, numero_nota, numero_processo, documento_habil, numero_empenho, fornecedor_nome, dados_json
+             FROM notas_analisadas WHERE uasg = $1 ORDER BY id ASC`, [uasg]);
+        job.total = r.rows.length;
+        for (const row of r.rows) {
+          const dados: any = typeof row.dados_json === 'string' ? JSON.parse(row.dados_json) : (row.dados_json || {});
+          const nota = {
+            ...dados,
+            uasg,
+            numeroProcesso: row.numero_processo || dados.numeroProcesso,
+            documentoHabil: row.documento_habil || dados.documentoHabil,
+            numeroEmpenho: row.numero_empenho || dados.numeroEmpenho
+          } as ResultadoConsolidado;
+
+          let motivo: string;
+          let mensagem = '';
+          if (apenasDiagnostico) {
+            const proc = normalizarProcessoSei(nota.numeroProcesso);
+            const ns = normalizarNS(nota.documentoHabil);
+            const chaves = await this.carregarChaves();
+            motivo = !proc ? 'SEM_PROCESSO' : !ns ? 'SEM_NS' : !cnpjValido(nota.fornecedorCnpj) ? 'CNPJ_INVALIDO'
+              : !chaves.get(uasg) ? 'SEM_CHAVE' : 'PRONTA';
+          } else {
+            const res = await this.inserirOuAtualizarRetencao(nota);
+            motivo = res.motivo || (res.sucesso ? 'OK' : 'RECUSADO');
+            mensagem = res.mensagem;
+          }
+          job.contagem[motivo] = (job.contagem[motivo] || 0) + 1;
+          if (!['OK', 'PRONTA'].includes(motivo) && job.problemas.length < 300) {
+            job.problemas.push({
+              id: row.id, notaFiscal: row.numero_nota, processo: row.numero_processo || '',
+              documentoHabil: row.documento_habil || '', fornecedor: row.fornecedor_nome, motivo, mensagem
+            });
+          }
+          job.processados++;
+        }
+      } catch (e: any) {
+        job.erro = e?.message || String(e);
+      } finally {
+        job.concluido = true;
+        job.finalizadoEm = new Date().toISOString();
+      }
+    })();
+    return job;
   }
 
   /** Reenvia a fila local. Chamado periodicamente pelo servidor ou sob demanda pelo usuário. */

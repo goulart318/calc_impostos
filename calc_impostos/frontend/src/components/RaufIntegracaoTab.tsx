@@ -21,6 +21,7 @@ export const RaufIntegracaoTab: React.FC = () => {
   const [chave, setChave] = useState('');
   const [credenciais, setCredenciais] = useState<Credencial[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const [job, setJob] = useState<any>(null);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
 
   const carregar = useCallback(async () => {
@@ -40,6 +41,35 @@ export const RaufIntegracaoTab: React.FC = () => {
       })
       .catch(() => setHabilitado(false));
   }, [carregar]);
+
+  const MOTIVOS: Record<string, string> = {
+    OK: 'Enviadas ao Rauf', PRONTA: 'Prontas para enviar', SEM_PROCESSO: 'Sem nº de processo SEI completo',
+    SEM_NS: 'Sem NS da liquidação (AAAANSXXXXXX)', CNPJ_INVALIDO: 'CNPJ do fornecedor inválido',
+    SEM_CHAVE: 'Sem chave de integração do órgão', RECUSADO: 'Recusadas pelo Rauf', FILA: 'Na fila (Rauf indisponível)'
+  };
+
+  useEffect(() => {
+    apiFetch<any>('/api/integracao/rauf/reenviar-historico/status').then(setJob).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!job || job.concluido) return;
+    const t = setInterval(() => {
+      apiFetch<any>('/api/integracao/rauf/reenviar-historico/status').then(setJob).catch(() => undefined);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [job]);
+
+  const iniciarHistorico = async (apenasDiagnostico: boolean) => {
+    if (!apenasDiagnostico && !window.confirm('Enviar ao Rauf todas as notas já calculadas deste órgão que tenham processo SEI completo e NS válida?')) return;
+    try {
+      setJob(await apiFetch<any>('/api/integracao/rauf/reenviar-historico', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apenasDiagnostico })
+      }));
+    } catch (e: any) {
+      setMsg({ tipo: 'erro', texto: e?.message || 'Não foi possível iniciar o reenvio.' });
+    }
+  };
 
   const salvar = async () => {
     setSalvando(true);
@@ -135,6 +165,45 @@ export const RaufIntegracaoTab: React.FC = () => {
           </div>
         </>
       )}
+
+      <div style={caixa}>
+        <b style={{ fontSize: 13 }}>Enviar histórico ao Rauf</b>
+        <p style={{ fontSize: 12, opacity: 0.75, margin: '6px 0 10px' }}>
+          Notas calculadas antes da integração (ou sem chave/NS na época) não foram ao Rauf. Use <b>Diagnosticar</b> para ver quais estão prontas
+          e o que falta nas demais; use <b>Enviar</b> para sincronizar as prontas. Reenviar é seguro: registros existentes são atualizados, sem duplicar.
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => iniciarHistorico(true)} disabled={!!job && !job.concluido}>Diagnosticar</button>
+          <button className="btn btn-primary" onClick={() => iniciarHistorico(false)} disabled={!!job && !job.concluido}>Enviar notas prontas</button>
+        </div>
+        {job && (
+          <div style={{ marginTop: 12, fontSize: 13 }}>
+            <div style={{ fontWeight: 600 }}>
+              {job.apenasDiagnostico ? 'Diagnóstico' : 'Envio'}: {job.processados}/{job.total} notas
+              {job.concluido ? ' — concluído' : ' — em andamento…'}
+            </div>
+            {job.erro && <div style={{ color: '#ef4444' }}>Erro: {job.erro}</div>}
+            <ul style={{ margin: '6px 0 0 16px' }}>
+              {Object.entries(job.contagem || {}).map(([k, v]) => (
+                <li key={k}>{MOTIVOS[k] || k}: <b>{String(v)}</b></li>
+              ))}
+            </ul>
+            {job.problemas?.length > 0 && (
+              <details style={{ marginTop: 8 }}>
+                <summary style={{ cursor: 'pointer' }}>Notas com pendência ({job.problemas.length})</summary>
+                <div style={{ maxHeight: 260, overflow: 'auto', marginTop: 6 }}>
+                  {job.problemas.map((p: any) => (
+                    <div key={p.id} style={{ padding: '6px 0', borderTop: '1px solid rgba(148,163,184,0.25)', fontSize: 12 }}>
+                      <b>NF {p.notaFiscal}</b> · {p.fornecedor} · SEI {p.processo || '—'} · NS {p.documentoHabil || '—'}
+                      <div style={{ opacity: 0.75 }}>{MOTIVOS[p.motivo] || p.motivo}{p.mensagem ? ` — ${p.mensagem}` : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

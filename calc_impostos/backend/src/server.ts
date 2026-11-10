@@ -1028,6 +1028,17 @@ app.get('/api/integracao/rauf/consultar', async (req: Request, res: Response) =>
   }
 });
 
+// Reenvio das notas já calculadas (histórico) da UASG da sessão: inicia em segundo plano e consulta o andamento
+app.post('/api/integracao/rauf/reenviar-historico', (req: Request, res: Response) => {
+  const uasg = uasgDaSessao();
+  if (!uasg) return res.status(401).json({ error: 'Sessão sem UASG.' });
+  res.json(RaufIntegrationService.iniciarReenvioHistorico(uasg, Boolean(req.body?.apenasDiagnostico)));
+});
+app.get('/api/integracao/rauf/reenviar-historico/status', (_req: Request, res: Response) => {
+  const uasg = uasgDaSessao();
+  res.json((uasg && RaufIntegrationService.statusJobHistorico(uasg)) || null);
+});
+
 // Reenvia a fila local de sincronizações que falharam por indisponibilidade do Rauf
 app.post('/api/integracao/rauf/reenviar-pendentes', async (req: Request, res: Response) => {
   try {
