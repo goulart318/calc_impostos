@@ -27,3 +27,9 @@ modelos/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Dumps/backups do banco (dados sensiveis: nunca versionar)
+calc_dados*.sql
+*_supabase_parte*.sql
+calc_conferencia.sql
+*.dump
