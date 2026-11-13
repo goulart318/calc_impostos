@@ -5,7 +5,9 @@ databases:
   - name: calc-impostos-db
     databaseName: ret_impostos
     user: ret_impostos_user
-    plan: free
+    # Plano pago (upgrade feito no painel em 13/11/2026, o gratuito expirou). Manter igual ao painel para o
+    # auto-sync do Blueprint não tentar voltar ao plano free. Remover este banco após migrar para o Supabase.
+    plan: 0.1c-256mb
     region: ohio
 
 services:
