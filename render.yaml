@@ -1,14 +1,9 @@
-# Blueprint de Deploy Unificado no Render (Frontend + Backend + PostgreSQL)
+# Blueprint de Deploy no Render (Frontend + Backend) — banco no Supabase (schema calc)
 # goulart318/calc_impostos
 
-databases:
-  - name: calc-impostos-db
-    databaseName: ret_impostos
-    user: ret_impostos_user
-    # Plano pago (upgrade feito no painel em 13/11/2026, o gratuito expirou). Manter igual ao painel para o
-    # auto-sync do Blueprint não tentar voltar ao plano free. Remover este banco após migrar para o Supabase.
-    plan: 0.1c-256mb
-    region: ohio
+# O banco de dados NÃO é mais gerenciado por este Blueprint: o calc_impostos usa o schema "calc" do
+# Postgres do Supabase (projeto do RAUF), com o usuário restrito "calc_app". O banco antigo do Render
+# (calc-impostos-db) deixa de ser declarado aqui e fica "unmanaged" até ser excluído manualmente no painel.
 
 services:
   # -------------------------------------------------------------
@@ -27,10 +22,11 @@ services:
         value: production
       - key: PORT
         value: 3001
+      # String de conexão do Supabase (pooler, modo transaction, usuário calc_app). Definida à mão no painel
+      # (sync: false) porque contém senha; nunca versionar o valor.
+      #   postgresql://calc_app.<REF_DO_PROJETO>:<SENHA>@aws-0-us-west-2.pooler.supabase.com:6543/postgres
       - key: DATABASE_URL
-        fromDatabase:
-          name: calc-impostos-db
-          property: connectionString
+        sync: false
 
   # -------------------------------------------------------------
   # 2. FRONTEND (Vite / React SPA)
