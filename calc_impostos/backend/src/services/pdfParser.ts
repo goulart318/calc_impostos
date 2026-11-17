@@ -315,7 +315,12 @@ export class PdfParser {
       for (const p of padroes) {
         const m = text.match(p);
         if (m && m[1]) {
-          numeroNota = m[1].replace(/\./g, '');
+          const val = m[1].replace(/\./g, '');
+          // Evita capturar citações legais como "IN RFB nº 1.234/2012"
+          if (val === '1234' && /(?:IN|Instru[çc][ãa]o\s*Normativa)\s*(?:RFB\s*)?n[ºo\.]\s*1\.?234/i.test(text)) {
+            continue;
+          }
+          numeroNota = val;
           break;
         }
       }
