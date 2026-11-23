@@ -165,6 +165,7 @@ export interface ResultadoConsolidado {
   // Cruzamento e Histórico de Análises Anteriores
   jaAnalisadaAntes?: boolean;
   idRegistroHistorico?: number;
+  avisoExtracao?: string;
   dataAnaliseAnterior?: string;
   mensagemCruzamento?: string;
 

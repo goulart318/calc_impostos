@@ -128,6 +128,7 @@ async function cruzarComHistoricoEAutoPreencher(
     }
 
     const notaAnterior = await HistoryService.buscarNotaHistorico({
+      id: resultado.idRegistroHistorico,
       chaveAcesso: resultado.chaveAcesso,
       numeroNota: resultado.numeroNota,
       fornecedorCnpj: resultado.fornecedorCnpj,
@@ -167,6 +168,12 @@ async function cruzarComHistoricoEAutoPreencher(
       }
     }
 
+    // Extração vazia (ex.: PDF sem camada de texto): não grava lançamento lixo (Nº 1, R$ 0,00) no histórico.
+    // O registro só é criado quando o usuário calcular com os dados preenchidos.
+    if (!resultado.fornecedorCnpj && !(resultado.totalBruto > 0)) {
+      return resultado;
+    }
+
     // Persistência automática no banco (UPSERT sem duplicidade)
     const saveRes = await HistoryService.salvarOuAtualizarNota(resultado);
     resultado.idRegistroHistorico = saveRes.id;
@@ -195,6 +202,9 @@ app.post('/api/analisar', async (req: Request, res: Response) => {
   try {
     const params: ParametrosCalculo = req.body;
     const resultado = await TaxEngine.processarNota(params);
+    // Mantém o vínculo com o registro já gravado: se o usuário corrigir nº da nota/CNPJ, atualiza em vez de duplicar
+    const idExistente = Number(req.body.idRegistroHistorico);
+    if (idExistente > 0) resultado.idRegistroHistorico = idExistente;
     await cruzarComHistoricoEAutoPreencher(resultado, req.body.numeroProcesso, req.body.numeroEmpenho, req.body.documentoHabil);
     res.json(resultado);
   } catch (error: any) {
@@ -416,6 +426,7 @@ async function processarNotaExtraidaUnica(
   resultado.dataOpcaoSimples = dataOpcaoSimples;
   resultado.fonteConsultaCnpj = fonteConsultaCnpj;
   resultado.validacaoChave = notaExtraida.validacaoChave;
+  resultado.avisoExtracao = notaExtraida.avisoExtracao;
 
   await cruzarComHistoricoEAutoPreencher(resultado, reqBody?.numeroProcesso, reqBody?.numeroEmpenho, reqBody?.documentoHabil);
   return resultado;

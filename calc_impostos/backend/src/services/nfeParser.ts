@@ -29,6 +29,8 @@ export interface NotaFiscalExtraida {
   numeroPaginaOrigem?: number;
   totalPaginasDocumento?: number;
   totalNotasNoPdf?: number;
+  /** Aviso quando o PDF não pôde ser lido (ex.: sem camada de texto) e os dados não são confiáveis */
+  avisoExtracao?: string;
   todasNotasNoPdf?: Array<any>;
 }
 

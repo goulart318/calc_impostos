@@ -192,7 +192,7 @@ export class HistoryService {
     resultado.uasg = uasgEfetiva;
 
     const notaExistente = await this.buscarNotaHistorico({
-      id: (resultado as any).id,
+      id: (resultado as any).id ?? resultado.idRegistroHistorico,
       chaveAcesso: resultado.chaveAcesso,
       numeroNota: resultado.numeroNota,
       fornecedorCnpj: resultado.fornecedorCnpj,

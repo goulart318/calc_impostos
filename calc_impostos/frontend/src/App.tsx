@@ -246,7 +246,8 @@ export default function App() {
           manualAliqPis: item.manualAliqPis,
           manualAliqCofins: item.manualAliqCofins
         })),
-        optanteCprb
+        optanteCprb,
+        idRegistroHistorico: resultado?.idRegistroHistorico
       };
 
       const data = await apiFetch<ResultadoConsolidado>('/api/analisar', {
@@ -344,6 +345,9 @@ export default function App() {
       setNumeroEmpenho(data.numeroEmpenho || '');
       setResultado(data);
       setValidacaoChave(data.validacaoChave || null);
+      if (data.avisoExtracao) {
+        alert('⚠️ ' + data.avisoExtracao);
+      }
 
       setNumeroNota(data.numeroNota || '');
       setChaveAcesso(data.chaveAcesso || '');

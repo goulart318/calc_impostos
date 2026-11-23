@@ -1319,6 +1319,9 @@ export class PdfParser {
     return {
       tipoDocumento: ehServico ? 'NFSE' : 'NFE',
       validacaoChave,
+      avisoExtracao: text.trim().length < 50
+        ? 'Não foi possível ler texto neste PDF (provavelmente foi gerado por "Microsoft Print to PDF" ou é uma imagem digitalizada, sem camada de texto). Fornecedor, CNPJ, valores e itens NÃO foram extraídos e a data de emissão exibida é apenas a data de hoje. Preencha os dados manualmente ou envie o PDF original / XML da nota.'
+        : undefined,
       numeroNota: numeroNota || '1',
       chaveAcesso,
       numeroEmpenho,
